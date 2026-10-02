@@ -1,0 +1,204 @@
+{
+    "id":  "9bb45134-cd12-4bf1-8371-ef4db2daab6c",
+    "prevId":  "00000000-0000-0000-0000-000000000000",
+    "version":  "7",
+    "dialect":  "postgresql",
+    "tables":  {
+                   "public.games":  {
+                                        "name":  "games",
+                                        "schema":  "",
+                                        "columns":  {
+                                                        "id":  {
+                                                                   "name":  "id",
+                                                                   "type":  "uuid",
+                                                                   "primaryKey":  true,
+                                                                   "notNull":  true,
+                                                                   "default":  "gen_random_uuid()"
+                                                               },
+                                                        "title":  {
+                                                                      "name":  "title",
+                                                                      "type":  "text",
+                                                                      "primaryKey":  false,
+                                                                      "notNull":  true
+                                                                  },
+                                                        "description":  {
+                                                                            "name":  "description",
+                                                                            "type":  "text",
+                                                                            "primaryKey":  false,
+                                                                            "notNull":  false
+                                                                        },
+                                                        "cover_url":  {
+                                                                          "name":  "cover_url",
+                                                                          "type":  "text",
+                                                                          "primaryKey":  false,
+                                                                          "notNull":  false
+                                                                      },
+                                                        "background_url":  {
+                                                                               "name":  "background_url",
+                                                                               "type":  "text",
+                                                                               "primaryKey":  false,
+                                                                               "notNull":  false
+                                                                           },
+                                                        "release_year":  {
+                                                                             "name":  "release_year",
+                                                                             "type":  "integer",
+                                                                             "primaryKey":  false,
+                                                                             "notNull":  false
+                                                                         },
+                                                        "developer":  {
+                                                                          "name":  "developer",
+                                                                          "type":  "text",
+                                                                          "primaryKey":  false,
+                                                                          "notNull":  false
+                                                                      },
+                                                        "publisher":  {
+                                                                          "name":  "publisher",
+                                                                          "type":  "text",
+                                                                          "primaryKey":  false,
+                                                                          "notNull":  false
+                                                                      },
+                                                        "status":  {
+                                                                       "name":  "status",
+                                                                       "type":  "game_status",
+                                                                       "typeSchema":  "public",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "default":  "\u0027BACKLOG\u0027"
+                                                                   },
+                                                        "priority":  {
+                                                                         "name":  "priority",
+                                                                         "type":  "game_priority",
+                                                                         "typeSchema":  "public",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "default":  "\u0027NORMAL\u0027"
+                                                                     },
+                                                        "estimated_main_hours":  {
+                                                                                     "name":  "estimated_main_hours",
+                                                                                     "type":  "numeric(8, 2)",
+                                                                                     "primaryKey":  false,
+                                                                                     "notNull":  false
+                                                                                 },
+                                                        "estimated_completionist_hours":  {
+                                                                                              "name":  "estimated_completionist_hours",
+                                                                                              "type":  "numeric(8, 2)",
+                                                                                              "primaryKey":  false,
+                                                                                              "notNull":  false
+                                                                                          },
+                                                        "personal_estimated_hours":  {
+                                                                                         "name":  "personal_estimated_hours",
+                                                                                         "type":  "numeric(8, 2)",
+                                                                                         "primaryKey":  false,
+                                                                                         "notNull":  false
+                                                                                     },
+                                                        "notes":  {
+                                                                      "name":  "notes",
+                                                                      "type":  "text",
+                                                                      "primaryKey":  false,
+                                                                      "notNull":  false
+                                                                  },
+                                                        "created_at":  {
+                                                                           "name":  "created_at",
+                                                                           "type":  "timestamp with time zone",
+                                                                           "primaryKey":  false,
+                                                                           "notNull":  true,
+                                                                           "default":  "now()"
+                                                                       },
+                                                        "updated_at":  {
+                                                                           "name":  "updated_at",
+                                                                           "type":  "timestamp with time zone",
+                                                                           "primaryKey":  false,
+                                                                           "notNull":  true,
+                                                                           "default":  "now()"
+                                                                       }
+                                                    },
+                                        "indexes":  {
+
+                                                    },
+                                        "foreignKeys":  {
+
+                                                        },
+                                        "compositePrimaryKeys":  {
+
+                                                                 },
+                                        "uniqueConstraints":  {
+
+                                                              },
+                                        "policies":  {
+
+                                                     },
+                                        "checkConstraints":  {
+                                                                 "games_title_not_blank":  {
+                                                                                               "name":  "games_title_not_blank",
+                                                                                               "value":  "length(trim(\"games\".\"title\")) \u003e 0"
+                                                                                           },
+                                                                 "games_release_year_valid":  {
+                                                                                                  "name":  "games_release_year_valid",
+                                                                                                  "value":  "\"games\".\"release_year\" IS NULL OR \"games\".\"release_year\" BETWEEN 1 AND 9999"
+                                                                                              },
+                                                                 "games_estimated_main_hours_nonnegative":  {
+                                                                                                                "name":  "games_estimated_main_hours_nonnegative",
+                                                                                                                "value":  "\"games\".\"estimated_main_hours\" IS NULL OR \"games\".\"estimated_main_hours\" \u003e= 0"
+                                                                                                            },
+                                                                 "games_estimated_completionist_hours_nonnegative":  {
+                                                                                                                         "name":  "games_estimated_completionist_hours_nonnegative",
+                                                                                                                         "value":  "\"games\".\"estimated_completionist_hours\" IS NULL OR \"games\".\"estimated_completionist_hours\" \u003e= 0"
+                                                                                                                     },
+                                                                 "games_personal_estimated_hours_nonnegative":  {
+                                                                                                                    "name":  "games_personal_estimated_hours_nonnegative",
+                                                                                                                    "value":  "\"games\".\"personal_estimated_hours\" IS NULL OR \"games\".\"personal_estimated_hours\" \u003e= 0"
+                                                                                                                }
+                                                             },
+                                        "isRLSEnabled":  false
+                                    }
+               },
+    "enums":  {
+                  "public.game_priority":  {
+                                               "name":  "game_priority",
+                                               "schema":  "public",
+                                               "values":  [
+                                                              "LOW",
+                                                              "NORMAL",
+                                                              "HIGH"
+                                                          ]
+                                           },
+                  "public.game_status":  {
+                                             "name":  "game_status",
+                                             "schema":  "public",
+                                             "values":  [
+                                                            "BACKLOG",
+                                                            "QUEUED",
+                                                            "PLAYING",
+                                                            "PAUSED",
+                                                            "COMPLETED",
+                                                            "ABANDONED"
+                                                        ]
+                                         }
+              },
+    "schemas":  {
+
+                },
+    "sequences":  {
+
+                  },
+    "roles":  {
+
+              },
+    "policies":  {
+
+                 },
+    "views":  {
+
+              },
+    "_meta":  {
+                  "columns":  {
+
+                              },
+                  "schemas":  {
+
+                              },
+                  "tables":  {
+
+                             }
+              }
+}

@@ -1,0 +1,78 @@
+import type { FastifyInstance } from 'fastify';
+import { sessionInputSchema, sessionSchema, sessionUpdateSchema } from '@gameshelf/contracts';
+import type { GameRepository } from '../games/repository.js';
+import type { SessionRecord, SessionRepository } from './repository.js';
+
+export async function registerSessionRoutes(
+  app: FastifyInstance,
+  gameRepository: GameRepository,
+  sessionRepository: SessionRepository,
+) {
+  app.get<{ Params: { gameId: string } }>('/games/:gameId/sessions', async (request, reply) => {
+    const gameId = parseId(request.params.gameId);
+    if (!gameId) return reply.code(400).send({ error: 'ID inválido.' });
+    if (!await gameRepository.find(gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    const records = await sessionRepository.listForGame(gameId);
+    return reply.send(records.map((record) => sessionSchema.parse(toResponse(record))));
+  });
+
+  app.post<{ Params: { gameId: string } }>('/games/:gameId/sessions', async (request, reply) => {
+    const gameId = parseId(request.params.gameId);
+    if (!gameId) return reply.code(400).send({ error: 'ID inválido.' });
+    if (!await gameRepository.find(gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    const parsed = sessionInputSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Dados da sessão inválidos.', issues: parsed.error.issues });
+    const record = await sessionRepository.create(gameId, parsed.data);
+    return reply.code(201).send(sessionSchema.parse(toResponse(record)));
+  });
+
+  app.patch<{ Params: { gameId: string; sessionId: string } }>('/games/:gameId/sessions/:sessionId', async (request, reply) => {
+    const gameId = parseId(request.params.gameId);
+    const sessionId = parseId(request.params.sessionId);
+    if (!gameId || !sessionId) return reply.code(400).send({ error: 'ID inválido.' });
+    if (!await gameRepository.find(gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    const existing = await sessionRepository.findForGame(gameId, sessionId);
+    if (!existing) return reply.code(404).send({ error: 'Sessão não encontrada.' });
+    const patch = sessionUpdateSchema.safeParse(request.body);
+    if (!patch.success) return reply.code(400).send({ error: 'Dados da sessão inválidos.', issues: patch.error.issues });
+    const merged = sessionInputSchema.safeParse({
+      startedAt: existing.startedAt.toISOString(),
+      endedAt: existing.endedAt?.toISOString() ?? null,
+      progress: existing.progress,
+      location: existing.location,
+      notes: existing.notes,
+      ...patch.data,
+    });
+    if (!merged.success) return reply.code(400).send({ error: 'A sessão resultante possui dados inválidos.', issues: merged.error.issues });
+    const updated = await sessionRepository.update(gameId, sessionId, merged.data);
+    if (!updated) return reply.code(404).send({ error: 'Sessão não encontrada.' });
+    return reply.send(sessionSchema.parse(toResponse(updated)));
+  });
+
+  app.delete<{ Params: { gameId: string; sessionId: string } }>('/games/:gameId/sessions/:sessionId', async (request, reply) => {
+    const gameId = parseId(request.params.gameId);
+    const sessionId = parseId(request.params.sessionId);
+    if (!gameId || !sessionId) return reply.code(400).send({ error: 'ID inválido.' });
+    if (!await gameRepository.find(gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    const deleted = await sessionRepository.delete(gameId, sessionId);
+    if (!deleted) return reply.code(404).send({ error: 'Sessão não encontrada.' });
+    return reply.code(204).send();
+  });
+}
+
+function parseId(id: string): string | undefined {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : undefined;
+}
+
+function toResponse(session: SessionRecord) {
+  return {
+    ...session,
+    startedAt: session.startedAt.toISOString(),
+    endedAt: session.endedAt?.toISOString() ?? null,
+    durationMinutes: session.endedAt === null
+      ? null
+      : Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 60_000),
+    createdAt: session.createdAt.toISOString(),
+    updatedAt: session.updatedAt.toISOString(),
+  };
+}

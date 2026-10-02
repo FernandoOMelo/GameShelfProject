@@ -1,0 +1,41 @@
+{
+    "version":  "7",
+    "dialect":  "postgresql",
+    "entries":  [
+                    {
+                        "idx":  0,
+                        "version":  "7",
+                        "when":  1790900235509,
+                        "tag":  "0001_games",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  1,
+                        "version":  "7",
+                        "when":  1790903726454,
+                        "tag":  "0002_franchises",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  2,
+                        "version":  "7",
+                        "when":  1790940985268,
+                        "tag":  "0003_platforms_genres",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  3,
+                        "version":  "7",
+                        "when":  1790942405577,
+                        "tag":  "0004_game_sessions",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  4,
+                        "version":  "7",
+                        "when":  1790949747387,
+                        "tag":  "0005_backlog_planning",
+                        "breakpoints":  true
+                    }
+                ]
+}

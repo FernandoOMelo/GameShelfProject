@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+.pnpm-store/
+.corepack/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/

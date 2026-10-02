@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gameshelf}
+      POSTGRES_USER: ${POSTGRES_USER:-gameshelf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gameshelf}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - gameshelf-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gameshelf} -d ${POSTGRES_DB:-gameshelf}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: gameshelf-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["pnpm", "--filter", "@gameshelf/database", "db:migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-gameshelf}:${POSTGRES_PASSWORD:-gameshelf}@postgres:5432/${POSTGRES_DB:-gameshelf}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: gameshelf-api:local
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-gameshelf}:${POSTGRES_PASSWORD:-gameshelf}@postgres:5432/${POSTGRES_DB:-gameshelf}
+      WEB_ORIGIN: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  gameshelf-postgres:
