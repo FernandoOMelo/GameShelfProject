@@ -3,6 +3,10 @@ import type { DashboardResponse, Game, QueueItem, Session } from '@gameshelf/con
 type DateRange = { from?: string; to?: string; timezoneOffsetMinutes?: number };
 type GameSummaryInput = Pick<Game, 'status' | 'personalEstimatedHours' | 'estimatedMainHours'>;
 
+const STALLED_AFTER_DAYS = 30;
+const STALLED_LIMIT = 5;
+const WEEKS_PER_MONTH = 52 / 12;
+
 export function estimateRemainingHours(game: GameSummaryInput, playedHours: number): number | null {
   const estimate = game.personalEstimatedHours ?? game.estimatedMainHours;
   return estimate === null ? null : Math.max(estimate - playedHours, 0);
@@ -14,6 +18,7 @@ export function buildDashboard(input: {
   queue: QueueItem[];
   weeklyMinutes: number;
   range?: DateRange;
+  today?: string;
 }): DashboardResponse {
   const playedByGame = new Map<string, number>();
   const latestSessionByGame = new Map<string, Session>();
@@ -51,9 +56,16 @@ export function buildDashboard(input: {
   });
   const currentGame = playingGames[0] ?? null;
   const remaining = (game: Game) => estimateRemainingHours(game, hoursFor(game));
-  const backlogRemainingHours = nonArchived
-    .filter((game) => game.owned && game.status !== 'COMPLETED' && game.status !== 'ABANDONED')
-    .reduce((sum, game) => sum + (remaining(game) ?? 0), 0);
+  const backlogGames = nonArchived.filter((game) => game.owned && game.status !== 'COMPLETED' && game.status !== 'ABANDONED');
+  const backlogRemainingHours = backlogGames.reduce((sum, game) => sum + (remaining(game) ?? 0), 0);
+  const today = input.today ?? new Date().toISOString().slice(0, 10);
+  const stalledGames = nonArchived.filter((game) => game.status === 'PLAYING' || game.status === 'PAUSED').map((game) => {
+    const lastActivity = (latestSessionByGame.get(game.id)?.startedAt ?? game.startedAt ?? game.updatedAt).slice(0, 10);
+    const daysStalled = Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${lastActivity}T00:00:00Z`)) / 86_400_000);
+    return { game, daysStalled, remainingHours: remaining(game) === null ? null : roundHours(remaining(game)!) };
+  }).filter((entry) => entry.daysStalled >= STALLED_AFTER_DAYS)
+    .sort((a, b) => b.daysStalled - a.daysStalled || a.game.title.localeCompare(b.game.title, 'pt-BR'))
+    .slice(0, STALLED_LIMIT);
   const queueRemainingHours = input.queue.reduce((sum, item) => sum + (remaining(item.game) ?? 0), 0);
   const weeklyHours = input.weeklyMinutes / 60;
   const completionByYear = new Map<number, Set<string>>();
@@ -111,6 +123,12 @@ export function buildDashboard(input: {
     weeklyHours: roundHours(weeklyHours),
     queueRemainingHours: roundHours(queueRemainingHours),
     estimatedQueueWeeks: weeklyHours > 0 ? roundHours(queueRemainingHours / weeklyHours) : null,
+    backlogForecast: {
+      estimatedWeeks: weeklyHours > 0 ? roundHours(backlogRemainingHours / weeklyHours) : null,
+      estimatedMonths: weeklyHours > 0 ? Math.round((backlogRemainingHours / weeklyHours) / WEEKS_PER_MONTH * 10) / 10 : null,
+      gamesWithoutEstimate: backlogGames.filter((game) => remaining(game) === null).length,
+      stalledGames,
+    },
     currentGame,
     playingGames,
     period: { from: input.range?.from ?? null, to: input.range?.to ?? null },

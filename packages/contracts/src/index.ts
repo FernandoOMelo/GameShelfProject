@@ -214,6 +214,16 @@ export const dashboardResponseSchema = z.object({
   weeklyHours: z.number().nonnegative(),
   queueRemainingHours: z.number().nonnegative(),
   estimatedQueueWeeks: z.number().nonnegative().nullable(),
+  backlogForecast: z.object({
+    estimatedWeeks: z.number().nonnegative().nullable(),
+    estimatedMonths: z.number().nonnegative().nullable(),
+    gamesWithoutEstimate: z.number().int().nonnegative(),
+    stalledGames: z.array(z.object({
+      game: gameSchema,
+      daysStalled: z.number().int().nonnegative(),
+      remainingHours: z.number().nonnegative().nullable(),
+    }).strict()),
+  }).strict(),
   currentGame: z.object({
     game: gameSchema,
     playedHours: z.number().nonnegative(),

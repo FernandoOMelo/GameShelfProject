@@ -81,7 +81,7 @@ Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 
 - [x] 1. atividade: heatmap e sequências
 - [x] 2. replay do ano
-- [ ] 3. previsão do backlog
+- [x] 3. previsão do backlog
 - [ ] 4. próximo jogo
 - [ ] 5. metas
 - [ ] 6. diário de sessão com screenshots

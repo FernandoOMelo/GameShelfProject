@@ -39,6 +39,21 @@ históricos quando aplicável.
 O sistema não apresenta histórico de estados abandonados: esse dado exigiria
 persistir eventos de transição.
 
+## Previsão do backlog
+
+Cartão no Painel (`backlogForecast` em `GET /dashboard`), independente do período:
+
+- **meses até zerar o backlog** = horas restantes do backlog / horas semanais da
+  meta, em semanas e em meses (1 mês = 52/12 semanas). Sem meta semanal não há
+  previsão. O backlog segue a definição já usada em `backlogRemainingHours`: jogos
+  não arquivados, na biblioteca, que não estão zerados nem abandonados;
+- jogos desse conjunto sem estimativa de tempo não entram na conta e são contados
+  à parte (`gamesWithoutEstimate`);
+- **parados há mais tempo**: jogos Jogando ou Pausados (não arquivados) sem
+  atividade há 30 dias ou mais, até 5, do mais antigo ao mais recente. A última
+  atividade é a sessão mais recente, ou a data de início do jogo, ou a última
+  atualização do cadastro. Servem de lista de candidatos a retomar, pausar ou abandonar.
+
 ## Missão principal
 
 Cartão com um objetivo de longo prazo ligado a uma lista pessoal, com contagem de

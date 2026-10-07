@@ -105,6 +105,8 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
         <Kpi label="Em andamento" value={String(dashboard.playingCount)} />
       </div>
 
+      <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />
+
       <ChallengeCard />
 
       <section className="dashboard-bottom">
@@ -117,6 +119,22 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
 
 function Kpi({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return <article className={`stat-card${accent ? ' stat-card-accent' : ''}`}><span>{label}</span><strong>{value}</strong></article>;
+}
+
+function BacklogForecast({ forecast, remainingHours, onSelectGame }: { forecast: DashboardResponse['backlogForecast']; remainingHours: number; onSelectGame: (game: Game) => void }) {
+  const months = forecast.estimatedMonths;
+  return <section className="panel" aria-labelledby="forecast-title">
+    <h2 id="forecast-title">Previsão do backlog</h2>
+    {months === null
+      ? <p className="dashboard-empty">Defina a meta semanal para ver quando o backlog acaba.</p>
+      : <p className="panel-figure">No seu ritmo, as {formatCompactHours(remainingHours)} restantes levam cerca de <strong>{months.toLocaleString('pt-BR')} {months === 1 ? 'mês' : 'meses'}</strong> ({forecast.estimatedWeeks?.toLocaleString('pt-BR')} semanas).</p>}
+    {forecast.gamesWithoutEstimate > 0 && <small>{forecast.gamesWithoutEstimate} {forecast.gamesWithoutEstimate === 1 ? 'jogo sem estimativa não entra' : 'jogos sem estimativa não entram'} na conta.</small>}
+    <h3 className="forecast-subtitle">Parados há mais tempo</h3>
+    {forecast.stalledGames.length
+      ? <ul className="rank-list">{forecast.stalledGames.map((entry) => <li key={entry.game.id}><button type="button" onClick={() => onSelectGame(entry.game)}>{entry.game.title}</button><span>{entry.daysStalled} dias{entry.remainingHours === null ? '' : ` · faltam ${formatCompactHours(entry.remainingHours)}`}</span></li>)}</ul>
+      : <p className="dashboard-empty">Nenhum jogo em andamento ou pausado parado há 30 dias ou mais.</p>}
+    <small>Candidatos a pausar de vez ou abandonar: jogos em andamento ou pausados sem sessão recente.</small>
+  </section>;
 }
 
 function ChallengeCard() {

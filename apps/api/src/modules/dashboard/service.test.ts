@@ -78,6 +78,32 @@ describe('dashboard calculations', () => {
     expect(dashboard.periodStats).toEqual({ playedHours: 1, sessions: 0, gamesPlayed: 1, gamesCompleted: 0 });
   });
 
+  describe('backlog forecast', () => {
+    const owned = { ...game, owned: true };
+
+    it('estimates months from the remaining hours and the weekly pace, and counts games without estimate', () => {
+      const noEstimate = { ...owned, id: '00000000-0000-4000-8000-000000000005', title: 'Sem estimativa', status: 'BACKLOG' as const, personalEstimatedHours: null, estimatedMainHours: null };
+      const dashboard = buildDashboard({ games: [owned, noEstimate], sessions: [], queue: [], weeklyMinutes: 360, today: '2026-01-02' });
+      // 18 h restantes a 6 h/semana = 3 semanas.
+      expect(dashboard.backlogForecast).toMatchObject({ estimatedWeeks: 3, estimatedMonths: 0.7, gamesWithoutEstimate: 1 });
+    });
+
+    it('has no forecast without a weekly goal', () => {
+      const dashboard = buildDashboard({ games: [owned], sessions: [], queue: [], weeklyMinutes: 0, today: '2026-01-02' });
+      expect(dashboard.backlogForecast).toMatchObject({ estimatedWeeks: null, estimatedMonths: null });
+    });
+
+    it('lists playing and paused games stalled for 30+ days, longest first, using the last session date', () => {
+      const paused = { ...game, id: '00000000-0000-4000-8000-000000000006', title: 'Celeste', status: 'PAUSED' as const, updatedAt: '2025-10-01T00:00:00.000Z' };
+      const recent = { ...game, id: '00000000-0000-4000-8000-000000000007', title: 'Recente', updatedAt: '2026-02-20T00:00:00.000Z' };
+      const backlog = { ...game, id: '00000000-0000-4000-8000-000000000008', title: 'Na fila', status: 'BACKLOG' as const, updatedAt: '2025-01-01T00:00:00.000Z' };
+      const fresh = { ...session, gameId: recent.id, startedAt: '2026-02-25T10:00:00.000Z' };
+      const dashboard = buildDashboard({ games: [game, paused, recent, backlog], sessions: [session, fresh], queue: [], weeklyMinutes: 0, today: '2026-03-01' });
+      expect(dashboard.backlogForecast.stalledGames.map((entry) => [entry.game.title, entry.daysStalled])).toEqual([['Celeste', 151], ['Hades', 59]]);
+      expect(dashboard.backlogForecast.stalledGames[1]).toMatchObject({ remainingHours: 16 });
+    });
+  });
+
   it('counts a completion by date even if the game later returns to playing', () => {
     const replay = { ...game, status: 'PLAYING' as const, completedAt: '2025-02-10' };
     const dashboard = buildDashboard({ games: [replay], sessions: [], queue: [], weeklyMinutes: 0, range: { from: '2025-02-01', to: '2025-02-28' } });

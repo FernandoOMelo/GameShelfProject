@@ -113,6 +113,9 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
       gameCount: games.length, desiredCount: 0, backlogCount: 0, completedCount: 0, playingCount: playingGames.length, pausedCount: 0, abandonedCount: 0, archivedCount: 0,
       totalPlayedHours: 0, backlogRemainingHours: 0, weeklyHours: weeklyMinutes / 60,
       queueRemainingHours: 0, estimatedQueueWeeks: weeklyMinutes > 0 ? 0 : null,
+      backlogForecast: weeklyMinutes > 0
+        ? { estimatedWeeks: 8, estimatedMonths: 1.8, gamesWithoutEstimate: 2, stalledGames: playingGames.slice(0, 1).map((entry) => ({ game: entry.game, daysStalled: 45, remainingHours: 12 })) }
+        : { estimatedWeeks: null, estimatedMonths: null, gamesWithoutEstimate: 0, stalledGames: [] },
       currentGame: null, playingGames, period: { from: null, to: null }, periodStats: { playedHours: 0, sessions: 0, gamesPlayed: 0, gamesCompleted: 0 }, queuePreview: queue.slice(0, 5),
     }), { status: 200 });
     }
@@ -365,14 +368,17 @@ describe('library page', () => {
       createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z',
     };
     mockApi([game]);
+    const base = fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.startsWith('/api/dashboard')) return base(input, init);
       if (url.endsWith('/sessions') && !init?.method) return new Response(JSON.stringify([session]), { status: 200 });
       if (init?.method === 'DELETE') return new Response(null, { status: 204 });
       if (url === '/api/queue') return new Response('[]', { status: 200 });
       if (url === '/api/dashboard') return new Response(JSON.stringify({
         gameCount: 1, desiredCount: 0, backlogCount: 0, completedCount: 0, playingCount: 1, pausedCount: 0, abandonedCount: 0, archivedCount: 0, totalPlayedHours: 0,
         backlogRemainingHours: 0, weeklyHours: 0, queueRemainingHours: 0, estimatedQueueWeeks: null,
+        backlogForecast: { estimatedWeeks: null, estimatedMonths: null, gamesWithoutEstimate: 0, stalledGames: [] },
         currentGame: null, queuePreview: [],
       }), { status: 200 });
       return new Response(JSON.stringify([game]), { status: 200 });
@@ -427,6 +433,17 @@ describe('library page', () => {
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '360' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
     expect(await screen.findByText('Meta semanal salva.')).toBeInTheDocument();
+  });
+
+  it('shows the backlog forecast and stalled games once a weekly goal exists', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
+    render(<App />);
+    expect(await screen.findByText('Defina a meta semanal para ver quando o backlog acaba.')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '360' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
+    expect(await screen.findByText(/1,8 meses/)).toBeInTheDocument();
+    expect(screen.getByText(/2 jogos sem estimativa/)).toBeInTheDocument();
+    expect(screen.getByText(/45 dias · faltam/)).toBeInTheDocument();
   });
 });
 
