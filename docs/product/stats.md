@@ -26,6 +26,17 @@ gêneros e plataformas e quais foram os melhores jogos de cada ano.
 Considera jogos com status Zerado, inclusive arquivados. As horas de um jogo
 contam no ano em que ele foi zerado. Um jogo com vários gêneros entra em cada um.
 
+## Atividade (`GET /stats/activity?year=&timezoneOffsetMinutes=`)
+
+Heatmap anual e sequências de dias jogados, exibidos na tela de Estatísticas.
+
+- minutos por dia = soma das sessões encerradas, atribuídas ao dia local de início
+  (`timezoneOffsetMinutes` segue a convenção de `Date.getTimezoneOffset`);
+- `days` traz só os dias com sessões do ano pedido (padrão: ano atual);
+- **maior sequência** considera todo o histórico; **sequência atual** continua
+  válida se o último dia jogado foi hoje ou ontem;
+- horas retroativas não têm data de sessão e não entram.
+
 ## Missão principal
 
 Objetivo de longo prazo acompanhando uma lista pessoal: progresso = jogos zerados

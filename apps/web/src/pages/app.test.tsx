@@ -91,6 +91,9 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
       queue.forEach((item, position) => { item.position = position; });
       return new Response(JSON.stringify(queue), { status: 200 });
     }
+    if (url.startsWith('/api/stats/activity')) return new Response(JSON.stringify({
+      year: new Date().getFullYear(), days: [{ date: `${new Date().getFullYear()}-03-01`, minutes: 90 }], activeDays: 1, totalMinutes: 90, maxDayMinutes: 90, currentStreak: 0, longestStreak: 3,
+    }), { status: 200 });
     if (url === '/api/stats') return new Response(JSON.stringify({
       totals: { completedCount: 2, completedHours: 42, averageCompletedHours: 21, longestGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30 }, shortestGame: null, journeyStart: '2024-01-01', journeyDays: 400 },
       ratingDistribution: [{ rating: 11, count: 1 }, { rating: 10, count: 0 }], difficultyDistribution: [{ difficulty: 'AAA', count: 0 }, { difficulty: 'C', count: 2 }],
@@ -434,6 +437,10 @@ describe('statistics and classification', () => {
     expect(screen.getByText('Top 10 jogos favoritos')).toBeInTheDocument();
     expect(screen.getByRole('rowheader', { name: 'RPG' })).toBeInTheDocument();
     expect(screen.getByText('Jogo do ano')).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: /dias jogados/ })).toBeInTheDocument();
+    expect(screen.getByText('Maior sequência').nextSibling).toHaveTextContent('3 dias');
+    fireEvent.click(screen.getByRole('button', { name: 'Ano anterior' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`year=${new Date().getFullYear() - 1}`))).toBe(true));
   });
 
   it('sends difficulty, type, completion condition, favorite and game of the year when saving a game', async () => {

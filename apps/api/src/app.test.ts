@@ -627,6 +627,15 @@ describe('classification, stats and challenge API', () => {
     expect(response.json()).toMatchObject({ totals: { completedCount: 0 }, ratingDistribution: expect.any(Array), byYear: [] });
   });
 
+  it('returns the activity contract and rejects invalid parameters', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), platformRepository: createPlatformRepository(), genreRepository: createGenreRepository() });
+    apps.push(app);
+    const response = await app.inject({ method: 'GET', url: '/stats/activity?year=2026&timezoneOffsetMinutes=180' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ year: 2026, days: [], activeDays: 0, totalMinutes: 0, maxDayMinutes: 0, currentStreak: 0, longestStreak: 0 });
+    expect((await app.inject({ method: 'GET', url: '/stats/activity?year=abc' })).statusCode).toBe(400);
+  });
+
   it('sets, reads and clears the main challenge from a list', async () => {
     let stored: { title: string; listId: string } | undefined;
     const lists = createGameListRepository();

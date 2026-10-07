@@ -281,7 +281,22 @@ export const statsResponseSchema = z.object({
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
 export type StatsGroup = z.infer<typeof statsGroupSchema>;
 
-export const mainChallengeInputSchema = z.object({
+export const activityQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0),
+}).strict();
+export const activityResponseSchema = z.object({
+  year: z.number().int(),
+  days: z.array(z.object({ date: calendarDateSchema, minutes: z.number().int().positive() }).strict()),
+  activeDays: z.number().int().nonnegative(),
+  totalMinutes: z.number().int().nonnegative(),
+  maxDayMinutes: z.number().int().nonnegative(),
+  currentStreak: z.number().int().nonnegative(),
+  longestStreak: z.number().int().nonnegative(),
+}).strict();
+export type ActivityResponse = z.infer<typeof activityResponseSchema>;
+
+export const mainChallengeInputSchema =z.object({
   title: z.string().trim().min(1).max(200),
   listId: z.string().uuid(),
 }).strict();

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StatsGroup, StatsResponse } from '@gameshelf/contracts';
-import { apiUrl, difficultyLabels, formatCompactHours } from './shared';
+import { ActivityHeatmap } from './activity-heatmap';
+import { apiUrl,difficultyLabels, formatCompactHours } from './shared';
 
 export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onOpenGame: (gameId: string) => void }) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -39,6 +40,8 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       <Tile label="Jogo mais longo" value={totals.longestGame?.title ?? '—'} detail={totals.longestGame ? formatCompactHours(totals.longestGame.hours) : undefined} small />
       <Tile label="Jogo mais curto" value={totals.shortestGame?.title ?? '—'} detail={totals.shortestGame ? formatCompactHours(totals.shortestGame.hours) : undefined} small />
     </div>
+
+    <ActivityHeatmap refreshKey={refreshKey} />
 
     <section className="panel" aria-labelledby="timeline-title"><h2 id="timeline-title">Linha do tempo anual</h2>
       {stats.byYear.length ? <ol className="year-timeline">{stats.byYear.map((entry) => <li key={entry.year}>

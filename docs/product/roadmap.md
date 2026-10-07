@@ -75,6 +75,20 @@
 
 Ver [Estatísticas](stats.md) e ADR-010.
 
+## Fase 8 — Evolução (em andamento)
+
+Detalhes em [Plano — Fase 8 em diante](next-phase.md).
+
+- [x] 1. atividade: heatmap e sequências
+- [ ] 2. replay do ano
+- [ ] 3. previsão do backlog
+- [ ] 4. próximo jogo
+- [ ] 5. metas
+- [ ] 6. diário de sessão com screenshots
+- [ ] 7. múltiplas filas (avaliar antes)
+- [ ] 8. exportar, importar e backup
+- [ ] 9. PWA offline
+
 ## Depois do MVP
 
 O planejamento da experiência e do escopo da versão 1.0 está em
