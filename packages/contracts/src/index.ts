@@ -296,7 +296,21 @@ export const activityResponseSchema = z.object({
 }).strict();
 export type ActivityResponse = z.infer<typeof activityResponseSchema>;
 
-export const mainChallengeInputSchema =z.object({
+export const replayResponseSchema = z.object({
+  year: z.number().int(),
+  totalMinutes: z.number().int().nonnegative(),
+  sessionCount: z.number().int().nonnegative(),
+  activeDays: z.number().int().nonnegative(),
+  completedCount: z.number().int().nonnegative(),
+  mostPlayedGame: z.object({ id: z.string().uuid(), title: z.string(), coverUrl: mediaUrl.nullable(), minutes: z.number().int().positive() }).strict().nullable(),
+  topGenre: z.object({ name: z.string(), minutes: z.number().int().positive() }).strict().nullable(),
+  longestSession: z.object({ gameId: z.string().uuid(), title: z.string(), date: calendarDateSchema, minutes: z.number().int().positive() }).strict().nullable(),
+  busiestMonth: z.object({ month: z.number().int().min(1).max(12), minutes: z.number().int().positive() }).strict().nullable(),
+  gameOfYear: statsGameRefSchema.nullable(),
+}).strict();
+export type ReplayResponse = z.infer<typeof replayResponseSchema>;
+
+export const mainChallengeInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   listId: z.string().uuid(),
 }).strict();

@@ -91,6 +91,11 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
       queue.forEach((item, position) => { item.position = position; });
       return new Response(JSON.stringify(queue), { status: 200 });
     }
+    if (url.startsWith('/api/stats/replay')) return new Response(JSON.stringify({
+      year: new Date().getFullYear(), totalMinutes: 270, sessionCount: 3, activeDays: 3, completedCount: 2,
+      mostPlayedGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, minutes: 180 },
+      topGenre: { name: 'RPG', minutes: 270 }, longestSession: null, busiestMonth: { month: 2, minutes: 180 }, gameOfYear: null,
+    }), { status: 200 });
     if (url.startsWith('/api/stats/activity')) return new Response(JSON.stringify({
       year: new Date().getFullYear(), days: [{ date: `${new Date().getFullYear()}-03-01`, minutes: 90 }], activeDays: 1, totalMinutes: 90, maxDayMinutes: 90, currentStreak: 0, longestStreak: 3,
     }), { status: 200 });
@@ -439,6 +444,10 @@ describe('statistics and classification', () => {
     expect(screen.getByText('Jogo do ano')).toBeInTheDocument();
     expect(await screen.findByRole('img', { name: /dias jogados/ })).toBeInTheDocument();
     expect(screen.getByText('Maior sequência').nextSibling).toHaveTextContent('3 dias');
+    expect(await screen.findByText('Gênero mais jogado')).toBeInTheDocument();
+    expect(screen.getByText('Mês mais ativo').parentElement).toHaveTextContent('fevereiro');
+    fireEvent.click(screen.getByRole('button', { name: 'Replay do ano anterior' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/stats/replay') && String(url).includes(`year=${new Date().getFullYear() - 1}`))).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Ano anterior' }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`year=${new Date().getFullYear() - 1}`))).toBe(true));
   });

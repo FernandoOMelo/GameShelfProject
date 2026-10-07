@@ -80,7 +80,7 @@ Ver [Estatísticas](stats.md) e ADR-010.
 Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 
 - [x] 1. atividade: heatmap e sequências
-- [ ] 2. replay do ano
+- [x] 2. replay do ano
 - [ ] 3. previsão do backlog
 - [ ] 4. próximo jogo
 - [ ] 5. metas

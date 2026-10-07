@@ -634,6 +634,10 @@ describe('classification, stats and challenge API', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ year: 2026, days: [], activeDays: 0, totalMinutes: 0, maxDayMinutes: 0, currentStreak: 0, longestStreak: 0 });
     expect((await app.inject({ method: 'GET', url: '/stats/activity?year=abc' })).statusCode).toBe(400);
+    const replay = await app.inject({ method: 'GET', url: '/stats/replay?year=2026' });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ year: 2026, totalMinutes: 0, sessionCount: 0, mostPlayedGame: null, gameOfYear: null });
+    expect((await app.inject({ method: 'GET', url: '/stats/replay?year=1' })).statusCode).toBe(400);
   });
 
   it('sets, reads and clears the main challenge from a list', async () => {

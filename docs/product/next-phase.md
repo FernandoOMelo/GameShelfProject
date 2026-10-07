@@ -21,7 +21,8 @@ exige novo schema. Cada etapa é uma entrega independente, com testes e docs.
 - `GET /stats/replay?year=`: horas, sessões, zerados, jogo mais jogado, gênero
   mais jogado, maior sessão, jogo do ano, mês mais ativo.
 - Reutiliza os serviços de stats e dashboard. Sem migration.
-- Frontend: tela "Replay" com seletor de ano.
+- Frontend: painel "Replay do ano" na tela de Estatísticas, com seletor de ano
+  (em vez de uma tela separada, para não ampliar a navegação).
 
 ## Etapa 3 — Previsão do backlog
 

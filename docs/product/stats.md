@@ -37,6 +37,19 @@ Heatmap anual e sequências de dias jogados, exibidos na tela de Estatísticas.
   válida se o último dia jogado foi hoje ou ontem;
 - horas retroativas não têm data de sessão e não entram.
 
+## Replay do ano (`GET /stats/replay?year=&timezoneOffsetMinutes=`)
+
+Painel na tela de Estatísticas com seletor de ano. Resume o ano escolhido:
+
+- horas, sessões e dias jogados: sessões encerradas cujo dia local de início cai no ano;
+- jogo mais jogado, gênero mais jogado (um jogo soma em cada um dos seus gêneros),
+  mês mais ativo e maior sessão, todos por minutos de sessão; empates ficam com o
+  menor nome (ou mês), para o resultado ser estável;
+- jogos zerados e jogo do ano: pela data de conclusão do jogo, não por sessões;
+- horas retroativas não entram, pois não têm data de sessão.
+
+Reutiliza os mesmos parâmetros e a mesma regra de dia local da atividade.
+
 ## Missão principal
 
 Objetivo de longo prazo acompanhando uma lista pessoal: progresso = jogos zerados

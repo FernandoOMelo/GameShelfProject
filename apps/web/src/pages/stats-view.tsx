@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StatsGroup, StatsResponse } from '@gameshelf/contracts';
 import { ActivityHeatmap } from './activity-heatmap';
+import { ReplayPanel } from './replay-panel';
 import { apiUrl,difficultyLabels, formatCompactHours } from './shared';
 
 export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onOpenGame: (gameId: string) => void }) {
@@ -41,6 +42,7 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       <Tile label="Jogo mais curto" value={totals.shortestGame?.title ?? '—'} detail={totals.shortestGame ? formatCompactHours(totals.shortestGame.hours) : undefined} small />
     </div>
 
+    <ReplayPanel refreshKey={refreshKey} onOpenGame={onOpenGame} />
     <ActivityHeatmap refreshKey={refreshKey} />
 
     <section className="panel" aria-labelledby="timeline-title"><h2 id="timeline-title">Linha do tempo anual</h2>
