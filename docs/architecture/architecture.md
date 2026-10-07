@@ -2,7 +2,8 @@
 
 ## Visão
 
-Aplicação web self-hosted composta por frontend, API e PostgreSQL.
+Aplicação web self-hosted composta por frontend, API, PostgreSQL e armazenamento
+local de arquivos de mídia.
 
 ```text
 Browser
@@ -12,9 +13,9 @@ Frontend React
   |
   v
 Fastify API
-  |
-  v
-PostgreSQL
+  |             \
+  v              v
+PostgreSQL     Filesystem local (imagens)
 ```
 
 ## Monorepo
@@ -60,6 +61,10 @@ PostgreSQL é a fonte persistente de dados.
 
 Todas as alterações de schema devem ocorrer por migrations.
 
+Imagens importadas ficam em filesystem local persistido por volume do Docker;
+suas URLs locais são armazenadas nos campos de capa e background do jogo. Veja
+ADR-005.
+
 ## Contratos
 
 Schemas Zod compartilhados devem definir:
@@ -78,6 +83,7 @@ O domínio deve ser organizado por módulos:
 - genres;
 - sessions;
 - backlog;
+- game-lists;
 - planning;
 - dashboard.
 

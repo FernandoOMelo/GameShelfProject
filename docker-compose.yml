@@ -39,8 +39,13 @@ services:
       API_PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-gameshelf}:${POSTGRES_PASSWORD:-gameshelf}@postgres:5432/${POSTGRES_DB:-gameshelf}
       WEB_ORIGIN: http://localhost:8080
+      IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
+      IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
+      MEDIA_STORAGE_PATH: /app/storage
     ports:
       - "3000:3000"
+    volumes:
+      - gameshelf-media:/app/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,3 +69,4 @@ services:
 
 volumes:
   gameshelf-postgres:
+  gameshelf-media:

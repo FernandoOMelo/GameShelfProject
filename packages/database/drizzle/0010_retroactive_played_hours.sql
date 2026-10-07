@@ -1,0 +1,2 @@
+ALTER TABLE "games" ADD COLUMN "retroactive_played_hours" numeric(8, 2) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "games" ADD CONSTRAINT "games_retroactive_played_hours_nonnegative" CHECK ("games"."retroactive_played_hours" >= 0);

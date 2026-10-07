@@ -17,7 +17,8 @@ export async function registerBacklogRoutes(app: FastifyInstance, games: GameRep
     if (typeof request.body?.gameId !== 'string' || !isUuid(request.body.gameId)) return reply.code(400).send({ error: 'ID de jogo inválido.' });
     const game = await games.find(request.body.gameId);
     if (!game) return reply.code(404).send({ error: 'Jogo não encontrado.' });
-    if (game.status === 'COMPLETED' || game.status === 'ABANDONED') return reply.code(400).send({ error: 'Jogos concluídos ou abandonados não podem entrar na fila.' });
+    if (!game.owned) return reply.code(400).send({ error: 'A fila só aceita jogos que você possui.' });
+    if (game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED') return reply.code(400).send({ error: 'Jogos arquivados, zerados ou abandonados não podem entrar na fila.' });
     try {
       await backlog.addToQueue(game.id);
     } catch (error) {
@@ -53,6 +54,7 @@ function serializeGame(game: Awaited<ReturnType<GameRepository['find']>> extends
     estimatedMainHours: game.estimatedMainHours === null ? null : Number(game.estimatedMainHours),
     estimatedCompletionistHours: game.estimatedCompletionistHours === null ? null : Number(game.estimatedCompletionistHours),
     personalEstimatedHours: game.personalEstimatedHours === null ? null : Number(game.personalEstimatedHours),
+    retroactivePlayedHours: Number(game.retroactivePlayedHours ?? 0),
     createdAt: game.createdAt.toISOString(),
     updatedAt: game.updatedAt.toISOString(),
   };

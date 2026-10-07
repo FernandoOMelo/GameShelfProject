@@ -46,6 +46,10 @@ No celular, o fluxo prioritário é:
 
 Soma das durações das sessões válidas do jogo.
 
+O detalhe do jogo também exibe horas retroativas acumuladas sem data junto ao
+tempo das sessões. Esse lançamento não cria sessão e não participa das
+estatísticas, relatórios ou previsões do painel.
+
 No cadastro inicial, a duração de uma sessão finalizada é calculada pela API em minutos completos a partir de `startedAt` e `endedAt`. Uma sessão sem `endedAt` permanece em andamento e ainda não contribui para a duração.
 
 ### Tempo total da biblioteca
@@ -61,3 +65,9 @@ Uma implementação futura poderá tratar progresso por capítulos, objetivos ou
 ## Implementação inicial
 
 A página de detalhes do jogo permite registrar, editar e excluir sessões, encerrar sessões em andamento e consultar o histórico. A API calcula a duração e limita cada operação ao jogo da rota.
+
+Na página de detalhes, a ação **Continuar jogando** cria imediatamente uma sessão
+em andamento e exibe o tempo decorrido. O timer é retomado a partir do horário
+persistido ao reabrir o jogo. **Encerrar sessão** grava o término pela API e abre
+o formulário para registrar progresso, local e notas. A sessão continua editável
+no histórico.

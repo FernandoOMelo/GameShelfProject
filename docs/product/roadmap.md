@@ -42,6 +42,7 @@
 - [x] ordenação
 - [x] filtros
 - [x] prioridades
+- [x] listas pessoais nomeadas de jogos
 
 ## Fase 4 — Dashboard
 
@@ -60,12 +61,24 @@
 
 ## Fase 6 — Metadata
 
-- [ ] provider interface
-- [ ] integração IGDB
-- [ ] importação de capas
-- [ ] importação de metadata
+- [x] provider interface
+- [x] integração IGDB (busca de candidatos pela API)
+- [x] importação e armazenamento local de capas e artworks
+- [x] importação de metadata com revisão antes de salvar
+
+## Fase 7 — Estatísticas
+
+- [x] dificuldade, tipo, condição de zeramento, favorito e jogo do ano
+- [x] tela de estatísticas (notas, dificuldade, gênero, tipo, plataforma, anos)
+- [x] missão principal
+- [x] painel redesenhado
+
+Ver [Estatísticas](stats.md) e ADR-010.
 
 ## Depois do MVP
+
+O planejamento da experiência e do escopo da versão 1.0 está em
+[Blueprint de produto — GameShelf 1.0](v1-blueprint.md).
 
 Avaliar, com base no uso real:
 

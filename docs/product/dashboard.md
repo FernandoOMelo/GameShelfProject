@@ -1,63 +1,63 @@
-# Dashboard
+# Painel
 
 ## Objetivo
 
-Mostrar rapidamente a situação atual da biblioteca.
+O Painel é a tela inicial do GameShelf. Ele apresenta a situação atual da
+biblioteca, ações para os jogos em andamento e estatísticas de atividade.
 
-## Seção: Continuar jogando
+## Jogando agora
 
-Mostrar:
+Exibe todos os jogos não arquivados em `PLAYING`, ordenados pela atividade mais
+recente. Cada card pode abrir os detalhes, iniciar/continuar uma sessão, encerrar
+uma sessão ativa ou pausar o jogo. O timer da sessão ativa atualiza ao vivo.
 
-- jogo atual;
-- capa;
-- progresso;
-- horas jogadas;
-- estimativa pessoal;
-- última sessão;
-- local onde parou.
+## Período
 
-## Seção: Fila
+Opções: últimos 7 dias, mês atual, ano atual, intervalo personalizado e todo o
+período. Mês atual é o padrão; a opção escolhida fica salva no navegador. Os
+limites de data seguem o fuso do navegador.
 
-Mostrar os próximos jogos da fila.
+## Indicadores do período
 
-## Seção: Estatísticas
+- horas jogadas: minutos de sessões encerradas que caem dentro do período;
+- sessões: sessões iniciadas dentro do período;
+- jogos jogados: títulos únicos com uma sessão que cruza o período;
+- jogos zerados: títulos únicos com `completedAt` dentro do período.
 
-Indicadores mínimos:
+Sessões abertas aparecem no card e contam como sessão/jogo quando iniciadas no
+período, mas não entram nas horas fechadas. Uma sessão que cruza o limite
+contribui apenas com os minutos dentro do intervalo.
 
-- quantidade de jogos;
-- jogos concluídos;
-- jogos em andamento;
-- jogos abandonados;
-- horas jogadas;
-- horas estimadas do backlog;
-- horas disponíveis por semana.
+## Fotografia atual
 
-## Cálculos
+O Painel também mostra a quantidade total de jogos não arquivados, estados
+atuais, horas jogadas em todo o histórico, horas estimadas restantes dos jogos
+possuídos e a previsão da fila com base na meta semanal. Jogos arquivados ficam
+fora dessas visões atuais, mas seus registros continuam contando em relatórios
+históricos quando aplicável.
 
-### Horas jogadas
+O sistema não apresenta histórico de estados abandonados: esse dado exigiria
+persistir eventos de transição.
 
-Soma das sessões.
+## Missão principal
 
-### Horas restantes
+Cartão com um objetivo de longo prazo ligado a uma lista pessoal, com contagem de
+jogos zerados e barra de progresso. Detalhes em [Estatísticas](stats.md).
 
-Quando houver estimativa pessoal:
+## Visual
 
-`max(estimativa pessoal - horas jogadas, 0)`
+Indicadores do período em destaque, cartões de jogos em andamento com capa e
+barra de progresso, barra empilhada com a biblioteca por estado (cores fixas por
+estado), gráfico de zerados por ano e o resumo geral.
 
-Caso contrário, usar a estimativa principal.
+## API
 
-### Semanas restantes
+O resumo atual também apresenta contagens por estado: Desejados, Na biblioteca,
+Jogando, Pausados, Zerados, Abandonados e Arquivados. Cada card de jogo em
+andamento oferece ações rápidas para iniciar ou encerrar sessão, pausar, zerar,
+abandonar ou abrir os detalhes.
 
-Quando houver meta semanal maior que zero:
-
-`horas restantes / horas semanais`
-
-O resultado é aproximado e deve ser apresentado como estimativa.
-
-## Não fazer no MVP
-
-Não criar uma "pontuação de jogador" ou ranking de eficiência.
-
-## Implementação inicial
-
-`GET /dashboard` agrega os jogos, sessões finalizadas, fila e meta semanal. A meta é configurada em minutos por semana em `/planning/settings` e começa em zero. O jogo atual é o jogo em status `PLAYING` com a sessão mais recente; se não houver sessão, usa a última atualização do jogo. O painel mostra até cinco jogos na prévia da fila e destaca os três primeiros.
+`GET /dashboard` aceita `from` e `to` no formato `YYYY-MM-DD` e
+`timezoneOffsetMinutes` para delimitar o período local. Sem datas, retorna o
+histórico completo. A resposta inclui `playingGames`, `period` e `periodStats`,
+além das estatísticas gerais e prévia da fila.

@@ -27,8 +27,9 @@ Cada item possui:
 
 - um jogo não deve aparecer duas vezes na mesma fila;
 - a posição deve ser consistente;
-- jogos concluídos podem permanecer no histórico, mas não precisam permanecer na fila;
-- o usuário pode colocar qualquer jogo não concluído na fila.
+- apenas jogos possuídos podem entrar na fila;
+- jogos arquivados, zerados ou abandonados não podem entrar na fila;
+- mudar posse, arquivar ou concluir um jogo remove sua entrada da fila.
 
 ## Prioridade
 
@@ -52,4 +53,4 @@ Isso não faz parte do MVP.
 
 ## Implementação inicial
 
-O MVP possui uma fila única persistida localmente. A posição é independente do campo prioridade do jogo. Jogos concluídos ou abandonados não podem ser adicionados; excluir um jogo remove sua entrada da fila por chave estrangeira em cascata.
+O MVP possui uma fila única persistida localmente. A posição é independente do campo prioridade e do estado do jogo. A fila aceita apenas jogos possuídos e não arquivados, zerados ou abandonados; excluir um jogo remove sua entrada por chave estrangeira em cascata.

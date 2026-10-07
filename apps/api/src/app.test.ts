@@ -8,13 +8,16 @@ import type { GenreRepository } from './modules/genres/repository.js';
 import type { SessionRecord, SessionRepository } from './modules/sessions/repository.js';
 import type { BacklogRepository, QueueRecord } from './modules/backlog/repository.js';
 import type { PlanningSettingsRepository } from './modules/planning/repository.js';
+import type { GameMetadataProvider } from './modules/games/metadata-provider.js';
+import type { GameImageStorage } from './modules/games/image-storage.js';
+import type { GameListRepository, GameListRecord } from './modules/game-lists/repository.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
 const game: GameRecord = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null,
   coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: 'Supergiant Games',
   publisher: null, franchiseId: null, status: 'BACKLOG', priority: 'NORMAL', estimatedMainHours: null,
-  estimatedCompletionistHours: null, personalEstimatedHours: null, notes: null, platformIds: [], genreIds: [],
+  estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null, platformId: null, genreIds: [], rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, owned: true, archived: false, startedAt: null, completedAt: null,
   createdAt: now, updatedAt: now,
 };
 
@@ -23,10 +26,10 @@ function createRepository(): GameRepository {
   return {
     list: async () => games,
     find: async (id) => games.find((item) => item.id === id),
-    create: async (input: GameInput) => ({ ...game, ...input, id: '00000000-0000-4000-8000-000000000002' }),
+    create: async (input: GameInput) => ({ ...game, ...input, archived: input.archived ?? false, rating: input.rating ?? null, id: '00000000-0000-4000-8000-000000000002' }),
     update: async (id, input: GameUpdate) => {
       const existing = games.find((item) => item.id === id);
-      return existing ? { ...existing, ...input, updatedAt: new Date() } : undefined;
+      return existing ? { ...existing, ...input, rating: input.rating ?? existing.rating, updatedAt: new Date() } : undefined;
     },
     delete: async (id) => {
       const index = games.findIndex((item) => item.id === id);
@@ -130,6 +133,46 @@ function createPlanningSettingsRepository(): PlanningSettingsRepository {
   return { getWeeklyMinutes: async () => weeklyMinutes, setWeeklyMinutes: async (value) => { weeklyMinutes = value; } };
 }
 
+function createGameListRepository(): GameListRepository {
+  const lists: GameListRecord[] = [];
+  return {
+    list: async () => lists,
+    find: async (id) => lists.find((list) => list.id === id),
+    create: async (name) => {
+      if (lists.some((list) => list.name === name)) throw { code: '23505' };
+      const record = { id: '00000000-0000-4000-8000-000000000050', name, createdAt: now, updatedAt: now, gameIds: [] };
+      lists.push(record);
+      return record;
+    },
+    rename: async (id, name) => {
+      const record = lists.find((list) => list.id === id);
+      if (!record) return undefined;
+      if (lists.some((list) => list.id !== id && list.name === name)) throw { code: '23505' };
+      record.name = name;
+      return record;
+    },
+    delete: async (id) => {
+      const index = lists.findIndex((list) => list.id === id);
+      if (index < 0) return false;
+      lists.splice(index, 1);
+      return true;
+    },
+    addGame: async (listId, gameId) => {
+      const record = lists.find((list) => list.id === listId)!;
+      if (record.gameIds.includes(gameId)) throw { code: '23505' };
+      record.gameIds.push(gameId);
+    },
+    removeGame: async (listId, gameId) => {
+      const record = lists.find((list) => list.id === listId);
+      if (!record) return false;
+      const index = record.gameIds.indexOf(gameId);
+      if (index < 0) return false;
+      record.gameIds.splice(index, 1);
+      return true;
+    },
+  };
+}
+
 describe('GET /health', () => {
   const apps: ReturnType<typeof buildApp>[] = [];
   afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
@@ -194,14 +237,68 @@ describe('games API', () => {
     expect(response.json().franchiseId).toBe('00000000-0000-4000-8000-000000000010');
   });
 
-  it('accepts multiple platform and genre associations', async () => {
+  it('accepts a single platform and genre association', async () => {
     const app = buildApp({ gameRepository: createRepository() });
     apps.push(app);
     const platformId = '00000000-0000-4000-8000-000000000020';
     const genreId = '00000000-0000-4000-8000-000000000030';
-    const response = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Hades', platformIds: [platformId], genreIds: [genreId] } });
+    const response = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Hades', platformId, genreIds: [genreId], status: 'PLAYING', owned: true, startedAt: '2025-01-01' } });
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toMatchObject({ platformIds: [platformId], genreIds: [genreId] });
+    expect(response.json()).toMatchObject({ platformId, genreIds: [genreId], status: 'PLAYING', owned: true, startedAt: '2025-01-01' });
+  });
+
+  it('accepts GameShelf local media paths when creating or editing a game', async () => {
+    const app = buildApp({ gameRepository: createRepository() });
+    apps.push(app);
+    const coverUrl = '/media/00000000-0000-4000-8000-000000000050.jpg';
+    const created = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Local cover', coverUrl } });
+    const updated = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, payload: { coverUrl } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().coverUrl).toBe(coverUrl);
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().coverUrl).toBe(coverUrl);
+  });
+
+  it('stores per-platform ownership, lifecycle dates and one game rating', async () => {
+    const app = buildApp({ gameRepository: createRepository() });
+    apps.push(app);
+    const platformId = '00000000-0000-4000-8000-000000000020';
+    const response = await app.inject({ method: 'POST', url: '/games', payload: {
+      title: 'Hades', rating: 11,
+      platformId, owned: true, status: 'COMPLETED', startedAt: '2025-01-02', completedAt: '2025-02-03',
+    } });
+    const invalidRating = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Bad rating', rating: 12 } });
+    const invalidDates = await app.inject({ method: 'POST', url: '/games', payload: {
+      title: 'Bad dates', platformId, status: 'COMPLETED', startedAt: '2025-03-02', completedAt: '2025-02-03',
+    } });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ rating: 11, platformId, owned: true, status: 'COMPLETED', startedAt: '2025-01-02', completedAt: '2025-02-03' });
+    expect(invalidRating.statusCode).toBe(400);
+    expect(invalidDates.statusCode).toBe(400);
+  });
+
+  it('allows ratings only for completed or abandoned games and preserves archive state', async () => {
+    const app = buildApp({ gameRepository: createRepository() });
+    apps.push(app);
+    const invalidCreate = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Still playing', status: 'PLAYING', rating: 8 } });
+    const archived = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, payload: { archived: true } });
+    const invalidRating = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, payload: { status: 'PLAYING', rating: 8 } });
+    expect(invalidCreate.statusCode).toBe(400);
+    expect(archived.statusCode).toBe(200);
+    expect(archived.json()).toMatchObject({ archived: true, status: 'BACKLOG' });
+    expect(invalidRating.statusCode).toBe(400);
+  });
+
+  it('removes a game from the queue when it is archived or loses possession', async () => {
+    const repository = createRepository();
+    const backlog = createBacklogRepository();
+    const app = buildApp({ gameRepository: repository, backlogRepository: backlog });
+    apps.push(app);
+    await backlog.addToQueue(game.id);
+    const archived = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, payload: { archived: true } });
+    const queue = await app.inject('/queue');
+    expect(archived.statusCode).toBe(200);
+    expect(queue.json()).toEqual([]);
   });
 
   it('returns 404 for unknown games and updates existing games', async () => {
@@ -357,6 +454,19 @@ describe('backlog and planning APIs', () => {
     expect(removed.statusCode).toBe(204);
   });
 
+  it('rejects games that are not owned from the queue', async () => {
+    const nonOwnedRepository = createRepository();
+    const originalFind = nonOwnedRepository.find;
+    nonOwnedRepository.find = async (id) => {
+      const found = await originalFind(id);
+      return found ? { ...found, owned: false } : undefined;
+    };
+    const app = buildApp({ gameRepository: nonOwnedRepository, backlogRepository: createBacklogRepository() });
+    apps.push(app);
+    const response = await app.inject({ method: 'POST', url: '/queue', payload: { gameId: game.id } });
+    expect(response.statusCode).toBe(400);
+  });
+
   it('saves a weekly goal and returns a dashboard summary', async () => {
     const app = buildApp({
       gameRepository: createRepository(), sessionRepository: createSessionRepository(),
@@ -366,8 +476,172 @@ describe('backlog and planning APIs', () => {
     const invalid = await app.inject({ method: 'PUT', url: '/planning/settings', payload: { weeklyMinutes: -30 } });
     const saved = await app.inject({ method: 'PUT', url: '/planning/settings', payload: { weeklyMinutes: 360 } });
     const dashboard = await app.inject('/dashboard');
+    const rangedDashboard = await app.inject('/dashboard?from=2026-01-01&to=2026-01-31&timezoneOffsetMinutes=180');
+    const invalidRange = await app.inject('/dashboard?from=2026-02-01&to=2026-01-01');
     expect(invalid.statusCode).toBe(400);
     expect(saved.json()).toEqual({ weeklyMinutes: 360 });
     expect(dashboard.json()).toMatchObject({ gameCount: 1, weeklyHours: 6, queueRemainingHours: 0, estimatedQueueWeeks: 0 });
+    expect(rangedDashboard.json().period).toEqual({ from: '2026-01-01', to: '2026-01-31' });
+    expect(invalidRange.statusCode).toBe(400);
+  });
+});
+
+describe('custom game lists API', () => {
+  const apps: ReturnType<typeof buildApp>[] = [];
+  afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
+
+  it('creates a named list, adds and removes games, and returns the list contents', async () => {
+    const app = buildApp({ gameRepository: createRepository(), gameListRepository: createGameListRepository() });
+    apps.push(app);
+    const created = await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Favoritos' } });
+    expect(created.statusCode).toBe(201);
+    const listId = created.json().id as string;
+    expect(created.json()).toMatchObject({ name: 'Favoritos', gameCount: 0 });
+
+    const added = await app.inject({ method: 'POST', url: `/lists/${listId}/games`, payload: { gameId: game.id } });
+    expect(added.statusCode).toBe(204);
+    const duplicate = await app.inject({ method: 'POST', url: `/lists/${listId}/games`, payload: { gameId: game.id } });
+    expect(duplicate.statusCode).toBe(409);
+    const detail = await app.inject(`/lists/${listId}`);
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({ name: 'Favoritos', gameCount: 1, games: [{ id: game.id, title: 'Hades' }] });
+
+    const removed = await app.inject({ method: 'DELETE', url: `/lists/${listId}/games/${game.id}` });
+    expect(removed.statusCode).toBe(204);
+    expect((await app.inject(`/lists/${listId}`)).json()).toMatchObject({ gameCount: 0, games: [] });
+    const renamed = await app.inject({ method: 'PATCH', url: `/lists/${listId}`, payload: { name: 'Favoritos pessoais' } });
+    expect(renamed.json()).toMatchObject({ id: listId, name: 'Favoritos pessoais' });
+    expect((await app.inject({ method: 'DELETE', url: `/lists/${listId}` })).statusCode).toBe(204);
+    expect((await app.inject(`/lists/${listId}`)).statusCode).toBe(404);
+  });
+
+  it('rejects blank and duplicate list names', async () => {
+    const app = buildApp({ gameRepository: createRepository(), gameListRepository: createGameListRepository() });
+    apps.push(app);
+    expect((await app.inject({ method: 'POST', url: '/lists', payload: { name: '  ' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Backlog pessoal' } })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Backlog pessoal' } })).statusCode).toBe(409);
+  });
+});
+
+describe('metadata search API', () => {
+  const apps: ReturnType<typeof buildApp>[] = [];
+  afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
+
+  it('returns validated provider candidates for a search query', async () => {
+    const metadataProvider: GameMetadataProvider = {
+      id: 'test-provider',
+      search: async (query) => [{ providerId: '42', title: query, releaseYear: 2024 }],
+    };
+    const app = buildApp({ metadataProvider });
+    apps.push(app);
+
+    const result = await app.inject('/metadata/games?query=Example%20Game');
+
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toEqual([{ providerId: '42', title: 'Example Game', releaseYear: 2024 }]);
+  });
+
+  it('rejects invalid queries and reports an unconfigured provider', async () => {
+    const app = buildApp();
+    apps.push(app);
+
+    const invalid = await app.inject('/metadata/games?query=%20%20');
+    const unavailable = await app.inject('/metadata/games?query=Hades');
+
+    expect(invalid.statusCode).toBe(400);
+    expect(unavailable.statusCode).toBe(503);
+  });
+
+  it('does not expose provider errors to API clients', async () => {
+    const app = buildApp({ metadataProvider: { id: 'test', search: async () => { throw new Error('secret detail'); } } });
+    apps.push(app);
+
+    const result = await app.inject('/metadata/games?query=Hades');
+
+    expect(result.statusCode).toBe(502);
+    expect(result.json()).toEqual({ error: 'Não foi possível buscar metadata externa. Consulte o log da API para ver o diagnóstico.' });
+    expect(result.body).not.toContain('secret detail');
+  });
+});
+
+describe('local metadata images', () => {
+  const apps: ReturnType<typeof buildApp>[] = [];
+  afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
+
+  it('stores IGDB cover and artwork locally when a game is saved', async () => {
+    const importedUrls: string[] = [];
+    const imageStorage: GameImageStorage = {
+      importImage: async (sourceUrl) => {
+        importedUrls.push(sourceUrl);
+        return `/media/00000000-0000-4000-8000-000000000050.jpg`;
+      },
+      removeImage: async () => undefined,
+      openImage: async () => undefined,
+    };
+    const app = buildApp({ gameRepository: createRepository(), imageStorage });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/games',
+      payload: {
+        title: 'Hades',
+        coverUrl: 'https://images.igdb.com/igdb/image/upload/t_cover_big/cover.jpg',
+        backgroundUrl: 'https://images.igdb.com/igdb/image/upload/t_1080p/artwork.jpg',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ coverUrl: '/media/00000000-0000-4000-8000-000000000050.jpg' });
+    expect(importedUrls).toEqual([
+      'https://images.igdb.com/igdb/image/upload/t_cover_big/cover.jpg',
+      'https://images.igdb.com/igdb/image/upload/t_1080p/artwork.jpg',
+    ]);
+  });
+});
+
+describe('classification, stats and challenge API', () => {
+  const apps: ReturnType<typeof buildApp>[] = [];
+  afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
+
+  it('accepts the new classification fields and requires a completion date for game of the year', async () => {
+    const app = buildApp({ gameRepository: createRepository() });
+    apps.push(app);
+    const created = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Chrono Trigger', status: 'COMPLETED', completedAt: '2026-02-01', difficulty: 'B', gameType: 'RPG de Turno', completionCondition: 'Veja os créditos', favorite: true, gameOfYear: true } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ difficulty: 'B', gameType: 'RPG de Turno', completionCondition: 'Veja os créditos', favorite: true, gameOfYear: true });
+    const invalid = await app.inject({ method: 'POST', url: '/games', payload: { title: 'Sem data', gameOfYear: true } });
+    expect(invalid.statusCode).toBe(400);
+    const badDifficulty = await app.inject({ method: 'POST', url: '/games', payload: { title: 'X', difficulty: 'Z' } });
+    expect(badDifficulty.statusCode).toBe(400);
+    const patch = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, payload: { gameOfYear: true } });
+    expect(patch.statusCode).toBe(400);
+  });
+
+  it('returns the stats contract', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), platformRepository: createPlatformRepository(), genreRepository: createGenreRepository() });
+    apps.push(app);
+    const response = await app.inject({ method: 'GET', url: '/stats' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ totals: { completedCount: 0 }, ratingDistribution: expect.any(Array), byYear: [] });
+  });
+
+  it('sets, reads and clears the main challenge from a list', async () => {
+    let stored: { title: string; listId: string } | undefined;
+    const lists = createGameListRepository();
+    const list = await lists.create('Clássicos');
+    await lists.addGame(list.id, game.id);
+    const app = buildApp({
+      gameRepository: createRepository(), gameListRepository: lists,
+      mainChallengeRepository: { get: async () => stored, set: async (input) => { stored = input; }, clear: async () => { stored = undefined; } },
+    });
+    apps.push(app);
+    expect((await app.inject({ method: 'GET', url: '/challenge' })).json()).toBeNull();
+    expect((await app.inject({ method: 'PUT', url: '/challenge', payload: { title: 'Zerar tudo', listId: '00000000-0000-4000-8000-000000000099' } })).statusCode).toBe(404);
+    const put = await app.inject({ method: 'PUT', url: '/challenge', payload: { title: 'Zerar tudo', listId: list.id } });
+    expect(put.json()).toMatchObject({ title: 'Zerar tudo', totalGames: 1, completedGames: 0, percent: 0, listName: 'Clássicos' });
+    expect((await app.inject({ method: 'DELETE', url: '/challenge' })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', url: '/challenge' })).json()).toBeNull();
   });
 });

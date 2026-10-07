@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey } from 'drizzle-orm/pg-core';
+import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const franchises = pgTable('franchises', {
@@ -20,10 +20,12 @@ export const genres = pgTable('genres', {
 });
 
 export const gameStatus = pgEnum('game_status', [
-  'BACKLOG', 'QUEUED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED',
+  'DESIRED', 'BACKLOG', 'QUEUED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED',
 ]);
 
 export const gamePriority = pgEnum('game_priority', ['LOW', 'NORMAL', 'HIGH']);
+
+export const gameDifficulty = pgEnum('game_difficulty', ['C', 'B', 'A', 'AA', 'AAA']);
 
 export const games = pgTable('games', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -35,11 +37,23 @@ export const games = pgTable('games', {
   developer: text('developer'),
   publisher: text('publisher'),
   franchiseId: uuid('franchise_id').references(() => franchises.id, { onDelete: 'restrict' }),
+  platformId: uuid('platform_id').references(() => platforms.id, { onDelete: 'set null' }),
   status: gameStatus('status').notNull().default('BACKLOG'),
+  owned: boolean('owned').notNull().default(false),
+  archived: boolean('archived').notNull().default(false),
+  startedAt: date('started_at'),
+  completedAt: date('completed_at'),
   priority: gamePriority('priority').notNull().default('NORMAL'),
   estimatedMainHours: numeric('estimated_main_hours', { precision: 8, scale: 2 }),
   estimatedCompletionistHours: numeric('estimated_completionist_hours', { precision: 8, scale: 2 }),
   personalEstimatedHours: numeric('personal_estimated_hours', { precision: 8, scale: 2 }),
+  retroactivePlayedHours: numeric('retroactive_played_hours', { precision: 8, scale: 2 }).notNull().default('0'),
+  rating: integer('rating'),
+  difficulty: gameDifficulty('difficulty'),
+  gameType: text('game_type'),
+  completionCondition: text('completion_condition'),
+  favorite: boolean('favorite').notNull().default(false),
+  gameOfYear: boolean('game_of_year').notNull().default(false),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -49,12 +63,11 @@ export const games = pgTable('games', {
   check('games_estimated_main_hours_nonnegative', sql`${table.estimatedMainHours} IS NULL OR ${table.estimatedMainHours} >= 0`),
   check('games_estimated_completionist_hours_nonnegative', sql`${table.estimatedCompletionistHours} IS NULL OR ${table.estimatedCompletionistHours} >= 0`),
   check('games_personal_estimated_hours_nonnegative', sql`${table.personalEstimatedHours} IS NULL OR ${table.personalEstimatedHours} >= 0`),
+  check('games_retroactive_played_hours_nonnegative', sql`${table.retroactivePlayedHours} >= 0`),
+  check('games_game_of_year_requires_completion', sql`NOT ${table.gameOfYear} OR ${table.completedAt} IS NOT NULL`),
+  check('games_rating_valid', sql`${table.rating} IS NULL OR ${table.rating} BETWEEN 1 AND 11`),
+  check('games_completion_not_before_start', sql`${table.startedAt} IS NULL OR ${table.completedAt} IS NULL OR ${table.completedAt} >= ${table.startedAt}`),
 ]);
-
-export const gamePlatforms = pgTable('game_platforms', {
-  gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
-  platformId: uuid('platform_id').notNull().references(() => platforms.id, { onDelete: 'restrict' }),
-}, (table) => [primaryKey({ columns: [table.gameId, table.platformId] })]);
 
 export const gameGenres = pgTable('game_genres', {
   gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
@@ -83,6 +96,19 @@ export const queueEntries = pgTable('queue_entries', {
   addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [check('queue_entries_position_nonnegative', sql`${table.position} >= 0`)]);
 
+export const gameLists = pgTable('game_lists', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check('game_lists_name_not_blank', sql`length(trim(${table.name})) > 0`)]);
+
+export const gameListEntries = pgTable('game_list_entries', {
+  listId: uuid('list_id').notNull().references(() => gameLists.id, { onDelete: 'cascade' }),
+  gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
+  addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.listId, table.gameId] })]);
+
 export const planningSettings = pgTable('planning_settings', {
   id: integer('id').primaryKey().default(1),
   weeklyMinutes: integer('weekly_minutes').notNull().default(0),
@@ -90,4 +116,14 @@ export const planningSettings = pgTable('planning_settings', {
 }, (table) => [
   check('planning_settings_singleton_id', sql`${table.id} = 1`),
   check('planning_settings_weekly_minutes_nonnegative', sql`${table.weeklyMinutes} >= 0`),
+]);
+
+export const mainChallenge = pgTable('main_challenge', {
+  id: integer('id').primaryKey().default(1),
+  title: text('title').notNull(),
+  listId: uuid('list_id').notNull().references(() => gameLists.id, { onDelete: 'cascade' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('main_challenge_singleton_id', sql`${table.id} = 1`),
+  check('main_challenge_title_not_blank', sql`length(trim(${table.title})) > 0`),
 ]);

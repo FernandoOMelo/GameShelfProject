@@ -27,7 +27,7 @@ O MVP está implementado conforme o escopo documentado. Metadata externa não bl
 
 **O projeto ainda não tem uma definição documentada de “versão 1.0”; portanto, não há um percentual único confiável para esse marco.** A seção “Depois do MVP” lista ideias a avaliar com base no uso real, sem dizer quais entram na versão 1.0.
 
-Como referência provisória, se a 1.0 significar concluir as Fases 0–6 do roadmap — incluindo integração de metadata opcional —, o progresso atual é de aproximadamente **90%**. As Fases 0–5 estão concluídas; a Fase 6 (provider e importação IGDB) não começou. O valor cai se a 1.0 incluir itens da lista pós-MVP, como Steam, PWA offline, autenticação ou acesso remoto.
+Como referência provisória, se a 1.0 significar concluir as Fases 0–6 do roadmap — incluindo integração de metadata opcional —, o progresso atual é de aproximadamente **100%**. As Fases 0–6 estão concluídas, incluindo busca IGDB, revisão de metadata e armazenamento local de capas e artworks. O valor cai se a 1.0 incluir itens da lista pós-MVP, como Steam, PWA offline, autenticação ou acesso remoto.
 
 ## Recalibração
 

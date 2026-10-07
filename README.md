@@ -58,6 +58,10 @@ Com PostgreSQL ativo e migrations aplicadas, a biblioteca permite cadastrar, lis
 
 A estimativa atual de progresso está em [docs/product/progress-estimate.md](docs/product/progress-estimate.md). A definição funcional do MVP está em [docs/product/mvp.md](docs/product/mvp.md).
 
+## Busca de metadata IGDB
+
+Opcionalmente, configure `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET` no `.env` para habilitar a busca de candidatos de metadata no formulário de jogos. Os resultados são preenchidos para revisão e só são gravados quando o formulário é salvo. Ao salvar, capas e artworks IGDB são baixadas para `MEDIA_STORAGE_PATH`; no Docker Compose, o volume persistente `gameshelf-media` guarda esses arquivos. Sem credenciais, a biblioteca e os demais recursos seguem funcionando normalmente.
+
 ## Primeira execução passo a passo
 
 1. Selecione Node.js 22 ou superior no nvm e instale as dependências: `pnpm install` (no PowerShell, use o comando via `npm exec` descrito acima se pnpm não estiver no PATH).

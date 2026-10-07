@@ -8,7 +8,15 @@ import { DrizzlePlatformRepository } from './modules/platforms/drizzle-platform-
 import { DrizzleGenreRepository } from './modules/genres/drizzle-genre-repository.js';
 import { DrizzleSessionRepository } from './modules/sessions/drizzle-session-repository.js';
 import { DrizzleBacklogRepository } from './modules/backlog/drizzle-backlog-repository.js';
+import { DrizzleGameListRepository } from './modules/game-lists/drizzle-game-list-repository.js';
 import { DrizzlePlanningSettingsRepository } from './modules/planning/drizzle-planning-settings-repository.js';
+import { DrizzleMainChallengeRepository } from './modules/challenge/drizzle-challenge-repository.js';
+import { IgdbMetadataProvider } from './modules/games/igdb-metadata-provider.js';
+import { LocalImageStorage } from './modules/games/image-storage.js';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const apiDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 if (!env.DATABASE_URL) {
   throw new Error('DATABASE_URL é obrigatória para iniciar a API.');
@@ -22,7 +30,13 @@ const app = buildApp({
   genreRepository: new DrizzleGenreRepository(database.db),
   sessionRepository: new DrizzleSessionRepository(database.db),
   backlogRepository: new DrizzleBacklogRepository(database.db),
+  gameListRepository: new DrizzleGameListRepository(database.db),
+  mainChallengeRepository: new DrizzleMainChallengeRepository(database.db),
   planningSettingsRepository: new DrizzlePlanningSettingsRepository(database.db),
+  imageStorage: new LocalImageStorage(resolve(apiDirectory, env.MEDIA_STORAGE_PATH)),
+  ...(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET && {
+    metadataProvider: new IgdbMetadataProvider(env.IGDB_CLIENT_ID, env.IGDB_CLIENT_SECRET),
+  }),
   webOrigin: env.WEB_ORIGIN,
 });
 

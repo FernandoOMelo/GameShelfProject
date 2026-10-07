@@ -15,8 +15,17 @@ import { registerBacklogRoutes } from './modules/backlog/routes.js';
 import type { PlanningSettingsRepository } from './modules/planning/repository.js';
 import { registerPlanningRoutes } from './modules/planning/routes.js';
 import { registerDashboardRoutes } from './modules/dashboard/routes.js';
+import type { GameMetadataProvider } from './modules/games/metadata-provider.js';
+import { registerMetadataRoutes } from './modules/games/metadata-routes.js';
+import type { GameImageStorage } from './modules/games/image-storage.js';
+import { registerMediaRoutes } from './modules/games/media-routes.js';
+import type { GameListRepository } from './modules/game-lists/repository.js';
+import { registerGameListRoutes } from './modules/game-lists/routes.js';
+import { registerStatsRoutes } from './modules/stats/routes.js';
+import type { MainChallengeRepository } from './modules/challenge/repository.js';
+import { registerChallengeRoutes } from './modules/challenge/routes.js';
 
-export function buildApp(options: { gameRepository?: GameRepository; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; webOrigin?: string } = {}) {
+export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   app.addHook('onRequest', async (request, reply) => {
@@ -37,7 +46,11 @@ export function buildApp(options: { gameRepository?: GameRepository; franchiseRe
     return reply.code(200).send(body);
   });
 
-  if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!));
+  app.register((instance) => registerMetadataRoutes(instance, options.metadataProvider));
+
+  if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!, options.imageStorage, options.backlogRepository));
+  if (options.gameRepository && options.gameListRepository) app.register((instance) => registerGameListRoutes(instance, options.gameRepository!, options.gameListRepository!));
+  if (options.imageStorage) app.register((instance) => registerMediaRoutes(instance, options.imageStorage!));
   if (options.franchiseRepository) app.register((instance) => registerFranchiseRoutes(instance, options.franchiseRepository!));
   if (options.platformRepository) app.register((instance) => registerPlatformRoutes(instance, options.platformRepository!));
   if (options.genreRepository) app.register((instance) => registerGenreRoutes(instance, options.genreRepository!));
@@ -50,6 +63,12 @@ export function buildApp(options: { gameRepository?: GameRepository; franchiseRe
   if (options.planningSettingsRepository) app.register((instance) => registerPlanningRoutes(instance, options.planningSettingsRepository!));
   if (options.gameRepository && options.sessionRepository && options.backlogRepository && options.planningSettingsRepository) {
     app.register((instance) => registerDashboardRoutes(instance, options.gameRepository!, options.sessionRepository!, options.backlogRepository!, options.planningSettingsRepository!));
+  }
+  if (options.gameRepository && options.sessionRepository && options.platformRepository && options.genreRepository) {
+    app.register((instance) => registerStatsRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!));
+  }
+  if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
+    app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));
   }
 
   return app;
