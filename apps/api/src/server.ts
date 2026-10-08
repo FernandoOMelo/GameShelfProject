@@ -13,6 +13,7 @@ import { DrizzlePlanningSettingsRepository } from './modules/planning/drizzle-pl
 import { DrizzleMainChallengeRepository } from './modules/challenge/drizzle-challenge-repository.js';
 import { DrizzleGoalRepository } from './modules/goals/drizzle-goal-repository.js';
 import { DrizzleScreenshotRepository } from './modules/sessions/drizzle-screenshot-repository.js';
+import { DrizzleBackupImporter } from './modules/backup/drizzle-backup-importer.js';
 import { IgdbMetadataProvider } from './modules/games/igdb-metadata-provider.js';
 import { LocalImageStorage } from './modules/games/image-storage.js';
 import { dirname, resolve } from 'node:path';
@@ -35,6 +36,7 @@ const app = buildApp({
   gameListRepository: new DrizzleGameListRepository(database.db),
   mainChallengeRepository: new DrizzleMainChallengeRepository(database.db),
   goalRepository: new DrizzleGoalRepository(database.db),
+  backupImporter: new DrizzleBackupImporter(database.db),
   screenshotRepository: new DrizzleScreenshotRepository(database.db),
   planningSettingsRepository: new DrizzlePlanningSettingsRepository(database.db),
   imageStorage: new LocalImageStorage(resolve(apiDirectory, env.MEDIA_STORAGE_PATH)),

@@ -141,6 +141,7 @@ function createScreenshotRepository(sessionOwners: () => Array<{ id: string; gam
   return {
     records,
     listForSession: async (gameId, sessionId) => ownedBy(gameId, sessionId) ? records.filter((item) => item.sessionId === sessionId) : [],
+    listAll: async () => records,
     listForGame: async (gameId) => records.filter((item) => sessionOwners().some((owner) => owner.id === item.sessionId && owner.gameId === gameId)),
     add: async (sessionId, url) => {
       const record = { id: `00000000-0000-4000-8000-${String(700 + records.length).padStart(12, '0')}`, sessionId, url, createdAt: new Date() };

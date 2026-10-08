@@ -86,6 +86,7 @@ O domínio deve ser organizado por módulos:
 - game-lists;
 - planning;
 - goals;
+- backup;
 - dashboard.
 
 ## Integrações

@@ -381,3 +381,33 @@ export const mainChallengeSchema = z.object({
 }).strict();
 export type MainChallengeInput = z.infer<typeof mainChallengeInputSchema>;
 export type MainChallenge = z.infer<typeof mainChallengeSchema>;
+
+// Backup completo (ADR-014). Usa as mesmas formas da API; a integridade entre coleções é
+// verificada à parte, em apps/api (findBackupIssues).
+export const backupDataSchema = z.object({
+  franchises: z.array(franchiseSchema),
+  platforms: z.array(platformSchema),
+  genres: z.array(genreSchema),
+  games: z.array(gameSchema),
+  sessions: z.array(sessionSchema.omit({ durationMinutes: true })),
+  screenshots: z.array(sessionScreenshotSchema),
+  queue: z.array(z.object({ gameId: z.string().uuid(), position: z.number().int().nonnegative(), addedAt: z.string().datetime() }).strict()),
+  lists: z.array(z.object({
+    id: z.string().uuid(), name: z.string().trim().min(1).max(100), gameIds: z.array(z.string().uuid()),
+    createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
+  }).strict()),
+  challenge: z.object({ title: z.string().trim().min(1).max(200), listId: z.string().uuid() }).strict().nullable(),
+  goals: z.array(z.object({
+    id: z.string().uuid(), kind: goalKindSchema, period: goalPeriodSchema,
+    year: z.number().int().min(2000).max(2100), month: z.number().int().min(0).max(12), target: z.number().int().min(1).max(100000),
+  }).strict()),
+  weeklyMinutes: z.number().int().min(0).max(10080),
+}).strict();
+export const backupSchema = z.object({
+  app: z.literal('gameshelf'),
+  version: z.literal(1),
+  exportedAt: z.string().datetime(),
+  data: backupDataSchema,
+}).strict();
+export type BackupData = z.infer<typeof backupDataSchema>;
+export type Backup = z.infer<typeof backupSchema>;

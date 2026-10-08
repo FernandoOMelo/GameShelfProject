@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { DashboardResponse, Game, GameListSummary, MainChallenge, QueueItem, Session } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
+import { BackupCard } from './backup-card';
 import { GoalsCard } from './goals-card';
 import { apiUrl, formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
 
@@ -116,6 +117,8 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
         <div className="panel"><div className="section-heading"><h2>Próximos da fila</h2><button type="button" className="session-edit" onClick={onOpenQueue}>Ver fila completa</button></div>{queue.length ? <ol className="dashboard-queue">{queue.slice(0, 3).map((item) => <li key={item.game.id}><button type="button" onClick={() => onSelectGame(item.game)}>{item.position + 1}. {item.game.title}</button></li>)}</ol> : <p className="dashboard-empty">Sua fila está vazia.</p>}<p>{dashboard.queueRemainingHours} h estimadas na fila{dashboard.estimatedQueueWeeks === null ? '' : ` · cerca de ${dashboard.estimatedQueueWeeks} semanas`}</p></div>
         <form className="weekly-goal-form panel" onSubmit={(event) => void saveWeeklyGoal(event)}><h2>Meta semanal</h2><label className="form-field">Minutos disponíveis por semana<input aria-label="Minutos disponíveis por semana" type="number" min="0" max="10080" step="15" value={weeklyMinutes} onChange={(event) => setWeeklyMinutes(event.target.value)} /></label><Button type="submit">Salvar meta</Button>{feedback && <p role="status">{feedback}</p>}</form>
       </section>
+
+      <BackupCard onImported={() => window.location.reload()} />
     </>}
   </section>;
 }

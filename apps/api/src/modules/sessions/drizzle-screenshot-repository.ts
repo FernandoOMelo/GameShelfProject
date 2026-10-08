@@ -21,6 +21,10 @@ export class DrizzleScreenshotRepository implements ScreenshotRepository {
       .orderBy(asc(sessionScreenshots.createdAt), asc(sessionScreenshots.id));
   }
 
+  async listAll(): Promise<ScreenshotRecord[]> {
+    return this.db.select(columns).from(sessionScreenshots).orderBy(asc(sessionScreenshots.createdAt), asc(sessionScreenshots.id));
+  }
+
   async add(sessionId: string, url: string): Promise<ScreenshotRecord> {
     const [row] = await this.db.insert(sessionScreenshots).values({ sessionId, url }).returning(columns);
     return row!;

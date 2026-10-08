@@ -11,3 +11,6 @@ playwright-report/
 test-results/
 .gameshelf/
 **/.gameshelf/
+
+# Backups gerados por scripts/backup.ps1
+backups/
