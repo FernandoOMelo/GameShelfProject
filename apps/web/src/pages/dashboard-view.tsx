@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { DashboardResponse, Game, GameListSummary, MainChallenge, QueueItem, Session } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
+import { GoalsCard } from './goals-card';
 import { apiUrl, formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
 
 export type DashboardPeriod = '7d' | 'month' | 'year' | 'custom' | 'all';
@@ -106,6 +107,8 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
       </div>
 
       <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />
+
+      <GoalsCard />
 
       <ChallengeCard />
 

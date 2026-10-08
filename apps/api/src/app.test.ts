@@ -11,6 +11,7 @@ import type { PlanningSettingsRepository } from './modules/planning/repository.j
 import type { GameMetadataProvider } from './modules/games/metadata-provider.js';
 import type { GameImageStorage } from './modules/games/image-storage.js';
 import type { GameListRepository, GameListRecord } from './modules/game-lists/repository.js';
+import type { GoalRecord, GoalRepository } from './modules/goals/repository.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
 const game: GameRecord = {
@@ -131,6 +132,31 @@ function createBacklogRepository(gameRecord: GameRecord = game): BacklogReposito
 function createPlanningSettingsRepository(): PlanningSettingsRepository {
   let weeklyMinutes = 0;
   return { getWeeklyMinutes: async () => weeklyMinutes, setWeeklyMinutes: async (value) => { weeklyMinutes = value; } };
+}
+
+function createGoalRepository(): GoalRepository {
+  const records: GoalRecord[] = [];
+  return {
+    list: async () => records,
+    create: async (input) => {
+      const month = input.month ?? 0;
+      if (records.some((item) => item.kind === input.kind && item.period === input.period && item.year === input.year && item.month === month)) throw { code: '23505' };
+      const record = { id: `00000000-0000-4000-8000-${String(900 + records.length).padStart(12, '0')}`, kind: input.kind, period: input.period, year: input.year, month, target: input.target };
+      records.push(record);
+      return record;
+    },
+    updateTarget: async (id, target) => {
+      const record = records.find((item) => item.id === id);
+      if (record) record.target = target;
+      return record;
+    },
+    remove: async (id) => {
+      const index = records.findIndex((item) => item.id === id);
+      if (index < 0) return false;
+      records.splice(index, 1);
+      return true;
+    },
+  };
 }
 
 function createGameListRepository(): GameListRepository {
@@ -647,6 +673,32 @@ describe('classification, stats and challenge API', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject([{ game: { id: game.id }, reasons: expect.any(Array) }]);
     expect((await app.inject({ method: 'GET', url: '/backlog/suggestions?timezoneOffsetMinutes=abc' })).statusCode).toBe(400);
+  });
+
+  it('creates, updates and removes goals with calculated progress', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), goalRepository: createGoalRepository() });
+    apps.push(app);
+    const created = await app.inject({ method: 'POST', url: '/goals', payload: { kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, target: 12 } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: null, target: 12, current: 0, percent: 0 });
+    const goalId = created.json().id as string;
+    const monthly = await app.inject({ method: 'POST', url: '/goals', payload: { kind: 'PLAYED_HOURS', period: 'MONTH', year: 2026, month: 3, target: 40 } });
+    expect(monthly.json()).toMatchObject({ month: 3, target: 40 });
+    expect((await app.inject({ method: 'GET', url: '/goals?timezoneOffsetMinutes=180' })).json()).toHaveLength(2);
+
+    expect((await app.inject({ method: 'POST', url: '/goals', payload: { kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, target: 5 } })).statusCode).toBe(409);
+    expect((await app.inject({ method: 'POST', url: '/goals', payload: { kind: 'COMPLETED_GAMES', period: 'MONTH', year: 2026, target: 5 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/goals', payload: { kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 2, target: 5 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/goals', payload: { kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2027, target: 0 } })).statusCode).toBe(400);
+
+    const updated = await app.inject({ method: 'PATCH', url: `/goals/${goalId}`, payload: { target: 20 } });
+    expect(updated.json()).toMatchObject({ id: goalId, target: 20 });
+    expect((await app.inject({ method: 'PATCH', url: '/goals/00000000-0000-4000-8000-000000000001', payload: { target: 20 } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'PATCH', url: '/goals/invalid', payload: { target: 20 } })).statusCode).toBe(400);
+
+    expect((await app.inject({ method: 'DELETE', url: `/goals/${goalId}` })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'DELETE', url: `/goals/${goalId}` })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/goals' })).json()).toHaveLength(1);
   });
 
   it('sets, reads and clears the main challenge from a list', async () => {

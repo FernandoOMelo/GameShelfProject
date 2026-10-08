@@ -18,6 +18,7 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
   const queue = [...initialQueue] as Array<{ position: number; addedAt: string; game: { id: string; title: string } }>;
   const lists: Array<{ id: string; name: string; gameIds: string[] }> = [];
   let weeklyMinutes = 0;
+  const goals: Array<Record<string, unknown>> = [];
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
@@ -70,6 +71,14 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
     }
     if (url.match(/^\/api\/games\/[^/]+$/) && method === 'DELETE') return new Response(null, { status: 204 });
     if (url === '/api/games') return new Response(JSON.stringify(games), { status: 200 });
+    if (url.startsWith('/api/goals') && method === 'GET') return new Response(JSON.stringify(goals), { status: 200 });
+    if (url === '/api/goals' && method === 'POST') {
+      const input = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (input.target === 99) return new Response(JSON.stringify({ error: 'duplicada' }), { status: 409 });
+      goals.push({ id: '00000000-0000-4000-8000-000000000900', month: null, current: 3, percent: 25, elapsedPercent: 50, achieved: false, onTrack: false, ...input });
+      return new Response(JSON.stringify(goals.at(-1)), { status: 201 });
+    }
+    if (url.startsWith('/api/goals/') && method === 'DELETE') { goals.splice(0, goals.length); return new Response(null, { status: 204 }); }
     if (url.startsWith('/api/backlog/suggestions')) return new Response(JSON.stringify(games.slice(0, 2).map((item, position) => ({ game: item, score: 50 - position, reasons: position === 0 ? ['Primeiro da fila', 'Prioridade alta'] : ['Pausado: dá para retomar de onde parou'] }))), { status: 200 });
     if (url === '/api/queue' && method === 'GET') return new Response(JSON.stringify(queue), { status: 200 });
     if (url === '/api/queue' && method === 'POST') {
@@ -445,6 +454,36 @@ describe('library page', () => {
     expect(await screen.findByText(/1,8 meses/)).toBeInTheDocument();
     expect(screen.getByText(/2 jogos sem estimativa/)).toBeInTheDocument();
     expect(screen.getByText(/45 dias · faltam/)).toBeInTheDocument();
+  });
+});
+
+describe('goals', () => {
+  it('creates a goal with its progress and removes it', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    render(<App />);
+    expect(await screen.findByText(/Defina metas anuais ou mensais/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Nova meta' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Alvo da meta' }), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar meta' }));
+    expect(await screen.findByText(/Zerar 12 jogos/)).toBeInTheDocument();
+    expect(screen.getByText(/3 de 12 \(25%\) · abaixo do ritmo/)).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([url, init]) => url === '/api/goals' && init?.method === 'POST');
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ kind: 'COMPLETED_GAMES', period: 'YEAR', target: 12 });
+    fireEvent.click(screen.getByRole('button', { name: /Excluir meta/ }));
+    expect(await screen.findByText(/Defina metas anuais ou mensais/)).toBeInTheDocument();
+  });
+
+  it('warns about a duplicated goal and sends the month for monthly goals', async () => {
+    mockApi([]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nova meta' }));
+    fireEvent.change(screen.getByLabelText('Período da meta'), { target: { value: 'MONTH' } });
+    fireEvent.change(screen.getByLabelText('Mês da meta'), { target: { value: '3' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Alvo da meta' }), { target: { value: '99' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar meta' }));
+    expect(await screen.findByText('Você já tem uma meta deste tipo para esse período.')).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([url, init]) => url === '/api/goals' && init?.method === 'POST');
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ period: 'MONTH', month: 3, target: 99 });
   });
 });
 

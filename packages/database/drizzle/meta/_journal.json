@@ -1,83 +1,90 @@
 {
-    "version":  "7",
-    "dialect":  "postgresql",
-    "entries":  [
-                    {
-                        "idx":  0,
-                        "version":  "7",
-                        "when":  1790900235509,
-                        "tag":  "0001_games",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  1,
-                        "version":  "7",
-                        "when":  1790903726454,
-                        "tag":  "0002_franchises",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  2,
-                        "version":  "7",
-                        "when":  1790940985268,
-                        "tag":  "0003_platforms_genres",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  3,
-                        "version":  "7",
-                        "when":  1790942405577,
-                        "tag":  "0004_game_sessions",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  4,
-                        "version":  "7",
-                        "when":  1790949747387,
-                        "tag":  "0005_backlog_planning",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  5,
-                        "version":  "7",
-                        "when":  1791062495307,
-                        "tag":  "0006_game_platform_lifecycle_rating",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  6,
-                        "version":  "7",
-                        "when":  1791066441843,
-                        "tag":  "0007_game_owned_lifecycle",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  7,
-                        "version":  "7",
-                        "when":  1791068346864,
-                        "tag":  "0008_custom_game_lists",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  8,
-                        "version":  "7",
-                        "when":  1791068346865,
-                        "tag":  "0009_game_lifecycle_archive",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  9,
-                        "version":  "7",
-                        "when":  1791389161366,
-                        "tag":  "0010_retroactive_played_hours",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  10,
-                        "version":  "7",
-                        "when":  1791475561366,
-                        "tag":  "0011_stats_classification",
-                        "breakpoints":  true
-                    }
-                ]
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+        {
+            "idx": 0,
+            "version": "7",
+            "when": 1790900235509,
+            "tag": "0001_games",
+            "breakpoints": true
+        },
+        {
+            "idx": 1,
+            "version": "7",
+            "when": 1790903726454,
+            "tag": "0002_franchises",
+            "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "7",
+            "when": 1790940985268,
+            "tag": "0003_platforms_genres",
+            "breakpoints": true
+        },
+        {
+            "idx": 3,
+            "version": "7",
+            "when": 1790942405577,
+            "tag": "0004_game_sessions",
+            "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1790949747387,
+            "tag": "0005_backlog_planning",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1791062495307,
+            "tag": "0006_game_platform_lifecycle_rating",
+            "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "7",
+            "when": 1791066441843,
+            "tag": "0007_game_owned_lifecycle",
+            "breakpoints": true
+        },
+        {
+            "idx": 7,
+            "version": "7",
+            "when": 1791068346864,
+            "tag": "0008_custom_game_lists",
+            "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "7",
+            "when": 1791068346865,
+            "tag": "0009_game_lifecycle_archive",
+            "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "7",
+            "when": 1791389161366,
+            "tag": "0010_retroactive_played_hours",
+            "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "7",
+            "when": 1791475561366,
+            "tag": "0011_stats_classification",
+            "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "7",
+            "when": 1791561961366,
+            "tag": "0012_goals",
+            "breakpoints": true
+        }
+    ]
 }

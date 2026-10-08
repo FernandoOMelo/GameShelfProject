@@ -83,7 +83,7 @@ Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 - [x] 2. replay do ano
 - [x] 3. previsão do backlog
 - [x] 4. próximo jogo
-- [ ] 5. metas
+- [x] 5. metas
 - [ ] 6. diário de sessão com screenshots
 - [ ] 7. múltiplas filas (avaliar antes)
 - [ ] 8. exportar, importar e backup

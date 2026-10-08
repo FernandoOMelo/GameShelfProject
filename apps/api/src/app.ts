@@ -22,11 +22,13 @@ import { registerMediaRoutes } from './modules/games/media-routes.js';
 import type { GameListRepository } from './modules/game-lists/repository.js';
 import { registerGameListRoutes } from './modules/game-lists/routes.js';
 import { registerSuggestionRoutes } from './modules/backlog/suggestions-routes.js';
+import type { GoalRepository } from './modules/goals/repository.js';
+import { registerGoalRoutes } from './modules/goals/routes.js';
 import { registerStatsRoutes } from './modules/stats/routes.js';
 import type { MainChallengeRepository } from './modules/challenge/repository.js';
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
 
-export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; goalRepository?: GoalRepository; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   app.addHook('onRequest', async (request, reply) => {
@@ -73,6 +75,10 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));
+  }
+
+  if (options.gameRepository && options.sessionRepository && options.goalRepository) {
+    app.register((instance) => registerGoalRoutes(instance, options.gameRepository!, options.sessionRepository!, options.goalRepository!));
   }
 
   return app;

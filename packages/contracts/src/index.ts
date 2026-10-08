@@ -327,6 +327,36 @@ export const replayResponseSchema = z.object({
 }).strict();
 export type ReplayResponse = z.infer<typeof replayResponseSchema>;
 
+export const goalKindSchema = z.enum(['COMPLETED_GAMES', 'PLAYED_HOURS']);
+export const goalPeriodSchema = z.enum(['YEAR', 'MONTH']);
+export const goalInputSchema = z.object({
+  kind: goalKindSchema,
+  period: goalPeriodSchema,
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12).optional(),
+  target: z.number().int().min(1).max(100000),
+}).strict().superRefine((value, context) => {
+  if (value.period === 'MONTH' && value.month === undefined) context.addIssue({ code: 'custom', path: ['month'], message: 'Informe o mês da meta mensal.' });
+  if (value.period === 'YEAR' && value.month !== undefined) context.addIssue({ code: 'custom', path: ['month'], message: 'Metas anuais não têm mês.' });
+});
+export const goalTargetSchema = z.object({ target: z.number().int().min(1).max(100000) }).strict();
+export const goalProgressSchema = z.object({
+  id: z.string().uuid(),
+  kind: goalKindSchema,
+  period: goalPeriodSchema,
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12).nullable(),
+  target: z.number().int().positive(),
+  current: z.number().nonnegative(),
+  percent: z.number().min(0).max(100),
+  elapsedPercent: z.number().min(0).max(100),
+  achieved: z.boolean(),
+  onTrack: z.boolean(),
+}).strict();
+export const goalsQuerySchema = z.object({ timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0) }).strict();
+export type GoalInput = z.infer<typeof goalInputSchema>;
+export type GoalProgress = z.infer<typeof goalProgressSchema>;
+
 export const mainChallengeInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   listId: z.string().uuid(),

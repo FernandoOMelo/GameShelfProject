@@ -54,6 +54,20 @@ Cartão no Painel (`backlogForecast` em `GET /dashboard`), independente do perí
   atividade é a sessão mais recente, ou a data de início do jogo, ou a última
   atualização do cadastro. Servem de lista de candidatos a retomar, pausar ou abandonar.
 
+## Metas
+
+Cartão no Painel para metas anuais ou mensais de **jogos zerados** ou **horas jogadas**
+(ADR-011). O progresso é calculado a cada leitura, não gravado.
+
+- `GET /goals?timezoneOffsetMinutes=` lista as metas, da mais recente à mais antiga, com
+  `current`, `percent` (máximo 100), `elapsedPercent` (quanto do período já passou),
+  `achieved` e `onTrack` (progresso >= tempo decorrido, ou meta atingida);
+- `POST /goals` cria (`kind`, `period`, `year`, `month` só para metas mensais, `target`);
+  uma meta por tipo e período, duplicata retorna 409;
+- `PATCH /goals/:id` altera o alvo e `DELETE /goals/:id` exclui;
+- zerados: jogos com data de conclusão no período (inclui arquivados); horas: mesmo
+  recorte do indicador de horas do painel (sessões no período local mais horas retroativas).
+
 ## Missão principal
 
 Cartão com um objetivo de longo prazo ligado a uma lista pessoal, com contagem de

@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date } from 'drizzle-orm/pg-core';
+import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const franchises = pgTable('franchises', {
@@ -25,6 +25,8 @@ export const gameStatus = pgEnum('game_status', [
 
 export const gamePriority = pgEnum('game_priority', ['LOW', 'NORMAL', 'HIGH']);
 
+export const goalKind = pgEnum('goal_kind', ['COMPLETED_GAMES', 'PLAYED_HOURS']);
+export const goalPeriod = pgEnum('goal_period', ['YEAR', 'MONTH']);
 export const gameDifficulty = pgEnum('game_difficulty', ['C', 'B', 'A', 'AA', 'AAA']);
 
 export const games = pgTable('games', {
@@ -126,4 +128,19 @@ export const mainChallenge = pgTable('main_challenge', {
 }, (table) => [
   check('main_challenge_singleton_id', sql`${table.id} = 1`),
   check('main_challenge_title_not_blank', sql`length(trim(${table.title})) > 0`),
+]);
+
+export const goals = pgTable('goals', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  kind: goalKind('kind').notNull(),
+  period: goalPeriod('period').notNull(),
+  year: integer('year').notNull(),
+  month: integer('month').notNull().default(0),
+  target: integer('target').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('goals_kind_period_year_month_unique').on(table.kind, table.period, table.year, table.month),
+  check('goals_target_positive', sql`${table.target} > 0`),
+  check('goals_period_month', sql`(${table.period} = 'YEAR' AND ${table.month} = 0) OR (${table.period} = 'MONTH' AND ${table.month} BETWEEN 1 AND 12)`),
 ]);
