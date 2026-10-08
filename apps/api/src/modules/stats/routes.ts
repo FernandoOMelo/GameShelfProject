@@ -1,36 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { activityQuerySchema, activityResponseSchema, gameSchema, replayResponseSchema, sessionSchema, statsResponseSchema } from '@gameshelf/contracts';
+import { activityQuerySchema, activityResponseSchema, replayResponseSchema, statsResponseSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { SessionRepository } from '../sessions/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
 import type { GenreRepository } from '../genres/repository.js';
+import { toGame, toSession } from '../shared/serialize.js';
 import { buildActivity } from './activity.js';
 import { buildReplay } from './replay.js';
 import { buildStats } from './service.js';
-
-type SessionRecord = Awaited<ReturnType<SessionRepository['listAll']>>[number];
-
-function toSession(session: SessionRecord) {
-  return sessionSchema.parse({
-    ...session,
-    startedAt: session.startedAt.toISOString(), endedAt: session.endedAt?.toISOString() ?? null,
-    durationMinutes: session.endedAt === null ? null : Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 60_000),
-    createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString(),
-  });
-}
-
-type GameRecord = Awaited<ReturnType<GameRepository['list']>>[number];
-
-function toGame(game: GameRecord) {
-  return gameSchema.parse({
-    ...game,
-    estimatedMainHours: game.estimatedMainHours === null ? null : Number(game.estimatedMainHours),
-    estimatedCompletionistHours: game.estimatedCompletionistHours === null ? null : Number(game.estimatedCompletionistHours),
-    personalEstimatedHours: game.personalEstimatedHours === null ? null : Number(game.personalEstimatedHours),
-    retroactivePlayedHours: Number(game.retroactivePlayedHours ?? 0),
-    createdAt: game.createdAt.toISOString(), updatedAt: game.updatedAt.toISOString(),
-  });
-}
 
 export async function registerStatsRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, platforms: PlatformRepository, genres: GenreRepository) {
   app.get('/stats/replay', async (request, reply) => {

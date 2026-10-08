@@ -39,6 +39,25 @@ Exemplo:
 
 Um jogo pode possuir prioridade alta, mas estar em terceira posição porque existem dois jogos que o usuário deseja terminar primeiro.
 
+## Próximo jogo
+
+`GET /backlog/suggestions` (aceita `timezoneOffsetMinutes`) devolve até 3 jogos com pontuação e os motivos. A tela da Fila
+tem o botão "Me ajuda a escolher", que mostra a melhor opção e permite ver as outras. Sem IA: a regra é
+determinística e soma pontos.
+
+Candidatos: jogos possuídos, não arquivados, com status Na biblioteca ou Pausado.
+
+| Critério | Pontos |
+| --- | --- |
+| Prioridade alta / normal / baixa | 30 / 15 / 0 |
+| Está na fila | 40 − 3 por posição (a partir da 9ª posição, fixo em 16) |
+| Faltam até 5 h (estimativa pessoal, ou principal, menos o já jogado) | +10 |
+| Faltam até 15 h | +5 |
+| Pausado | +8 |
+| Esperando sem sessão (desde a última sessão, o início ou o cadastro) | +2 a cada 30 dias, máximo +10 |
+
+Empates são decididos pelo título. As constantes ficam em `modules/backlog/suggestions.ts`.
+
 ## Futuro
 
 A fila poderá possuir múltiplas listas, como:

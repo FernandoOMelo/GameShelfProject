@@ -640,6 +640,15 @@ describe('classification, stats and challenge API', () => {
     expect((await app.inject({ method: 'GET', url: '/stats/replay?year=1' })).statusCode).toBe(400);
   });
 
+  it('returns next game suggestions and validates parameters', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), backlogRepository: createBacklogRepository() });
+    apps.push(app);
+    const response = await app.inject({ method: 'GET', url: '/backlog/suggestions?timezoneOffsetMinutes=180' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject([{ game: { id: game.id }, reasons: expect.any(Array) }]);
+    expect((await app.inject({ method: 'GET', url: '/backlog/suggestions?timezoneOffsetMinutes=abc' })).statusCode).toBe(400);
+  });
+
   it('sets, reads and clears the main challenge from a list', async () => {
     let stored: { title: string; listId: string } | undefined;
     const lists = createGameListRepository();

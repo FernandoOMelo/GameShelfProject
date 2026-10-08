@@ -5,6 +5,7 @@ import { Button } from '@gameshelf/ui';
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
 import { DashboardView } from './dashboard-view';
 import { StatsView } from './stats-view';
+import { NextGameSuggestion } from './next-game-suggestion';
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
 type DashboardPeriod = '7d' | 'month' | 'year' | 'custom' | 'all';
@@ -586,7 +587,7 @@ function QueueView({ queue, onMove, onRemove, onSelectGame }: {
   onRemove: (gameId: string) => void;
   onSelectGame: (game: Game) => void;
 }) {
-  return <section className="queue-page" aria-labelledby="queue-title"><p className="eyebrow">SEU PRÓXIMO PASSO</p><h1 id="queue-title">Fila de jogos</h1><p className="library-subtitle">Organize o que pretende jogar. A posição da fila é independente da prioridade.</p>
+  return <section className="queue-page" aria-labelledby="queue-title"><p className="eyebrow">SEU PRÓXIMO PASSO</p><h1 id="queue-title">Fila de jogos</h1><p className="library-subtitle">Organize o que pretende jogar. A posição da fila é independente da prioridade.</p><NextGameSuggestion onSelectGame={onSelectGame} />
     {queue.length ? <ol className="queue-list">{queue.map((item, index) => <li key={item.game.id}><span className="queue-position">{index + 1}</span><button type="button" className="queue-game-link" onClick={() => onSelectGame(item.game)}><strong>{item.game.title}</strong><span>{item.game.personalEstimatedHours ?? item.game.estimatedMainHours ?? 'Sem estimativa'}{item.game.personalEstimatedHours !== null || item.game.estimatedMainHours !== null ? ' h estimadas' : ''}</span></button><div className="queue-actions"><button type="button" aria-label={`Mover ${item.game.title} para cima`} disabled={index === 0} onClick={() => onMove(index, -1)}>↑</button><button type="button" aria-label={`Mover ${item.game.title} para baixo`} disabled={index === queue.length - 1} onClick={() => onMove(index, 1)}>↓</button><button type="button" className="session-delete" onClick={() => onRemove(item.game.id)}>Remover</button></div></li>)}</ol> : <p className="dashboard-empty">Fila vazia. Adicione jogos pela biblioteca.</p>}
   </section>;
 }

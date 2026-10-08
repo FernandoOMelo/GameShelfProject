@@ -70,6 +70,7 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
     }
     if (url.match(/^\/api\/games\/[^/]+$/) && method === 'DELETE') return new Response(null, { status: 204 });
     if (url === '/api/games') return new Response(JSON.stringify(games), { status: 200 });
+    if (url.startsWith('/api/backlog/suggestions')) return new Response(JSON.stringify(games.slice(0, 2).map((item, position) => ({ game: item, score: 50 - position, reasons: position === 0 ? ['Primeiro da fila', 'Prioridade alta'] : ['Pausado: dá para retomar de onde parou'] }))), { status: 200 });
     if (url === '/api/queue' && method === 'GET') return new Response(JSON.stringify(queue), { status: 200 });
     if (url === '/api/queue' && method === 'POST') {
       const { gameId } = JSON.parse(String(init?.body)) as { gameId: string };
@@ -444,6 +445,21 @@ describe('library page', () => {
     expect(await screen.findByText(/1,8 meses/)).toBeInTheDocument();
     expect(screen.getByText(/2 jogos sem estimativa/)).toBeInTheDocument();
     expect(screen.getByText(/45 dias · faltam/)).toBeInTheDocument();
+  });
+});
+
+describe('next game suggestion', () => {
+  it('suggests a game with its reasons and cycles through the options', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades'), makeGame('00000000-0000-4000-8000-000000000002', 'Celeste')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Fila/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Me ajuda a escolher' }));
+    expect(await screen.findByRole('button', { name: 'Hades' })).toBeInTheDocument();
+    expect(screen.getByText('Primeiro da fila')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Outra opção/ }));
+    expect(await screen.findByRole('button', { name: 'Celeste' })).toBeInTheDocument();
+    expect(screen.getByText('Pausado: dá para retomar de onde parou')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Outra opção/ })).toBeDisabled();
   });
 });
 

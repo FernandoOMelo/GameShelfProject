@@ -198,6 +198,13 @@ export type QueueItem = z.infer<typeof queueItemSchema>;
 export type QueueReorder = z.infer<typeof queueReorderSchema>;
 export type WeeklyMinutesInput = z.infer<typeof weeklyMinutesSchema>;
 
+export const suggestionSchema = z.object({
+  game: gameSchema,
+  score: z.number(),
+  reasons: z.array(z.string()),
+}).strict();
+export type Suggestion = z.infer<typeof suggestionSchema>;
+
 export const dashboardResponseSchema = z.object({
   gameCount: z.number().int().nonnegative(),
   desiredCount: z.number().int().nonnegative(),

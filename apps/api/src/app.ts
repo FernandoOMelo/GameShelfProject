@@ -21,6 +21,7 @@ import type { GameImageStorage } from './modules/games/image-storage.js';
 import { registerMediaRoutes } from './modules/games/media-routes.js';
 import type { GameListRepository } from './modules/game-lists/repository.js';
 import { registerGameListRoutes } from './modules/game-lists/routes.js';
+import { registerSuggestionRoutes } from './modules/backlog/suggestions-routes.js';
 import { registerStatsRoutes } from './modules/stats/routes.js';
 import type { MainChallengeRepository } from './modules/challenge/repository.js';
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
@@ -59,6 +60,9 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
   }
   if (options.gameRepository && options.backlogRepository) {
     app.register((instance) => registerBacklogRoutes(instance, options.gameRepository!, options.backlogRepository!));
+  }
+  if (options.gameRepository && options.sessionRepository && options.backlogRepository) {
+    app.register((instance) => registerSuggestionRoutes(instance, options.gameRepository!, options.sessionRepository!, options.backlogRepository!));
   }
   if (options.planningSettingsRepository) app.register((instance) => registerPlanningRoutes(instance, options.planningSettingsRepository!));
   if (options.gameRepository && options.sessionRepository && options.backlogRepository && options.planningSettingsRepository) {
