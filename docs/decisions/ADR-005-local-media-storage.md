@@ -27,3 +27,8 @@ Imagens continuam disponíveis sem IGDB e após reiniciar os containers. O volum
 `gameshelf-media` deve ser mantido junto do volume PostgreSQL nos backups. A
 integração não importa imagens hospedadas em outros domínios; URLs manuais
 continuam sendo armazenadas como fornecidas.
+
+## Atualização
+
+O ADR-012 reutiliza este armazenamento para imagens enviadas pelo usuário
+(screenshots de sessão), validadas pela assinatura do arquivo.

@@ -166,6 +166,14 @@ export const sessionSchema = z.object({
   updatedAt: z.string().datetime(),
 }).strict();
 
+export const sessionScreenshotSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  url: mediaUrl,
+  createdAt: z.string().datetime(),
+}).strict();
+export type SessionScreenshot = z.infer<typeof sessionScreenshotSchema>;
+
 export type SessionInput = z.infer<typeof sessionInputSchema>;
 export type SessionUpdate = z.infer<typeof sessionUpdateSchema>;
 export type Session = z.infer<typeof sessionSchema>;

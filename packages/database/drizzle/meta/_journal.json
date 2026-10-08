@@ -85,6 +85,13 @@
             "when": 1791561961366,
             "tag": "0012_goals",
             "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "7",
+            "when": 1791648361366,
+            "tag": "0013_session_screenshots",
+            "breakpoints": true
         }
     ]
 }

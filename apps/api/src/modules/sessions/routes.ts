@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { sessionInputSchema, sessionSchema, sessionUpdateSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
+import type { GameImageStorage } from '../games/image-storage.js';
 import type { SessionRecord, SessionRepository } from './repository.js';
+import type { ScreenshotRepository } from './screenshot-repository.js';
 
 export async function registerSessionRoutes(
   app: FastifyInstance,
   gameRepository: GameRepository,
   sessionRepository: SessionRepository,
+  screenshotCleanup?: { screenshots: ScreenshotRepository; storage: GameImageStorage },
 ) {
   app.get<{ Params: { gameId: string } }>('/games/:gameId/sessions', async (request, reply) => {
     const gameId = parseId(request.params.gameId);
@@ -54,8 +57,11 @@ export async function registerSessionRoutes(
     const sessionId = parseId(request.params.sessionId);
     if (!gameId || !sessionId) return reply.code(400).send({ error: 'ID inválido.' });
     if (!await gameRepository.find(gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    // As linhas somem por cascata; os arquivos precisam ser apagados à parte.
+    const screenshotUrls = screenshotCleanup ? (await screenshotCleanup.screenshots.listForSession(gameId, sessionId)).map((item) => item.url) : [];
     const deleted = await sessionRepository.delete(gameId, sessionId);
     if (!deleted) return reply.code(404).send({ error: 'Sessão não encontrada.' });
+    await Promise.all(screenshotUrls.map((url) => screenshotCleanup!.storage.removeImage(url)));
     return reply.code(204).send();
   });
 }

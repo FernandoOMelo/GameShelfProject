@@ -12,6 +12,7 @@ import type { GameMetadataProvider } from './modules/games/metadata-provider.js'
 import type { GameImageStorage } from './modules/games/image-storage.js';
 import type { GameListRepository, GameListRecord } from './modules/game-lists/repository.js';
 import type { GoalRecord, GoalRepository } from './modules/goals/repository.js';
+import type { ScreenshotRecord, ScreenshotRepository } from './modules/sessions/screenshot-repository.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
 const game: GameRecord = {
@@ -132,6 +133,25 @@ function createBacklogRepository(gameRecord: GameRecord = game): BacklogReposito
 function createPlanningSettingsRepository(): PlanningSettingsRepository {
   let weeklyMinutes = 0;
   return { getWeeklyMinutes: async () => weeklyMinutes, setWeeklyMinutes: async (value) => { weeklyMinutes = value; } };
+}
+
+function createScreenshotRepository(sessionOwners: () => Array<{ id: string; gameId: string }>): ScreenshotRepository & { records: ScreenshotRecord[] } {
+  const records: ScreenshotRecord[] = [];
+  const ownedBy = (gameId: string, sessionId: string) => sessionOwners().some((item) => item.id === sessionId && item.gameId === gameId);
+  return {
+    records,
+    listForSession: async (gameId, sessionId) => ownedBy(gameId, sessionId) ? records.filter((item) => item.sessionId === sessionId) : [],
+    listForGame: async (gameId) => records.filter((item) => sessionOwners().some((owner) => owner.id === item.sessionId && owner.gameId === gameId)),
+    add: async (sessionId, url) => {
+      const record = { id: `00000000-0000-4000-8000-${String(700 + records.length).padStart(12, '0')}`, sessionId, url, createdAt: new Date() };
+      records.push(record);
+      return record;
+    },
+    remove: async (gameId, sessionId, screenshotId) => {
+      const index = records.findIndex((item) => item.id === screenshotId && item.sessionId === sessionId && ownedBy(gameId, sessionId));
+      return index < 0 ? undefined : records.splice(index, 1)[0];
+    },
+  };
 }
 
 function createGoalRepository(): GoalRepository {
@@ -602,6 +622,7 @@ describe('local metadata images', () => {
         importedUrls.push(sourceUrl);
         return `/media/00000000-0000-4000-8000-000000000050.jpg`;
       },
+      saveImage: async () => '/media/00000000-0000-4000-8000-000000000051.png',
       removeImage: async () => undefined,
       openImage: async () => undefined,
     };
@@ -673,6 +694,73 @@ describe('classification, stats and challenge API', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject([{ game: { id: game.id }, reasons: expect.any(Array) }]);
     expect((await app.inject({ method: 'GET', url: '/backlog/suggestions?timezoneOffsetMinutes=abc' })).statusCode).toBe(400);
+  });
+
+  describe('session screenshots', () => {
+    const pngBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]);
+
+    function setup() {
+      const sessionRepository = createSessionRepository();
+      const screenshotRepository = createScreenshotRepository(() => [{ id: '00000000-0000-4000-8000-000000000040', gameId: game.id }]);
+      const saved: string[] = [];
+      const removed: string[] = [];
+      const imageStorage: GameImageStorage = {
+        importImage: async () => '/media/unused.jpg',
+        saveImage: async (bytes) => {
+          if (bytes[0] !== 137) throw new Error('Downloaded file is not a supported image.');
+          const url = `/media/00000000-0000-4000-8000-${String(600 + saved.length).padStart(12, '0')}.png`;
+          saved.push(url);
+          return url;
+        },
+        removeImage: async (url) => { removed.push(url); },
+        openImage: async () => undefined,
+      };
+      const app = buildApp({ gameRepository: createRepository(), sessionRepository, screenshotRepository, imageStorage });
+      apps.push(app);
+      return { app, sessionRepository, screenshotRepository, saved, removed };
+    }
+    const base = `/games/${game.id}/sessions/00000000-0000-4000-8000-000000000040/screenshots`;
+
+    it('uploads, lists and deletes screenshots, removing the stored file', async () => {
+      const { app, sessionRepository, removed } = setup();
+      await sessionRepository.create(game.id, { startedAt: '2026-01-01T10:00:00.000Z' });
+      const created = await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: pngBytes });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({ url: '/media/00000000-0000-4000-8000-000000000600.png' });
+      expect((await app.inject({ method: 'GET', url: base })).json()).toHaveLength(1);
+      expect((await app.inject({ method: 'DELETE', url: `${base}/${created.json().id}` })).statusCode).toBe(204);
+      expect(removed).toEqual(['/media/00000000-0000-4000-8000-000000000600.png']);
+      expect((await app.inject({ method: 'GET', url: base })).json()).toEqual([]);
+      expect((await app.inject({ method: 'DELETE', url: `${base}/${created.json().id}` })).statusCode).toBe(404);
+    });
+
+    it('rejects invalid files, unsupported content types, missing sessions and the per-session limit', async () => {
+      const { app, sessionRepository, saved } = setup();
+      expect((await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: pngBytes })).statusCode).toBe(404);
+      await sessionRepository.create(game.id, { startedAt: '2026-01-01T10:00:00.000Z' });
+      expect((await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: Buffer.from('not an image') })).statusCode).toBe(415);
+      expect((await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'application/json' }, payload: { a: 1 } })).statusCode).toBe(415);
+      expect((await app.inject({ method: 'GET', url: `/games/${game.id}/sessions/invalid/screenshots` })).statusCode).toBe(400);
+      for (let index = 0; index < 10; index += 1) {
+        expect((await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: pngBytes })).statusCode).toBe(201);
+      }
+      expect((await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: pngBytes })).statusCode).toBe(409);
+      expect(saved).toHaveLength(10);
+    });
+
+    it('removes stored files when the session or the game is deleted', async () => {
+      const { app, sessionRepository, removed } = setup();
+      await sessionRepository.create(game.id, { startedAt: '2026-01-01T10:00:00.000Z' });
+      await app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: pngBytes });
+      expect((await app.inject({ method: 'DELETE', url: `/games/${game.id}/sessions/00000000-0000-4000-8000-000000000040` })).statusCode).toBe(204);
+      expect(removed).toEqual(['/media/00000000-0000-4000-8000-000000000600.png']);
+
+      const second = setup();
+      await second.sessionRepository.create(game.id, { startedAt: '2026-01-01T10:00:00.000Z' });
+      await second.app.inject({ method: 'POST', url: base, headers: { 'content-type': 'image/png' }, payload: pngBytes });
+      expect((await second.app.inject({ method: 'DELETE', url: `/games/${game.id}` })).statusCode).toBe(204);
+      expect(second.removed).toEqual(['/media/00000000-0000-4000-8000-000000000600.png']);
+    });
   });
 
   it('creates, updates and removes goals with calculated progress', async () => {

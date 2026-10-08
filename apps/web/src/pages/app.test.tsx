@@ -406,6 +406,50 @@ describe('library page', () => {
     confirm.mockRestore();
   });
 
+  it('lists, uploads and deletes session screenshots on demand', async () => {
+    const gameId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000040';
+    const hades = makeGame(gameId, 'Hades');
+    mockApi([hades]);
+    const base = fetchMock.getMockImplementation()!;
+    const shots = [{ id: '00000000-0000-4000-8000-000000000700', sessionId, url: '/media/a.png', createdAt: '2026-01-01T11:00:00.000Z' }];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === `/api/games/${gameId}/sessions` && method === 'GET') {
+        return new Response(JSON.stringify([{ id: sessionId, gameId, startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T11:00:00.000Z', durationMinutes: 60, progress: null, location: 'Elysium', notes: null, createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z' }]), { status: 200 });
+      }
+      if (url.endsWith('/screenshots') && method === 'GET') return new Response(JSON.stringify(shots), { status: 200 });
+      if (url.endsWith('/screenshots') && method === 'POST') {
+        const created = { id: '00000000-0000-4000-8000-000000000701', sessionId, url: '/media/b.png', createdAt: '2026-01-01T12:00:00.000Z' };
+        shots.push(created);
+        return new Response(JSON.stringify(created), { status: 201 });
+      }
+      if (url.includes('/screenshots/') && method === 'DELETE') { shots.splice(0, 1); return new Response(null, { status: 204 }); }
+      return base(input, init);
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    await screen.findByText('Elysium');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/screenshots'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Imagens' }));
+    expect((await screen.findAllByAltText('Screenshot da sessão'))).toHaveLength(1);
+
+    const file = new File([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('Adicionar imagem à sessão'), { target: { files: [file] } });
+    await waitFor(() => expect(screen.getAllByAltText('Screenshot da sessão')).toHaveLength(2));
+    const upload = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/screenshots') && init?.method === 'POST');
+    expect((upload?.[1]?.headers as Record<string, string>)['content-type']).toBe('image/png');
+
+    fireEvent.change(screen.getByLabelText('Adicionar imagem à sessão'), { target: { files: [new File(['x'], 'doc.pdf', { type: 'application/pdf' })] } });
+    expect(await screen.findByText('Use uma imagem JPEG, PNG ou WebP.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Excluir imagem' })[0]!);
+    await waitFor(() => expect(screen.getAllByAltText('Screenshot da sessão')).toHaveLength(1));
+  });
+
   it('adds games to the queue, displays the order and moves entries', async () => {
     const hades = makeGame('00000000-0000-4000-8000-000000000001', 'Hades');
     const hollowKnight = makeGame('00000000-0000-4000-8000-000000000002', 'Hollow Knight');

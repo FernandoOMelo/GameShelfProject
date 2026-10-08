@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const franchises = pgTable('franchises', {
@@ -144,3 +144,10 @@ export const goals = pgTable('goals', {
   check('goals_target_positive', sql`${table.target} > 0`),
   check('goals_period_month', sql`(${table.period} = 'YEAR' AND ${table.month} = 0) OR (${table.period} = 'MONTH' AND ${table.month} BETWEEN 1 AND 12)`),
 ]);
+
+export const sessionScreenshots = pgTable('session_screenshots', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index('session_screenshots_session_id_idx').on(table.sessionId)]);

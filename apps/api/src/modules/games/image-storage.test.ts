@@ -56,3 +56,16 @@ describe('LocalImageStorage', () => {
     expect(await (await import('node:fs/promises')).readdir(directory)).toEqual([]);
   });
 });
+
+describe('LocalImageStorage.saveImage', () => {
+  it('stores uploaded bytes by their real image type and rejects other content or oversized files', async () => {
+    const { directory, storage } = await createStorage(vi.fn<typeof fetch>());
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+    const publicUrl = await storage.saveImage(png);
+    expect(publicUrl).toMatch(/^\/media\/[0-9a-f-]+\.png$/);
+    expect(await readFile(join(directory, publicUrl.slice('/media/'.length)))).toEqual(png);
+
+    await expect(storage.saveImage(Buffer.from('<svg onload="alert(1)"></svg>'))).rejects.toThrow('not a supported image');
+    await expect(storage.saveImage(Buffer.alloc(8 * 1024 * 1024 + 1, 0xff))).rejects.toThrow('maximum allowed size');
+  });
+});

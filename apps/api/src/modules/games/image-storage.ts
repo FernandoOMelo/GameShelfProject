@@ -3,7 +3,7 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-const maxImageBytes = 8 * 1024 * 1024;
+export const maxImageBytes = 8 * 1024 * 1024;
 const mediaPathPrefix = '/media/';
 const imageTypes = {
   jpeg: { contentType: 'image/jpeg', extension: '.jpg' },
@@ -13,6 +13,7 @@ const imageTypes = {
 
 export interface GameImageStorage {
   importImage(sourceUrl: string): Promise<string>;
+  saveImage(bytes: Buffer): Promise<string>;
   removeImage(publicUrl: string): Promise<void>;
   openImage(filename: string): Promise<{ stream: ReadStream; contentType: string } | undefined>;
 }
@@ -35,7 +36,12 @@ export class LocalImageStorage implements GameImageStorage {
       throw new Error('Image exceeds the maximum allowed size.');
     }
 
-    const bytes = await readBoundedImage(response.body);
+    return this.saveImage(await readBoundedImage(response.body));
+  }
+
+  // Grava bytes já recebidos (upload do usuário). Valida tamanho e assinatura do arquivo.
+  async saveImage(bytes: Buffer): Promise<string> {
+    if (bytes.length > maxImageBytes) throw new Error('Image exceeds the maximum allowed size.');
     const imageType = detectImageType(bytes);
     await mkdir(this.directory, { recursive: true });
     const filename = `${randomUUID()}${imageType.extension}`;

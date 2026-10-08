@@ -5,6 +5,7 @@ import { Button } from '@gameshelf/ui';
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
 import { DashboardView } from './dashboard-view';
 import { StatsView } from './stats-view';
+import { SessionScreenshots } from './session-screenshots';
 import { NextGameSuggestion } from './next-game-suggestion';
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
@@ -526,6 +527,7 @@ export function App() {
                 <p>{[session.location, session.progress === null ? null : `${session.progress}%`].filter(Boolean).join(' · ') || 'Sem progresso informado'}</p>
                 {session.notes && <p>{session.notes}</p>}
                 <div className="session-item-actions"><button type="button" className="session-edit" onClick={() => setEditingSession(session)}>Editar sessão</button><button type="button" className="session-delete" onClick={() => void deleteSession(session)}>Excluir sessão</button></div>
+                <SessionScreenshots gameId={session.gameId} sessionId={session.id} />
               </li>)}</ol>}
             </section>
             {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}

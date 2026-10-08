@@ -3,8 +3,9 @@ import { gameInputSchema, gameSchema, gameUpdateSchema } from '@gameshelf/contra
 import type { GameRepository } from './repository.js';
 import type { GameImageStorage } from './image-storage.js';
 import type { BacklogRepository } from '../backlog/repository.js';
+import type { ScreenshotRepository } from '../sessions/screenshot-repository.js';
 
-export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository) {
+export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository) {
   app.get('/games', async (_request, reply) => {
     const games = await repository.list();
     return reply.send(games.map((game) => gameSchema.parse(toResponse(game))));
@@ -68,7 +69,9 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
   app.delete<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
     const id = parseId(request.params.id);
     if (!id) return reply.code(400).send({ error: 'ID inválido.' });
+    const screenshotUrls = screenshots && imageStorage ? (await screenshots.listForGame(id)).map((item) => item.url) : [];
     if (!await repository.delete(id)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    await Promise.all(screenshotUrls.map((url) => imageStorage!.removeImage(url)));
     return reply.code(204).send();
   });
 }

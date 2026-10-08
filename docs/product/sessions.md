@@ -71,3 +71,15 @@ em andamento e exibe o tempo decorrido. O timer é retomado a partir do horário
 persistido ao reabrir o jogo. **Encerrar sessão** grava o término pela API e abre
 o formulário para registrar progresso, local e notas. A sessão continua editável
 no histórico.
+
+## Screenshots
+
+Cada sessão aceita até 10 imagens (JPEG, PNG ou WebP, até 8 MB). Na página do jogo,
+o botão "Imagens" de cada sessão abre a galeria, com envio e exclusão. Detalhes e
+motivos em ADR-012.
+
+- `GET /games/:gameId/sessions/:sessionId/screenshots` lista;
+- `POST` no mesmo caminho envia o arquivo como corpo binário com o `Content-Type` da
+  imagem (415 se não for uma imagem válida, 409 acima do limite);
+- `DELETE .../screenshots/:screenshotId` exclui a linha e o arquivo;
+- excluir a sessão ou o jogo também apaga os arquivos.
