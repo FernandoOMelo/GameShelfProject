@@ -3,6 +3,9 @@
 Itens escolhidos a partir de "Depois do MVP". Fora de escopo por decisão do
 usuário: integração Steam, achievements, autenticação e acesso remoto.
 
+**Situação: todas as etapas foram concluídas** (ver [Roadmap](roadmap.md), Fase 8). Onde a
+implementação divergiu do plano, o texto abaixo foi atualizado e a decisão está no ADR indicado.
+
 Ordem de execução: do que só deriva dados existentes (sem migration) para o que
 exige novo schema. Cada etapa é uma entrega independente, com testes e docs.
 
@@ -65,11 +68,12 @@ exige novo schema. Cada etapa é uma entrega independente, com testes e docs.
 ## Etapa 9 — PWA offline
 
 - Manifest, service worker e fila local de sessões registradas offline,
-  sincronizadas ao voltar a conexão. Exige ADR-013 (conflitos de sincronização).
+  sincronizadas ao voltar a conexão. Decisões em ADR-015 (a numeração do plano
+  original mudou: ADR-011 metas, 012 screenshots, 013 fila, 014 backup, 015 PWA).
 
-## Decisões em aberto (etapa 5)
+## Decisões adotadas (etapa 5)
 
-Assumidas como padrão até o usuário dizer o contrário:
+Assumidas como padrão (ADR-011):
 
 - uma meta por combinação tipo + período;
 - meta de zerados conta jogos com `completedAt` no período (inclui arquivados);

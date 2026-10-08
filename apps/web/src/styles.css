@@ -58,3 +58,5 @@
 .session-screenshots{margin-top:8px}.screenshot-panel{display:grid;gap:10px;margin-top:8px}.screenshot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:0;padding:0;list-style:none}.screenshot-grid li{display:grid;gap:6px}.screenshot-grid img{width:100%;aspect-ratio:16/9;object-fit:cover;border:1px solid #ffffff12;border-radius:6px}.screenshot-upload{display:grid;gap:6px;color:#aaa;font-size:11px}.screenshot-upload input{font-size:11px}
 
 .backup-card .challenge-actions{align-items:center}.backup-import{position:relative;display:inline-flex;align-items:center;padding:12px 15px;cursor:pointer}.backup-import input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}.backup-problems{margin:10px 0 0;padding-left:18px;color:#e0b7a8;font-size:12px;line-height:1.6}
+
+.offline-banner{margin:12px 0;padding:10px 14px;border:1px solid #d8b78360;border-radius:8px;background:#d8b78312;color:#e4d6bd;font-size:12px;line-height:1.6}.offline-banner p{margin:4px 0}.offline-failed{margin:6px 0 0;padding-left:18px;color:#e0b7a8}

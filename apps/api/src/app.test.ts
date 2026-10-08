@@ -430,6 +430,10 @@ describe('sessions API', () => {
     });
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({ gameId: game.id, durationMinutes: 95, progress: 45, location: 'Elysium' });
+    // O reenvio da mesma sessão (fila offline) não duplica o registro.
+    const resent = await app.inject({ method: 'POST', url: `/games/${game.id}/sessions`, payload: { startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T11:35:00.000Z' } });
+    expect(resent.statusCode).toBe(409);
+    expect((await app.inject(`/games/${game.id}/sessions`)).json()).toHaveLength(1);
   });
 
   it('rejects invalid session timing and progress', async () => {

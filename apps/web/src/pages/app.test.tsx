@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 
 const fetchMock = vi.fn();
@@ -523,6 +523,127 @@ describe('library page', () => {
     expect(await screen.findByText(/1,8 meses/)).toBeInTheDocument();
     expect(screen.getByText(/2 jogos sem estimativa/)).toBeInTheDocument();
     expect(screen.getByText(/45 dias · faltam/)).toBeInTheDocument();
+  });
+});
+
+describe('offline session registration', () => {
+  const gameId = '00000000-0000-4000-8000-000000000001';
+  const sessionId = '00000000-0000-4000-8000-000000000040';
+  const sessionsUrl = `/api/games/${gameId}/sessions`;
+  const key = 'gameshelf-offline-sessions';
+
+  // Este ambiente de teste não expõe localStorage; instala um em memória só neste bloco.
+  const storage = new Map<string, string>();
+  beforeEach(() => {
+    storage.clear();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: { getItem: (name: string) => storage.get(name) ?? null, setItem: (name: string, value: string) => { storage.set(name, value); }, removeItem: (name: string) => { storage.delete(name); }, clear: () => storage.clear() },
+    });
+  });
+  afterEach(() => { Object.defineProperty(window, 'localStorage', { configurable: true, value: undefined }); });
+
+  const activeSession = { id: sessionId, gameId, startedAt: '2026-03-01T10:00:00.000Z', endedAt: null, durationMinutes: null, progress: null, location: null, notes: null, createdAt: '2026-03-01T10:00:00.000Z', updatedAt: '2026-03-01T10:00:00.000Z' };
+
+  function mockSessions(options: { existing?: unknown[] } = {}) {
+    mockApi([makeGame(gameId, 'Hades', 'PLAYING')]);
+    const base = fetchMock.getMockImplementation()!;
+    const control = { networkDown: true, sent: [] as Array<{ method: string; url: string; body: Record<string, unknown> }> };
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === sessionsUrl && method === 'GET') return new Response(JSON.stringify(options.existing ?? []), { status: 200 });
+      if (url.startsWith(sessionsUrl) && (method === 'POST' || method === 'PATCH')) {
+        if (control.networkDown) throw new TypeError('Failed to fetch');
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        control.sent.push({ method, url, body });
+        return new Response(JSON.stringify({ ...activeSession, ...body }), { status: method === 'POST' ? 201 : 200 });
+      }
+      return base(input, init);
+    });
+    return control;
+  }
+
+  async function openDetails() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+  }
+
+  it('starts a session offline, finishes it offline and sends one complete session when the connection returns', async () => {
+    const network = mockSessions();
+    render(<App />);
+    await openDetails();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar jogando' }));
+    expect(await screen.findByText(/a sessão foi iniciada neste aparelho/)).toBeInTheDocument();
+    expect(await screen.findByText(/em andamento sem conexão/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar agora' }));
+    expect(await screen.findByText(/1 operação aguardando envio: Hades/)).toBeInTheDocument();
+    expect(JSON.parse(storage.get(key)!)).toEqual([expect.objectContaining({ kind: 'create', gameId, payload: expect.objectContaining({ endedAt: expect.any(String) }) })]);
+
+    network.networkDown = false;
+    window.dispatchEvent(new Event('online'));
+    expect(await screen.findByText('1 operação enviada ao servidor.')).toBeInTheDocument();
+    expect(network.sent).toEqual([expect.objectContaining({ method: 'POST', url: sessionsUrl, body: expect.objectContaining({ endedAt: expect.any(String) }) })]);
+    expect(storage.get(key)).toBe('[]');
+    expect(screen.queryByText(/aguardando envio/)).not.toBeInTheDocument();
+  });
+
+  it('finishes a session that is open on the server while offline and sends the finish later', async () => {
+    const network = mockSessions({ existing: [activeSession] });
+    render(<App />);
+    await openDetails();
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar sessão' }));
+    expect(await screen.findByText(/o encerramento foi guardado neste aparelho/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 operação aguardando envio: Hades/)).toBeInTheDocument();
+
+    network.networkDown = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar agora' }));
+    expect(await screen.findByText('1 operação enviada ao servidor.')).toBeInTheDocument();
+    expect(network.sent).toEqual([expect.objectContaining({ method: 'PATCH', url: `${sessionsUrl}/${sessionId}`, body: { endedAt: expect.any(String) } })]);
+  });
+
+  it('starts a session from the dashboard card while offline', async () => {
+    const network = mockSessions();
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar jogando' }));
+    expect(await screen.findByText(/em andamento sem conexão/)).toBeInTheDocument();
+    network.networkDown = false;
+    window.dispatchEvent(new Event('online'));
+    expect(await screen.findByText('1 operação enviada ao servidor.')).toBeInTheDocument();
+    expect(network.sent[0]).toMatchObject({ method: 'POST', body: { endedAt: null } });
+  });
+
+  it('shows a rejected operation with the reason and lets the user discard it', async () => {
+    storage.set(key, JSON.stringify([{
+      clientId: 'c1', kind: 'create', gameId, gameTitle: 'Hades', queuedAt: '2026-03-01T12:00:00.000Z',
+      payload: { startedAt: '2026-03-01T10:00:00.000Z', endedAt: '2026-03-01T11:00:00.000Z', progress: null, location: null, notes: null },
+    }]));
+    mockApi([makeGame(gameId, 'Hades', 'PLAYING')]);
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === sessionsUrl && init?.method === 'POST') return new Response(JSON.stringify({ error: 'Jogo não encontrado.' }), { status: 404 });
+      return base(input, init);
+    });
+    render(<App />);
+    expect(await screen.findByText(/Sessão de Hades não enviada: Jogo não encontrado\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    await waitFor(() => expect(screen.queryByText(/não enviada/)).not.toBeInTheDocument());
+    expect(storage.get(key)).toBe('[]');
+  });
+
+  it('shows real server errors instead of queueing them', async () => {
+    mockApi([makeGame(gameId, 'Hades', 'PLAYING')]);
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === sessionsUrl && init?.method === 'POST') return new Response(JSON.stringify({ error: 'Dados da sessão inválidos.' }), { status: 400 });
+      return base(input, init);
+    });
+    render(<App />);
+    await openDetails();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar jogando' }));
+    expect(await screen.findByText('Dados da sessão inválidos.')).toBeInTheDocument();
+    expect(storage.has(key)).toBe(false);
   });
 });
 

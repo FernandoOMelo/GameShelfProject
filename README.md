@@ -60,6 +60,12 @@ A estimativa atual de progresso está em [docs/product/progress-estimate.md](doc
 
 ## Busca de metadata IGDB
 
+### Backup e uso offline
+
+- **Backup:** o Painel exporta e importa os dados em JSON, e `scripts/backup.ps1` copia o banco e o volume de mídia (ver `docs/product/backup.md`).
+- **PWA:** o app é instalável e registra sessões sem conexão (ver `docs/product/mobile.md`). O service worker só funciona em HTTPS ou `localhost`.
+- Após atualizar o código, rode `docker compose up -d --build` para aplicar as migrations novas (`migrate` roda sozinho).
+
 Opcionalmente, configure `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET` no `.env` para habilitar a busca de candidatos de metadata no formulário de jogos. Os resultados são preenchidos para revisão e só são gravados quando o formulário é salvo. Ao salvar, capas e artworks IGDB são baixadas para `MEDIA_STORAGE_PATH`; no Docker Compose, o volume persistente `gameshelf-media` guarda esses arquivos. Sem credenciais, a biblioteca e os demais recursos seguem funcionando normalmente.
 
 ## Primeira execução passo a passo

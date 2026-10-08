@@ -83,3 +83,8 @@ motivos em ADR-012.
   imagem (415 se não for uma imagem válida, 409 acima do limite);
 - `DELETE .../screenshots/:screenshotId` exclui a linha e o arquivo;
 - excluir a sessão ou o jogo também apaga os arquivos.
+
+## Duplicidade
+
+Um jogo não pode ter duas sessões com o mesmo início: `POST /games/:gameId/sessions`
+responde 409. Isso torna seguro reenviar sessões guardadas offline (ADR-015).

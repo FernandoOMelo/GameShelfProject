@@ -25,6 +25,11 @@ export async function registerSessionRoutes(
     if (!await gameRepository.find(gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
     const parsed = sessionInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Dados da sessão inválidos.', issues: parsed.error.issues });
+    // Reenvios da fila offline (ADR-015) chegam com o mesmo início; uma sessão por jogo e horário de início.
+    const startedAt = new Date(parsed.data.startedAt).getTime();
+    if ((await sessionRepository.listForGame(gameId)).some((item) => item.startedAt.getTime() === startedAt)) {
+      return reply.code(409).send({ error: 'Já existe uma sessão deste jogo iniciada neste horário.' });
+    }
     const record = await sessionRepository.create(gameId, parsed.data);
     return reply.code(201).send(sessionSchema.parse(toResponse(record)));
   });

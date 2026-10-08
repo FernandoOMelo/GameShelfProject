@@ -87,7 +87,7 @@ Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 - [x] 6. diário de sessão com screenshots
 - [x] 7. múltiplas filas: avaliado, lista pode ser enfileirada (ADR-013)
 - [x] 8. exportar, importar e backup
-- [ ] 9. PWA offline
+- [x] 9. PWA offline (HTTPS necessário no celular, ver ADR-015)
 
 ## Depois do MVP
 

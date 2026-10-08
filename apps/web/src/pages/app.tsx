@@ -5,6 +5,8 @@ import { Button } from '@gameshelf/ui';
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
 import { DashboardView } from './dashboard-view';
 import { StatsView } from './stats-view';
+import { enqueueFailureMessage, OfflineBanner, useOfflineSessions } from './offline-banner';
+import { isNetworkFailure } from './offline-sessions';
 import { SessionScreenshots } from './session-screenshots';
 import { NextGameSuggestion } from './next-game-suggestion';
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
@@ -76,6 +78,7 @@ export function App() {
   const [sessionFeedback, setSessionFeedback] = useState('');
   const [savingSession, setSavingSession] = useState(false);
   const [clockNow, setClockNow] = useState(Date.now());
+  const offline = useOfflineSessions(() => { void refreshPlanningViews().catch(() => undefined); });
   const [saving, setSaving] = useState(false);
   const [metadataCandidates, setMetadataCandidates] = useState<GameMetadataCandidate[]>([]);
   const [metadataError, setMetadataError] = useState('');
@@ -119,7 +122,7 @@ export function App() {
       setSessions([]);
       setSessionFeedback('Não foi possível carregar o histórico de sessões.');
     });
-  }, [selectedGame?.id]);
+  }, [selectedGame?.id, offline.syncs]);
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -396,7 +399,12 @@ export function App() {
       setSessions((items) => [created, ...items]);
       await refreshPlanningViews();
     } catch (cause) {
-      setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível iniciar a sessão.');
+      if (isNetworkFailure(cause)) {
+        const queued = offline.enqueue({ kind: 'create', gameId: selectedGame.id, gameTitle: selectedGame.title, payload: { startedAt: new Date().toISOString(), endedAt: null, progress: null, location: null, notes: null } });
+        setSessionFeedback(queued.ok ? 'Sem conexão: a sessão foi iniciada neste aparelho. Encerre-a no aviso acima; ela será enviada quando a conexão voltar.' : enqueueFailureMessage(queued));
+      } else {
+        setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível iniciar a sessão.');
+      }
     } finally {
       setSavingSession(false);
     }
@@ -423,7 +431,12 @@ export function App() {
       await refreshPlanningViews();
       setSessionFeedback('Sessão encerrada. Complete os detalhes abaixo, se quiser.');
     } catch (cause) {
-      setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível encerrar a sessão.');
+      if (isNetworkFailure(cause)) {
+        const queued = offline.enqueue({ kind: 'finish', gameId: selectedGame.id, gameTitle: selectedGame.title, sessionId: active.id, endedAt: new Date().toISOString() });
+        setSessionFeedback(queued.ok ? 'Sem conexão: o encerramento foi guardado neste aparelho e será enviado quando a conexão voltar.' : enqueueFailureMessage(queued));
+      } else {
+        setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível encerrar a sessão.');
+      }
     } finally {
       setSavingSession(false);
     }
@@ -473,13 +486,31 @@ export function App() {
   }
 
   async function startDashboardSession(game: Game) {
-    const response = await fetch(`${apiUrl}/games/${game.id}/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ startedAt: new Date().toISOString(), endedAt: null }) });
+    const startedAt = new Date().toISOString();
+    let response: Response;
+    try {
+      response = await fetch(`${apiUrl}/games/${game.id}/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ startedAt, endedAt: null }) });
+    } catch (cause) {
+      if (!isNetworkFailure(cause)) throw cause;
+      const queued = offline.enqueue({ kind: 'create', gameId: game.id, gameTitle: game.title, payload: { startedAt, endedAt: null, progress: null, location: null, notes: null } });
+      if (!queued.ok) setError(enqueueFailureMessage(queued));
+      return;
+    }
     if (!response.ok) { setError('Não foi possível iniciar a sessão.'); return; }
     await refreshPlanningViews();
   }
 
   async function finishDashboardSession(game: Game, session: Session) {
-    const response = await fetch(`${apiUrl}/games/${game.id}/sessions/${session.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endedAt: new Date().toISOString() }) });
+    const endedAt = new Date().toISOString();
+    let response: Response;
+    try {
+      response = await fetch(`${apiUrl}/games/${game.id}/sessions/${session.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endedAt }) });
+    } catch (cause) {
+      if (!isNetworkFailure(cause)) throw cause;
+      const queued = offline.enqueue({ kind: 'finish', gameId: game.id, gameTitle: game.title, sessionId: session.id, endedAt });
+      if (!queued.ok) setError(enqueueFailureMessage(queued));
+      return;
+    }
     if (!response.ok) { setError('Não foi possível encerrar a sessão.'); return; }
     const finished = await response.json() as Session;
     await refreshPlanningViews();
@@ -489,6 +520,7 @@ export function App() {
 
   return (
     <main className="library-shell">
+      <OfflineBanner pending={offline.pending} online={offline.online} notice={offline.notice} onFinishOpen={offline.finishOpen} onDiscard={offline.discard} onRetry={() => void offline.flush()} />
       <header className="library-header">
         <a className="brand" href="/" aria-label="GameShelf início"><span className="brand-mark">G</span><span>Game<span className="brand-accent">Shelf</span></span></a>
         <nav className="main-nav" aria-label="Navegação principal"><button type="button" aria-current={activeView === 'library' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('library'); }}>Biblioteca</button><button type="button" aria-current={activeView === 'queue' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('queue'); }}>Fila <span>{queue.length}</span></button><button type="button" aria-current={activeView === 'lists' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('lists'); }}>Listas</button><button type="button" aria-current={activeView === 'dashboard' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('dashboard'); }}>Painel</button><button type="button" aria-current={activeView === 'stats' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('stats'); }}>Estatísticas</button></nav>
