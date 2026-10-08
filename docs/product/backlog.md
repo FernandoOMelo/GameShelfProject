@@ -58,9 +58,17 @@ Candidatos: jogos possuídos, não arquivados, com status Na biblioteca ou Pausa
 
 Empates são decididos pelo título. As constantes ficam em `modules/backlog/suggestions.ts`.
 
+## Fila a partir de uma lista
+
+`POST /queue/from-list` (`{ listId }`) enfileira ao final os jogos elegíveis de uma lista, em ordem
+alfabética, e devolve `added`, `skipped` e a fila atualizada. Na tela de Listas, o botão "Adicionar à fila"
+faz isso. Elegível: possuído, não arquivado, não zerado nem abandonado e ainda fora da fila. Detalhes e
+motivo de não termos múltiplas filas em ADR-013.
+
 ## Futuro
 
-A fila poderá possuir múltiplas listas, como:
+Múltiplas filas **não** serão criadas por ora (ADR-013). Os temas abaixo continuam sendo
+listas pessoais, que podem ser enfileiradas:
 
 - Principal;
 - Curta;
@@ -68,7 +76,6 @@ A fila poderá possuir múltiplas listas, como:
 - RPG;
 - Próxima franquia.
 
-Isso não faz parte do MVP.
 
 ## Implementação inicial
 

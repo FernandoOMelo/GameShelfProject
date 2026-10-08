@@ -80,6 +80,13 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
     }
     if (url.startsWith('/api/goals/') && method === 'DELETE') { goals.splice(0, goals.length); return new Response(null, { status: 204 }); }
     if (url.startsWith('/api/backlog/suggestions')) return new Response(JSON.stringify(games.slice(0, 2).map((item, position) => ({ game: item, score: 50 - position, reasons: position === 0 ? ['Primeiro da fila', 'Prioridade alta'] : ['Pausado: dá para retomar de onde parou'] }))), { status: 200 });
+    if (url === '/api/queue/from-list' && method === 'POST') {
+      const { listId } = JSON.parse(String(init?.body)) as { listId: string };
+      const list = lists.find((item) => item.id === listId);
+      const toAdd = games.filter((item) => list?.gameIds.includes((item as { id: string }).id) && !queue.some((entry) => entry.game.id === (item as { id: string }).id));
+      for (const item of toAdd) queue.push({ position: queue.length, addedAt: new Date().toISOString(), game: item as { id: string; title: string } });
+      return new Response(JSON.stringify({ added: toAdd.length, skipped: (list?.gameIds.length ?? 0) - toAdd.length, queue }), { status: 200 });
+    }
     if (url === '/api/queue' && method === 'GET') return new Response(JSON.stringify(queue), { status: 200 });
     if (url === '/api/queue' && method === 'POST') {
       const { gameId } = JSON.parse(String(init?.body)) as { gameId: string };
@@ -315,6 +322,24 @@ describe('library page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remover' }));
     expect(await screen.findByText('Esta lista ainda não tem jogos.')).toBeInTheDocument();
+  });
+
+  it('adds the games of a list to the queue and reports what was added', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'BACKLOG')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Listas' }));
+    fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Curtos' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }));
+    expect(await screen.findByRole('button', { name: 'Adicionar à fila' })).toBeDisabled();
+    fireEvent.change(await screen.findByLabelText('Jogo para adicionar'), { target: { value: '00000000-0000-4000-8000-000000000001' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }));
+    await screen.findByRole('button', { name: /^Hades/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar à fila' }));
+    expect(await screen.findByText('1 jogo adicionado à fila.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Fila/ })).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar à fila' }));
+    expect(await screen.findByText(/Nenhum jogo novo para a fila/)).toBeInTheDocument();
   });
 
   it('registers a session from a game detail page and displays its duration', async () => {

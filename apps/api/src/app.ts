@@ -63,7 +63,7 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
     app.register((instance) => registerSessionRoutes(instance, options.gameRepository!, options.sessionRepository!, options.screenshotRepository && options.imageStorage ? { screenshots: options.screenshotRepository, storage: options.imageStorage } : undefined));
   }
   if (options.gameRepository && options.backlogRepository) {
-    app.register((instance) => registerBacklogRoutes(instance, options.gameRepository!, options.backlogRepository!));
+    app.register((instance) => registerBacklogRoutes(instance, options.gameRepository!, options.backlogRepository!, options.gameListRepository));
   }
   if (options.gameRepository && options.sessionRepository && options.backlogRepository) {
     app.register((instance) => registerSuggestionRoutes(instance, options.gameRepository!, options.sessionRepository!, options.backlogRepository!));

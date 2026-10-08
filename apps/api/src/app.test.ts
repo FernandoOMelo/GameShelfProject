@@ -763,6 +763,29 @@ describe('classification, stats and challenge API', () => {
     });
   });
 
+  it('queues the eligible games of a list in title order and reports skipped ones', async () => {
+    const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    const records: GameRecord[] = [
+      { ...game, id: id(11), title: 'Zelda' }, { ...game, id: id(12), title: 'Celeste' }, { ...game, id: id(13), title: 'Já na fila' },
+      { ...game, id: id(14), title: 'Zerado', status: 'COMPLETED' }, { ...game, id: id(15), title: 'Sem posse', owned: false }, { ...game, id: id(16), title: 'Fora da lista' },
+    ];
+    const repository: GameRepository = { ...createRepository(), list: async () => records, find: async (gameId) => records.find((item) => item.id === gameId) };
+    const backlog = createBacklogRepository();
+    await backlog.addToQueue(id(13));
+    const lists = createGameListRepository();
+    const list = await lists.create('Curtos');
+    list.gameIds.push(id(11), id(12), id(13), id(14), id(15));
+    const app = buildApp({ gameRepository: repository, backlogRepository: backlog, gameListRepository: lists });
+    apps.push(app);
+    const response = await app.inject({ method: 'POST', url: '/queue/from-list', payload: { listId: list.id } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ added: 2, skipped: 3 });
+    expect((await backlog.listQueue()).map((item) => item.game.id)).toEqual([id(13), id(12), id(11)]);
+    expect((await app.inject({ method: 'POST', url: '/queue/from-list', payload: { listId: list.id } })).json()).toMatchObject({ added: 0, skipped: 5 });
+    expect((await app.inject({ method: 'POST', url: '/queue/from-list', payload: { listId: id(999) } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/queue/from-list', payload: { listId: 'x' } })).statusCode).toBe(400);
+  });
+
   it('creates, updates and removes goals with calculated progress', async () => {
     const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), goalRepository: createGoalRepository() });
     apps.push(app);

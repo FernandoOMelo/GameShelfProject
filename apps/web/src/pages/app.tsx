@@ -534,7 +534,7 @@ export function App() {
             <div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><Button type="button" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</Button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
           </div>
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} /> : activeView === 'stats' ? <StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} /> : <>
+      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} /> : activeView === 'stats' ? <StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
       <section className="library-heading">
         <div><p className="eyebrow">SUA COLEÇÃO</p><h1>Biblioteca</h1><p className="library-subtitle">Seus jogos, reunidos em um só lugar.</p></div>
         <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>
@@ -594,7 +594,7 @@ function QueueView({ queue, onMove, onRemove, onSelectGame }: {
   </section>;
 }
 
-function GameListsView({ games, onSelectGame }: { games: Game[]; onSelectGame: (game: Game) => void }) {
+function GameListsView({ games, onSelectGame, onQueueChanged }: { games: Game[]; onSelectGame: (game: Game) => void; onQueueChanged: (queue: QueueItem[]) => void }) {
   const [lists, setLists] = useState<GameListSummary[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedList, setSelectedList] = useState<GameList | null>(null);
@@ -602,6 +602,7 @@ function GameListsView({ games, onSelectGame }: { games: Game[]; onSelectGame: (
   const [newName, setNewName] = useState('');
   const [gameId, setGameId] = useState('');
   const [error, setError] = useState('');
+  const [queueNotice, setQueueNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function loadLists(preferredId = selectedId) {
@@ -676,6 +677,17 @@ function GameListsView({ games, onSelectGame }: { games: Game[]; onSelectGame: (
     });
   }
 
+  async function enqueueList() {
+    if (!selectedList) return;
+    await run(async () => {
+      const response = await fetch(`${apiUrl}/queue/from-list`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ listId: selectedList.id }) });
+      if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? 'Não foi possível adicionar a lista à fila.');
+      const result = await response.json() as { added: number; skipped: number; queue: QueueItem[] };
+      onQueueChanged(result.queue);
+      setQueueNotice(result.added === 0 ? 'Nenhum jogo novo para a fila: os da lista já estão nela ou não podem entrar.' : `${result.added} ${result.added === 1 ? 'jogo adicionado' : 'jogos adicionados'} à fila${result.skipped ? `; ${result.skipped} ignorados (já na fila, sem posse, arquivados, zerados ou abandonados)` : ''}.`);
+    });
+  }
+
   async function removeGame(id: string) {
     if (!selectedList) return;
     await run(async () => {
@@ -691,10 +703,11 @@ function GameListsView({ games, onSelectGame }: { games: Game[]; onSelectGame: (
     {error && <div className="notice" role="alert">{error}</div>}
     <div className="game-lists-layout">
       <aside className="game-lists-sidebar"><form className="game-list-create" onSubmit={(event) => void createList(event)}><label className="form-field">Nova lista<input aria-label="Nome da nova lista" required maxLength={100} value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Ex.: Jogos da vida" /></label><Button type="submit" disabled={busy}>Criar lista</Button></form>
-        {lists.length ? <ul className="game-list-nav">{lists.map((list) => <li key={list.id}><button type="button" aria-current={selectedId === list.id ? 'true' : undefined} onClick={() => { setSelectedList(null); setSelectedId(list.id); }}>{list.name}<span>{list.gameCount}</span></button></li>)}</ul> : <p className="dashboard-empty">Você ainda não criou listas.</p>}
+        {lists.length ? <ul className="game-list-nav">{lists.map((list) => <li key={list.id}><button type="button" aria-current={selectedId === list.id ? 'true' : undefined} onClick={() => { setSelectedList(null); setQueueNotice(''); setSelectedId(list.id); }}>{list.name}<span>{list.gameCount}</span></button></li>)}</ul> : <p className="dashboard-empty">Você ainda não criou listas.</p>}
       </aside>
       <div className="game-list-content">{selectedList && selectedList.id === selectedId ? <>
-        <div className="game-list-heading"><form className="game-list-rename" onSubmit={(event) => void saveName(event)}><label className="form-field">Nome da lista<input aria-label="Nome da lista selecionada" required maxLength={100} value={rename} onChange={(event) => setRename(event.target.value)} /></label><Button type="submit" disabled={busy || rename.trim() === selectedList.name}>Salvar nome</Button></form><button type="button" className="session-delete" disabled={busy} onClick={() => void deleteList()}>Excluir lista</button></div>
+        <div className="game-list-heading"><form className="game-list-rename" onSubmit={(event) => void saveName(event)}><label className="form-field">Nome da lista<input aria-label="Nome da lista selecionada" required maxLength={100} value={rename} onChange={(event) => setRename(event.target.value)} /></label><Button type="submit" disabled={busy || rename.trim() === selectedList.name}>Salvar nome</Button></form><button type="button" className="session-edit" disabled={busy || selectedList.games.length === 0} onClick={() => void enqueueList()}>Adicionar à fila</button><button type="button" className="session-delete" disabled={busy} onClick={() => void deleteList()}>Excluir lista</button></div>
+        {queueNotice && <p role="status" className="session-feedback">{queueNotice}</p>}
         <form className="game-list-add" onSubmit={(event) => void addGame(event)}><label className="form-field">Adicionar jogo<select aria-label="Jogo para adicionar" required value={gameId} onChange={(event) => setGameId(event.target.value)}><option value="">Selecione um jogo</option>{availableGames.map((game) => <option key={game.id} value={game.id}>{game.title}</option>)}</select></label><Button type="submit" disabled={busy || !gameId}>Adicionar</Button></form>
         {selectedList.games.length ? <ul className="game-list-items">{selectedList.games.map((game) => <li key={game.id}><button type="button" onClick={() => onSelectGame(game)}><strong>{game.title}</strong><span>{statusLabels[game.status]}</span></button><button type="button" className="session-delete" disabled={busy} onClick={() => void removeGame(game.id)}>Remover</button></li>)}</ul> : <p className="dashboard-empty">Esta lista ainda não tem jogos.</p>}
       </> : <p className="dashboard-empty">Crie uma lista ou selecione uma existente.</p>}</div>

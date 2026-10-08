@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { queueItemSchema, queueReorderSchema } from '@gameshelf/contracts';
+import { queueFromListSchema, queueItemSchema, queueReorderSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
+import type { GameListRepository } from '../game-lists/repository.js';
 import type { BacklogRepository } from './repository.js';
 
-export async function registerBacklogRoutes(app: FastifyInstance, games: GameRepository, backlog: BacklogRepository) {
+export async function registerBacklogRoutes(app: FastifyInstance, games: GameRepository, backlog: BacklogRepository, lists?: GameListRepository) {
   app.get('/queue', async (_request, reply) => {
     const items = await backlog.listQueue();
     return reply.send(items.map((item) => queueItemSchema.parse({
@@ -30,6 +31,23 @@ export async function registerBacklogRoutes(app: FastifyInstance, games: GameRep
     return reply.code(201).send(queueItemSchema.parse({
       ...added!, addedAt: added!.addedAt.toISOString(), game: serializeGame(added!.game),
     }));
+  });
+
+  // ADR-013: enfileira ao final os jogos elegíveis de uma lista, em ordem alfabética.
+  app.post('/queue/from-list', async (request, reply) => {
+    if (!lists) return reply.code(404).send({ error: 'Listas indisponíveis.' });
+    const parsed = queueFromListSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'ID de lista inválido.', issues: parsed.error.issues });
+    const list = await lists.find(parsed.data.listId);
+    if (!list) return reply.code(404).send({ error: 'Lista não encontrada.' });
+    const queued = new Set((await backlog.listQueue()).map((item) => item.game.id));
+    const members = new Set(list.gameIds);
+    const eligible = (await games.list())
+      .filter((game) => members.has(game.id) && !queued.has(game.id) && game.owned && !game.archived && game.status !== 'COMPLETED' && game.status !== 'ABANDONED')
+      .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+    for (const game of eligible) await backlog.addToQueue(game.id);
+    const queue = (await backlog.listQueue()).map((item) => queueItemSchema.parse({ ...item, addedAt: item.addedAt.toISOString(), game: serializeGame(item.game) }));
+    return reply.send({ added: eligible.length, skipped: members.size - eligible.length, queue });
   });
 
   app.delete<{ Params: { gameId: string } }>('/queue/:gameId', async (request, reply) => {

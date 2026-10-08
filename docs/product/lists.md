@@ -21,3 +21,8 @@ partir de uma lista para consultar seus detalhes.
 
 A fila de planejamento permanece separada, pois representa uma ordem de
 execução e alimenta as previsões do painel.
+
+## Usar uma lista como fila
+
+Na lista selecionada, "Adicionar à fila" coloca ao final da fila os jogos que podem entrar nela,
+em ordem alfabética. A lista não é alterada. Ver ADR-013.

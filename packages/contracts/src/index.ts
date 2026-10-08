@@ -196,6 +196,8 @@ export const queueItemSchema = z.object({
   addedAt: z.string().datetime(),
   game: gameSchema,
 }).strict();
+export const queueFromListSchema = z.object({ listId: z.string().uuid() }).strict();
+export type QueueFromList = z.infer<typeof queueFromListSchema>;
 export const queueReorderSchema = z.object({
   gameIds: z.array(z.string().uuid()).max(1000),
 }).strict().refine((value) => new Set(value.gameIds).size === value.gameIds.length, {

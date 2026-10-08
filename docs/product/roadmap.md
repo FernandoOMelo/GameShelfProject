@@ -85,7 +85,7 @@ Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 - [x] 4. próximo jogo
 - [x] 5. metas
 - [x] 6. diário de sessão com screenshots
-- [ ] 7. múltiplas filas (avaliar antes)
+- [x] 7. múltiplas filas: avaliado, lista pode ser enfileirada (ADR-013)
 - [ ] 8. exportar, importar e backup
 - [ ] 9. PWA offline
 
