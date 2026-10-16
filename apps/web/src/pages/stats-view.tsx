@@ -26,6 +26,10 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
   const maxRating = Math.max(1, ...stats.ratingDistribution.map((entry) => entry.count));
   const maxDifficulty = Math.max(1, ...stats.difficultyDistribution.map((entry) => entry.count));
   const maxReleaseYear = Math.max(1, ...stats.byReleaseYear.map((entry) => entry.count));
+  // Escalas fixas (notas e dificuldades) chegam completas da API; mostrar só o que
+  // o usuário realmente usou evita paredes de barras zeradas.
+  const ratedEntries = stats.ratingDistribution.filter((entry) => entry.count > 0);
+  const difficultyEntries = stats.difficultyDistribution.filter((entry) => entry.count > 0);
   const journey = totals.journeyStart ? `${new Intl.NumberFormat('pt-BR').format(totals.journeyDays)} dias (${(totals.journeyDays / 365.25).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} anos)` : '—';
 
   return <section className="stats-page" aria-labelledby="stats-title">
@@ -60,10 +64,10 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
 
     <div className="dashboard-columns">
       <section className="panel" aria-labelledby="rating-title"><h2 id="rating-title">Pontuação</h2>
-        <ul className="hbar-list" aria-label="Jogos por nota">{stats.ratingDistribution.map((entry) => <li key={entry.rating} title={`Nota ${entry.rating}: ${entry.count}`}><span className="hbar-label">{entry.rating === 11 ? '11 · Jogo da vida' : entry.rating}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxRating) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul>
+        {ratedEntries.length ? <ul className="hbar-list" aria-label="Jogos por nota">{ratedEntries.map((entry) => <li key={entry.rating} title={`Nota ${entry.rating}: ${entry.count}`}><span className="hbar-label">{entry.rating === 11 ? '11 · Jogo da vida' : entry.rating}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxRating) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul> : <p className="dashboard-empty">Nenhum jogo zerado com nota registrada.</p>}
       </section>
       <section className="panel" aria-labelledby="difficulty-title"><h2 id="difficulty-title">Nível de dificuldade</h2>
-        <ul className="hbar-list" aria-label="Jogos zerados por dificuldade">{stats.difficultyDistribution.map((entry) => <li key={entry.difficulty} title={`${difficultyLabels[entry.difficulty]}: ${entry.count}`}><span className="hbar-label">{difficultyLabels[entry.difficulty]}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxDifficulty) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul>
+        {difficultyEntries.length ? <ul className="hbar-list" aria-label="Jogos zerados por dificuldade">{difficultyEntries.map((entry) => <li key={entry.difficulty} title={`${difficultyLabels[entry.difficulty]}: ${entry.count}`}><span className="hbar-label">{difficultyLabels[entry.difficulty]}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxDifficulty) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul> : <p className="dashboard-empty">Nenhum jogo zerado com dificuldade informada.</p>}
       </section>
     </div>
 

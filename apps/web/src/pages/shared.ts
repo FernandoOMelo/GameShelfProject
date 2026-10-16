@@ -1,8 +1,10 @@
 export const apiUrl = import.meta.env.VITE_API_URL ?? '/api';
 
+// Horas são sempre exibidas no formato compacto ("51,8 h"); sessões e tempos com
+// precisão de minutos usam formatDuration ("1 hora e 30 minutos").
 export function formatHours(value: number | null): string {
   if (value === null) return 'Não informada';
-  return formatDuration(Math.round(value * 60));
+  return formatCompactHours(value);
 }
 
 export function formatDateTime(value: string): string {

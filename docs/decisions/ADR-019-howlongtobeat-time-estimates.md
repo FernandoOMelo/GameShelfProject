@@ -57,7 +57,8 @@ usuário e mantendo a precedência no planejamento depois de ajustada.
 **6. Busca automática, mas só quando não sobrescreve nada.** Na tela de jogo a busca
 por título (IGDB e HowLongToBeat) dispara sozinha conforme o usuário digita, com
 debounce de 450 ms, mínimo de 3 caracteres e sem exibir erro/lista vazia nas buscas
-automáticas — o botão continua existindo como caminho explícito e diagnóstico. Ao
+automáticas — o botão "Buscar novamente", no painel de resultados, continua existindo
+como caminho explícito e diagnóstico. Ao
 abrir um jogo existente, o HowLongToBeat é consultado automaticamente **apenas se
 faltar alguma das três estimativas**; jogos já completos abrem sem requisição. A
 busca em tempo real não cancela a outra fonte: cada uma tem seu próprio token, e

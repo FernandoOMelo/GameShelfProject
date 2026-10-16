@@ -69,6 +69,13 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
         <Kpi label="Jogos zerados no período" value={String(periodStats.gamesCompleted)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'COMPLETED' }))} />
       </div>
 
+      <div className="kpi-grid kpi-grid-secondary" aria-label="Resumo geral">
+        <Kpi label="Tempo jogado · todo período" value={formatCompactHours(dashboard.totalPlayedHours)} />
+        <Kpi label="Horas restantes no backlog" value={formatCompactHours(dashboard.backlogRemainingHours)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'BACKLOG' }))} />
+        <Kpi label="Horas disponíveis por semana" value={formatCompactHours(dashboard.weeklyHours)} />
+        <Kpi label="Em andamento" value={String(dashboard.playingCount)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'PLAYING' }))} />
+      </div>
+
       <section className="playing-now"><h2>Jogando agora</h2>
         {playingGames.length ? <div className="playing-grid">{playingGames.map((entry) => {
           const percent = entry.progress ?? (entry.estimatedHours ? Math.min(100, Math.round((entry.playedHours / entry.estimatedHours) * 100)) : null);
@@ -92,9 +99,9 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
           <h2 id="status-panel-title">Biblioteca por estado</h2>
           <p className="panel-figure"><strong>{dashboard.gameCount}</strong> jogos no catálogo{dashboard.archivedCount > 0 ? ` · ${dashboard.archivedCount} arquivados` : ''}</p>
           <div className="stacked-bar" role="img" aria-label="Distribuição dos jogos por estado">{segments.filter((segment) => segment.value > 0).map((segment) => <span key={segment.status} title={`${segment.label}: ${segment.value}`} style={{ flexGrow: segment.value, background: statusColors[segment.status] }} />)}{segmentTotal === 0 && <span className="stacked-empty" />}</div>
-          <ul className="legend-list">{segments.map((segment) => <li key={segment.status}>{onFilterLibrary
+          <ul className="legend-list">{segments.filter((segment) => segment.value > 0).map((segment) => <li key={segment.status}>{onFilterLibrary
             ? <button type="button" className="legend-link" aria-label={`${segment.label}: ${segment.value}. Ver na biblioteca`} onClick={() => onFilterLibrary({ status: segment.status })}><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></button>
-            : <><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></>}</li>)}</ul>
+            : <><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></>}</li>)}{segmentTotal === 0 && <li className="legend-empty">Nenhum jogo na biblioteca ainda.</li>}</ul>
         </section>
 
         <section className="panel" aria-labelledby="year-panel-title">
@@ -104,13 +111,6 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
             : <><span className="bar-value">{entry.gameCount}</span><span className="bar" style={{ height: `${Math.max(4, (entry.gameCount / maxYear) * 100)}%` }} /><span className="bar-label">{entry.year}</span></>}</li>)}</ol> : <p className="dashboard-empty">Nenhuma conclusão com data registrada.</p>}
           <small>Cada jogo conta uma vez por período, mesmo que tenha sido zerado em mais de uma plataforma.</small>
         </section>
-      </div>
-
-      <div className="kpi-grid kpi-grid-secondary" aria-label="Resumo geral">
-        <Kpi label="Tempo jogado · todo período" value={formatCompactHours(dashboard.totalPlayedHours)} />
-        <Kpi label="Horas restantes no backlog" value={formatCompactHours(dashboard.backlogRemainingHours)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'BACKLOG' }))} />
-        <Kpi label="Horas disponíveis por semana" value={formatCompactHours(dashboard.weeklyHours)} />
-        <Kpi label="Em andamento" value={String(dashboard.playingCount)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'PLAYING' }))} />
       </div>
 
       <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />

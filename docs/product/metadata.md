@@ -83,9 +83,13 @@ devolve até dez candidatos com `mainHours`, `mainExtraHours` e `completionistHo
 Diferente do IGDB, não exige credenciais e fica sempre disponível.
 
 No formulário da biblioteca, a busca por título acontece **automaticamente** conforme
-se digita (debounce de 450 ms, a partir de 3 caracteres) e também pelos botões
-"Buscar metadata" e "Buscar tempos (HowLongToBeat)", que servem de caminho explícito
-e mostram erros e listas vazias. Escolhido um candidato de tempo, são preenchidas
+se digita (debounce de 450 ms, a partir de 3 caracteres) e alimenta um único painel de
+resultados logo abaixo do campo **Título**, com duas seções: "Metadata (IGDB)" e
+"Tempos (HowLongToBeat)". O painel tem altura limitada e rolagem própria, então os
+resultados nunca são cortados pelo tamanho do modal; ele fecha ao escolher um
+candidato, pelo botão "Fechar" ou por `Esc`, e o botão "Buscar novamente" repete as
+duas buscas e é o caminho explícito que mostra erros e listas vazias. Escolhido um
+candidato de tempo, são preenchidas
 **Estimativa principal** (`comp_main`), **Estimativa pessoal** (`comp_plus`) e
 **Estimativa completista** (`comp_100`) para revisão. O preenchimento é uma sugestão:
 nada é salvo sem confirmação e a `personalEstimatedHours` ajustada pelo usuário

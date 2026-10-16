@@ -68,7 +68,7 @@ A estimativa atual de progresso está em [docs/product/progress-estimate.md](doc
 
 Opcionalmente, configure `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET` no `.env` para habilitar a busca de candidatos de metadata no formulário de jogos. Os resultados são preenchidos para revisão e só são gravados quando o formulário é salvo. Ao salvar, capas e artworks IGDB são baixadas para `MEDIA_STORAGE_PATH`; no Docker Compose, o volume persistente `gameshelf-media` guarda esses arquivos. Sem credenciais, a biblioteca e os demais recursos seguem funcionando normalmente.
 
-A busca de estimativas de tempo usa o HowLongToBeat e não precisa de credenciais: a busca acontece conforme você digita o título e também pelo botão "Buscar tempos (HowLongToBeat)", preenchendo as estimativas principal, pessoal e completista para revisão, sem gravar nada automaticamente. Ao abrir um jogo sem alguma dessas estimativas, o HowLongToBeat é consultado sozinho (ver `docs/decisions/ADR-019-howlongtobeat-time-estimates.md`).
+A busca de estimativas de tempo usa o HowLongToBeat e não precisa de credenciais: a busca acontece conforme você digita o título e aparece no mesmo painel de resultados da metadata (seção "Tempos (HowLongToBeat)"), com o botão "Buscar novamente" como caminho explícito. Ela preenche as estimativas principal, pessoal e completista para revisão, sem gravar nada automaticamente. Ao abrir um jogo sem alguma dessas estimativas, o HowLongToBeat é consultado sozinho (ver `docs/decisions/ADR-019-howlongtobeat-time-estimates.md`).
 
 ## Primeira execução passo a passo
 

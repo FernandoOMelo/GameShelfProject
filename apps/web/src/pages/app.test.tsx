@@ -246,9 +246,9 @@ describe('library page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar metadata' }));
 
-    fireEvent.click(await screen.findByRole('button', { name: /Hades/ }));
+    const metadataResults = await screen.findByRole('list', { name: 'Resultados de metadata' });
+    fireEvent.click(within(metadataResults).getByRole('button', { name: /Hades/ }));
 
     expect(screen.getByLabelText('Título')).toHaveValue('Hades');
     expect(screen.getByLabelText('Desenvolvedora')).toHaveValue('Supergiant Games');
@@ -263,9 +263,9 @@ describe('library page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar tempos (HowLongToBeat)' }));
 
-    fireEvent.click(await screen.findByRole('button', { name: /Hades/ }));
+    const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
+    fireEvent.click(within(timeResults).getByRole('button', { name: /Hades/ }));
 
     expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
     expect(screen.getByLabelText('Estimativa pessoal (h)')).toHaveValue(40);
@@ -299,8 +299,25 @@ describe('library page', () => {
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/metadata/time-estimates?'))).toBe(true));
 
-    fireEvent.click(await screen.findByRole('button', { name: /Hades/ }));
+    const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
+    fireEvent.click(within(timeResults).getByRole('button', { name: /Hades/ }));
     expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
+  });
+
+  it('closes the search results and then the dialog with Escape', async () => {
+    mockApi();
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
+    await screen.findByRole('list', { name: 'Resultados de metadata' });
+
+    fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Escape' });
+    expect(screen.queryByRole('list', { name: 'Resultados de metadata' })).toBeNull();
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+
+    fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('keeps quiet when opening a game that already has all estimates', async () => {
@@ -347,8 +364,8 @@ describe('library page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     expect(screen.getByRole('heading', { name: 'Hades' })).toBeInTheDocument();
     expect(screen.getByText('Escape from the Underworld.')).toBeInTheDocument();
-    expect(screen.getByText('30 horas')).toBeInTheDocument();
-    expect(screen.getByText('22 horas')).toBeInTheDocument();
+    expect(screen.getByText('30 h')).toBeInTheDocument();
+    expect(screen.getByText('22 h')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Editar jogo' })).toBeInTheDocument();
   });
 
