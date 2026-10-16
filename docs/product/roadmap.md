@@ -102,8 +102,8 @@ Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 - [x] 9. filtros salvos da biblioteca (ADR-017)
 - [x] 10. não sugerir um jogo, sem arquivá-lo (ADR-017)
 - [x] 11. estatísticas: taxa de conclusão, média por jogo jogado, ano de lançamento e desenvolvedora
-- [ ] 12. estimativas de tempo externas (How Long to Beat) — lib `howlongtobeat-core`
-      está quebrada; API do site levantada, falta implementar cliente próprio
+- [x] 12. estimativas de tempo externas (How Long to Beat) — cliente próprio contra a
+      API do site (ADR-019); a lib `howlongtobeat-core` segue quebrada
 
 ## Fase 10 — Diário da sessão (ADR-018)
 

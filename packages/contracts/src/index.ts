@@ -138,6 +138,17 @@ export const gameMetadataCandidatesSchema = z.array(gameMetadataCandidateSchema)
 export const metadataSearchQuerySchema = z.object({ query: z.string().trim().min(1).max(100) }).strict();
 export type GameMetadataCandidate = z.infer<typeof gameMetadataCandidateSchema>;
 
+export const gameTimeEstimateSchema = z.object({
+  providerId: z.string().min(1),
+  title: z.string().min(1),
+  releaseYear: z.number().int().min(1).max(9999).nullable().optional(),
+  mainHours: optionalHours,
+  mainExtraHours: optionalHours,
+  completionistHours: optionalHours,
+}).strict();
+export const gameTimeEstimatesSchema = z.array(gameTimeEstimateSchema).max(10);
+export type GameTimeEstimate = z.infer<typeof gameTimeEstimateSchema>;
+
 const sessionFieldsSchema = z.object({
   startedAt: z.string().datetime(),
   endedAt: z.string().datetime().nullable().optional(),

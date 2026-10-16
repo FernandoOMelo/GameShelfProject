@@ -17,6 +17,7 @@ import { DrizzleGoalRepository } from './modules/goals/drizzle-goal-repository.j
 import { DrizzleScreenshotRepository } from './modules/sessions/drizzle-screenshot-repository.js';
 import { DrizzleBackupImporter } from './modules/backup/drizzle-backup-importer.js';
 import { IgdbMetadataProvider } from './modules/games/igdb-metadata-provider.js';
+import { HltbTimeEstimateProvider } from './modules/games/hltb-time-estimate-provider.js';
 import { LocalImageStorage } from './modules/games/image-storage.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +48,7 @@ const app = buildApp({
   ...(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET && {
     metadataProvider: new IgdbMetadataProvider(env.IGDB_CLIENT_ID, env.IGDB_CLIENT_SECRET),
   }),
+  timeEstimateProvider: new HltbTimeEstimateProvider(),
   webOrigin: env.WEB_ORIGIN,
 });
 

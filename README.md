@@ -68,6 +68,8 @@ A estimativa atual de progresso está em [docs/product/progress-estimate.md](doc
 
 Opcionalmente, configure `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET` no `.env` para habilitar a busca de candidatos de metadata no formulário de jogos. Os resultados são preenchidos para revisão e só são gravados quando o formulário é salvo. Ao salvar, capas e artworks IGDB são baixadas para `MEDIA_STORAGE_PATH`; no Docker Compose, o volume persistente `gameshelf-media` guarda esses arquivos. Sem credenciais, a biblioteca e os demais recursos seguem funcionando normalmente.
 
+A busca de estimativas de tempo usa o HowLongToBeat e não precisa de credenciais: no formulário de jogos, "Buscar tempos (HowLongToBeat)" preenche as estimativas principal e completista para revisão, sem gravar nada automaticamente (ver `docs/decisions/ADR-019-howlongtobeat-time-estimates.md`).
+
 ## Primeira execução passo a passo
 
 1. Selecione Node.js 22 ou superior no nvm e instale as dependências: `pnpm install` (no PowerShell, use o comando via `npm exec` descrito acima se pnpm não estiver no PATH).

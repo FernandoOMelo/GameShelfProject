@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, Genre, LibraryFilterState, LibrarySort, Platform, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
@@ -126,6 +126,9 @@ export function App() {
   const [metadataCandidates, setMetadataCandidates] = useState<GameMetadataCandidate[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [searchingMetadata, setSearchingMetadata] = useState(false);
+  const [timeEstimateCandidates, setTimeEstimateCandidates] = useState<GameTimeEstimate[]>([]);
+  const [timeEstimateError, setTimeEstimateError] = useState('');
+  const [searchingTimeEstimates, setSearchingTimeEstimates] = useState(false);
   const gameFormRef = useRef<HTMLFormElement>(null);
 
   async function loadGames() {
@@ -472,24 +475,51 @@ export function App() {
     }
   }
 
+  function setGameFormField(name: string, value: string | number | null | undefined) {
+    if (value === undefined) return;
+    const control = gameFormRef.current?.elements.namedItem(name);
+    if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) control.value = value == null ? '' : String(value);
+  }
+
   function applyMetadata(candidate: GameMetadataCandidate) {
-    const controls = gameFormRef.current?.elements;
-    const setField = (name: string, value: string | number | null | undefined) => {
-      if (value === undefined) return;
-      const control = controls?.namedItem(name);
-      if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) control.value = value == null ? '' : String(value);
-    };
-    setField('title', candidate.title);
-    setField('description', candidate.description);
-    setField('coverUrl', candidate.coverUrl);
-    setField('backgroundUrl', candidate.backgroundUrl);
-    setField('releaseYear', candidate.releaseYear);
-    setField('developer', candidate.developer);
-    setField('publisher', candidate.publisher);
-    setField('franchiseName', candidate.franchise);
-    setField('genreNames', candidate.genres?.join(', '));
+    setGameFormField('title', candidate.title);
+    setGameFormField('description', candidate.description);
+    setGameFormField('coverUrl', candidate.coverUrl);
+    setGameFormField('backgroundUrl', candidate.backgroundUrl);
+    setGameFormField('releaseYear', candidate.releaseYear);
+    setGameFormField('developer', candidate.developer);
+    setGameFormField('publisher', candidate.publisher);
+    setGameFormField('franchiseName', candidate.franchise);
+    setGameFormField('genreNames', candidate.genres?.join(', '));
     setMetadataCandidates([]);
     setMetadataError('Metadata preenchida para revisão. As plataformas do catálogo não foram selecionadas como suas cópias.');
+  }
+
+  async function searchTimeEstimates() {
+    const title = String(new FormData(gameFormRef.current ?? undefined).get('title') ?? '').trim();
+    if (!title) { setTimeEstimateError('Digite um título para pesquisar.'); return; }
+    setSearchingTimeEstimates(true);
+    setTimeEstimateError('');
+    setTimeEstimateCandidates([]);
+    try {
+      const response = await fetch(`${apiUrl}/metadata/time-estimates?query=${encodeURIComponent(title)}`);
+      const body = await response.json() as GameTimeEstimate[] | { error?: string };
+      if (!response.ok) throw new Error('error' in body ? body.error : undefined);
+      setTimeEstimateCandidates(body as GameTimeEstimate[]);
+      if ((body as GameTimeEstimate[]).length === 0) setTimeEstimateError('Nenhum tempo encontrado no HowLongToBeat.');
+    } catch (cause) {
+      setTimeEstimateError(cause instanceof Error && cause.message ? cause.message : 'Não foi possível buscar os tempos no HowLongToBeat.');
+    } finally {
+      setSearchingTimeEstimates(false);
+    }
+  }
+
+  function applyTimeEstimate(candidate: GameTimeEstimate) {
+    setGameFormField('estimatedMainHours', candidate.mainHours);
+    setGameFormField('estimatedCompletionistHours', candidate.completionistHours);
+    setTimeEstimateCandidates([]);
+    const extra = candidate.mainExtraHours != null ? ` História principal + extras: ${candidate.mainExtraHours} h.` : '';
+    setTimeEstimateError(`Tempos preenchidos para revisão.${extra} A estimativa pessoal continua sendo sua.`);
   }
 
   async function submitSession(event: FormEvent<HTMLFormElement>) {
@@ -616,6 +646,8 @@ export function App() {
     setFormStatus(game?.status ?? 'BACKLOG');
     setMetadataCandidates([]);
     setMetadataError('');
+    setTimeEstimateCandidates([]);
+    setTimeEstimateError('');
     setDialogOpen(true);
   }
 
@@ -791,7 +823,9 @@ export function App() {
           <label className="form-field form-wide">Condição de zeramento<input name="completionCondition" maxLength={300} defaultValue={editing?.completionCondition ?? ''} placeholder="Ex.: Veja os créditos" /></label>
           <label className="form-field checkbox-field"><span>Favorito</span><input type="checkbox" name="favorite" defaultChecked={editing?.favorite ?? false} /></label><label className="form-field checkbox-field"><span>Jogo do ano (exige data que zerei)</span><input type="checkbox" name="gameOfYear" defaultChecked={editing?.gameOfYear ?? false} /></label>
           <label className="form-field">Estimativa principal (h)<input name="estimatedMainHours" type="number" min="0" step="0.25" defaultValue={editing?.estimatedMainHours ?? ''} /></label><label className="form-field">Estimativa completista (h)<input name="estimatedCompletionistHours" type="number" min="0" step="0.25" defaultValue={editing?.estimatedCompletionistHours ?? ''} /></label>
-          <label className="form-field">Estimativa pessoal (h)<input name="personalEstimatedHours" type="number" min="0" step="0.25" defaultValue={editing?.personalEstimatedHours ?? ''} /></label><label className="form-field form-wide">Descrição<textarea name="description" rows={2} maxLength={10000} defaultValue={editing?.description ?? ''} /></label>
+          <label className="form-field">Estimativa pessoal (h)<input name="personalEstimatedHours" type="number" min="0" step="0.25" defaultValue={editing?.personalEstimatedHours ?? ''} /></label>
+          <div className="metadata-search form-wide"><Button type="button" disabled={searchingTimeEstimates} onClick={() => void searchTimeEstimates()}>{searchingTimeEstimates ? 'Buscando…' : 'Buscar tempos (HowLongToBeat)'}</Button><small>Preenche as estimativas principal e completista para revisão; a estimativa pessoal continua sendo sua.</small>{timeEstimateError && <p role="status">{timeEstimateError}</p>}{timeEstimateCandidates.length > 0 && <ul aria-label="Resultados de tempo">{timeEstimateCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyTimeEstimate(candidate)}><span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.mainHours != null ? `Principal ${candidate.mainHours} h` : null, candidate.completionistHours != null ? `Completista ${candidate.completionistHours} h` : null].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul>}</div>
+          <label className="form-field form-wide">Descrição<textarea name="description" rows={2} maxLength={10000} defaultValue={editing?.description ?? ''} /></label>
           <label className="form-field form-wide">Notas<textarea name="notes" rows={2} maxLength={10000} defaultValue={editing?.notes ?? ''} /></label>
           <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={() => setDialogOpen(false)}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
         </form></section></div>}

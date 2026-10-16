@@ -97,9 +97,7 @@ O domínio deve ser organizado por módulos:
 
 ## Integrações
 
-Integrações externas devem ficar isoladas em infraestrutura.
-
-Exemplo futuro:
+Integrações externas devem ficar isoladas em infraestrutura. É o caso de:
 
 ```text
 modules/games
@@ -109,6 +107,7 @@ modules/games
   +-- infrastructure
         |
         +-- igdb
+        +-- howlongtobeat
 ```
 
 A lógica de negócio não deve depender diretamente do SDK de um fornecedor.

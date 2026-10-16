@@ -83,7 +83,9 @@ Não criar sistema de pontuação ou ranking no MVP.
 
 ## Futuro
 
-Integração com IGDB poderá preencher metadata automaticamente.
+Integração com IGDB preenche metadata e a busca de tempos do HowLongToBeat preenche
+as estimativas principal e completista; ambas são opcionais e revisadas antes de
+salvar.
 
 ## Implementação inicial
 

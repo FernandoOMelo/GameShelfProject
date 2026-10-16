@@ -27,6 +27,9 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLis
       providerId: 'igdb-123', title: 'Hades', description: 'Escape the Underworld.', releaseYear: 2020,
       coverUrl: 'https://images.example/hades.jpg', developer: 'Supergiant Games', genres: ['Roguelike'], platforms: ['PC'],
     }]), { status: 200 });
+    if (url.startsWith('/api/metadata/time-estimates?')) return new Response(JSON.stringify([{
+      providerId: '2224', title: 'Hades', releaseYear: 2020, mainHours: 20, mainExtraHours: 40, completionistHours: 80,
+    }]), { status: 200 });
     if (url === '/api/saved-filters' && method === 'GET') return new Response(JSON.stringify(saved), { status: 200 });
     if (url === '/api/saved-filters' && method === 'POST') {
       const body = JSON.parse(String(init?.body)) as { name: string; filters: Record<string, unknown> };
@@ -252,6 +255,21 @@ describe('library page', () => {
     expect(screen.getByLabelText(/Capa/)).toHaveValue('https://images.example/hades.jpg');
     expect(document.querySelector<HTMLInputElement>('input[name="genreNames"]')).toHaveValue('Roguelike');
     expect(screen.getByRole('status')).toHaveTextContent('para revisão');
+  });
+
+  it('searches HowLongToBeat time estimates and fills the estimate fields', async () => {
+    mockApi();
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar tempos (HowLongToBeat)' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Hades/ }));
+
+    expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
+    expect(screen.getByLabelText('Estimativa completista (h)')).toHaveValue(80);
+    expect(screen.getByRole('status')).toHaveTextContent('História principal + extras: 40 h');
   });
 
   it('shows an empty state when the API has no games', async () => {

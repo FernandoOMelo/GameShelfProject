@@ -9,6 +9,7 @@ import type { SessionRecord, SessionRepository } from './modules/sessions/reposi
 import type { BacklogRepository, QueueRecord } from './modules/backlog/repository.js';
 import type { PlanningSettingsRepository } from './modules/planning/repository.js';
 import type { GameMetadataProvider } from './modules/games/metadata-provider.js';
+import type { GameTimeEstimateProvider } from './modules/games/time-estimate-provider.js';
 import type { GameImageStorage } from './modules/games/image-storage.js';
 import type { GameListRepository, GameListRecord } from './modules/game-lists/repository.js';
 import type { GoalRecord, GoalRepository } from './modules/goals/repository.js';
@@ -708,6 +709,47 @@ describe('metadata search API', () => {
 
     expect(result.statusCode).toBe(502);
     expect(result.json()).toEqual({ error: 'Não foi possível buscar metadata externa. Consulte o log da API para ver o diagnóstico.' });
+    expect(result.body).not.toContain('secret detail');
+  });
+});
+
+describe('time estimate metadata API', () => {
+  const apps: ReturnType<typeof buildApp>[] = [];
+  afterEach(async () => Promise.all(apps.splice(0).map((app) => app.close())));
+
+  it('returns validated time estimate candidates for a search query', async () => {
+    const timeEstimateProvider: GameTimeEstimateProvider = {
+      id: 'howlongtobeat',
+      search: async (query) => [{ providerId: '2224', title: query, mainHours: 2, completionistHours: 4 }],
+    };
+    const app = buildApp({ timeEstimateProvider });
+    apps.push(app);
+
+    const result = await app.inject('/metadata/time-estimates?query=Dark%20Souls');
+
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toEqual([{ providerId: '2224', title: 'Dark Souls', mainHours: 2, completionistHours: 4 }]);
+  });
+
+  it('rejects invalid queries and reports an unconfigured provider', async () => {
+    const app = buildApp();
+    apps.push(app);
+
+    const invalid = await app.inject('/metadata/time-estimates?query=%20%20');
+    const unavailable = await app.inject('/metadata/time-estimates?query=Hades');
+
+    expect(invalid.statusCode).toBe(400);
+    expect(unavailable.statusCode).toBe(503);
+  });
+
+  it('does not expose provider errors to API clients', async () => {
+    const app = buildApp({ timeEstimateProvider: { id: 'test', search: async () => { throw new Error('secret detail'); } } });
+    apps.push(app);
+
+    const result = await app.inject('/metadata/time-estimates?query=Hades');
+
+    expect(result.statusCode).toBe(502);
+    expect(result.json()).toEqual({ error: 'Não foi possível buscar estimativas no HowLongToBeat. Consulte o log da API para ver o diagnóstico.' });
     expect(result.body).not.toContain('secret detail');
   });
 });

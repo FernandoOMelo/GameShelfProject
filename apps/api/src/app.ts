@@ -17,6 +17,8 @@ import { registerPlanningRoutes } from './modules/planning/routes.js';
 import { registerDashboardRoutes } from './modules/dashboard/routes.js';
 import type { GameMetadataProvider } from './modules/games/metadata-provider.js';
 import { registerMetadataRoutes } from './modules/games/metadata-routes.js';
+import type { GameTimeEstimateProvider } from './modules/games/time-estimate-provider.js';
+import { registerTimeEstimateRoutes } from './modules/games/time-estimate-routes.js';
 import type { GameImageStorage } from './modules/games/image-storage.js';
 import { registerMediaRoutes } from './modules/games/media-routes.js';
 import type { GameListRepository } from './modules/game-lists/repository.js';
@@ -34,7 +36,7 @@ import { registerChallengeRoutes } from './modules/challenge/routes.js';
 import type { SavedFilterRepository } from './modules/saved-filters/repository.js';
 import { registerSavedFilterRoutes } from './modules/saved-filters/routes.js';
 
-export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   app.addHook('onRequest', async (request, reply) => {
@@ -56,6 +58,7 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
   });
 
   app.register((instance) => registerMetadataRoutes(instance, options.metadataProvider));
+  app.register((instance) => registerTimeEstimateRoutes(instance, options.timeEstimateProvider));
 
   if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!, options.imageStorage, options.backlogRepository, options.screenshotRepository, options.gameListRepository && options.mainChallengeRepository && options.challengeCompletionRepository
     ? { lists: options.gameListRepository, challenge: options.mainChallengeRepository, completions: options.challengeCompletionRepository }

@@ -3,7 +3,8 @@
 ## Status
 
 Opcional e fora dos critérios obrigatórios do MVP. A busca IGDB com revisão antes
-de salvar e o armazenamento local de imagens já estão implementados.
+de salvar, o armazenamento local de imagens e a busca de estimativas de tempo do
+HowLongToBeat já estão implementados.
 
 ## Objetivo
 
@@ -41,12 +42,17 @@ O usuário deve poder corrigir dados importados.
 Game Module
     |
     +-- Metadata Provider Interface
+    |        |
+    |        +-- IGDB Adapter
+    |        +-- Future Provider
+    |
+    +-- Time Estimate Provider Interface
              |
-             +-- IGDB Adapter
-             +-- Future Provider
+             +-- HowLongToBeat Adapter
 ```
 
-A regra de negócio não deve depender diretamente da API da IGDB.
+A regra de negócio não deve depender diretamente da API da IGDB nem do site do
+HowLongToBeat.
 
 ## Busca IGDB
 
@@ -68,3 +74,21 @@ Quando o IGDB fornecer localização para pt-BR, o título importado prioriza es
 versão, com fallback ao título original. A localização do IGDB fornece o nome
 localizado; a descrição, desenvolvedora, publicadora, gêneros e plataformas
 continuam usando os campos padrão retornados pelo serviço.
+
+## Estimativas de tempo (HowLongToBeat)
+
+A API expõe `GET /metadata/time-estimates?query=...`, que consulta o HowLongToBeat e
+devolve até dez candidatos com `mainHours`, `mainExtraHours` e `completionistHours`
+(em horas, convertidas dos segundos do site) e, quando disponível, `releaseYear`.
+Diferente do IGDB, não exige credenciais e fica sempre disponível.
+
+No formulário da biblioteca, o botão "Buscar tempos (HowLongToBeat)" usa o título
+digitado, mostra os candidatos e, escolhido um, preenche **Estimativa principal** e
+**Estimativa completista** para revisão. "História principal + extras" aparece como
+referência e não é gravado. A **Estimativa pessoal** nunca é preenchida
+automaticamente: é a adaptação do usuário e tem precedência (ADR-003).
+
+O HowLongToBeat não tem API pública; o cliente descobre o endpoint no build do site e
+renova um token de curta duração. Se o site mudar ou bloquear a requisição, a busca
+responde `502` e o restante da biblioteca continua normal. Sem provedor configurado,
+a rota responde `503`. Veja ADR-019.
