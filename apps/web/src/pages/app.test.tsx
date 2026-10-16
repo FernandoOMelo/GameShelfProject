@@ -211,6 +211,12 @@ afterEach(() => {
   vi.stubGlobal('fetch', fetchMock);
 });
 
+beforeEach(() => {
+  // A URL é a fonte da verdade da navegação (ADR-021): cada teste parte de `/`,
+  // senão a rota deixada pelo teste anterior mudaria a tela inicial.
+  window.history.replaceState(null, '', '/');
+});
+
 describe('library page', () => {
   it('edits a game with a local media path without URL validation errors', async () => {
     const game = { ...makeGame('00000000-0000-4000-8000-000000000009', 'Local game', 'PLAYING'), coverUrl: '/media/00000000-0000-4000-8000-000000000050.jpg' };
@@ -453,6 +459,26 @@ describe('library page', () => {
     expect(await screen.findByText(/Nenhum jogo novo para a fila/)).toBeInTheDocument();
   });
 
+  it('asks for confirmation before deleting a list', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Listas' }));
+    fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Clássicos' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir lista' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Excluir lista' });
+    expect(within(dialog).getByText('Excluir a lista “Clássicos”? Os jogos continuarão na biblioteca.')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir lista' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Excluir lista' })).getByRole('button', { name: 'Excluir' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/lists/00000000-0000-4000-8000-000000000050', { method: 'DELETE' }));
+    expect(await screen.findByText('Você ainda não criou listas.')).toBeInTheDocument();
+  });
+
   it('registers a session from a game detail page and displays its duration', async () => {
     const game = {
       id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null,
@@ -529,16 +555,124 @@ describe('library page', () => {
       }), { status: 200 });
       return new Response(JSON.stringify([game]), { status: 200 });
     });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir sessão' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Excluir sessão' });
+    expect(within(dialog).getByText('Excluir esta sessão? Esta ação não pode ser desfeita.')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Excluir' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/sessions/${session.id}`, { method: 'DELETE' }));
-    expect(confirm).toHaveBeenCalled();
     expect(await screen.findByText('Sessão excluída.')).toBeInTheDocument();
     expect(await screen.findByText('Nenhuma sessão registrada.')).toBeInTheDocument();
-    confirm.mockRestore();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps the game when the deletion dialog is cancelled', async () => {
+    const game = makeGame('00000000-0000-4000-8000-000000000001', 'Hades');
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    const trigger = await screen.findByRole('button', { name: 'Excluir jogo' });
+    // No navegador real o clique foca o botão; o jsdom não faz isso, então
+    // focamos explicitamente para verificar a devolução de foco ao fechar.
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole('dialog', { name: 'Excluir jogo' });
+    expect(dialog).toHaveFocus();
+    expect(within(dialog).getByText(/Esta ação não pode ser desfeita/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(`/api/games/${game.id}`, { method: 'DELETE' });
+    expect(screen.getByRole('button', { name: 'Excluir jogo' })).toHaveFocus();
+  });
+
+  it('closes the deletion dialog with Escape without calling the api', async () => {
+    const game = makeGame('00000000-0000-4000-8000-000000000001', 'Hades');
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir jogo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Excluir jogo' });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(`/api/games/${game.id}`, { method: 'DELETE' });
+  });
+
+  it('compara o período do painel com o período anterior', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
+    const base = fetchMock.getMockImplementation()!;
+    const dashboardUrls: string[] = [];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith('/api/dashboard')) {
+        dashboardUrls.push(url);
+        const previous = dashboardUrls.length > 1;
+        return new Response(JSON.stringify({
+          gameCount: 1, desiredCount: 0, backlogCount: 0, completedCount: 0, playingCount: 1, pausedCount: 0, abandonedCount: 0, archivedCount: 0,
+          totalPlayedHours: 10, backlogRemainingHours: 0, weeklyHours: 0,
+          backlogForecast: { estimatedWeeks: null, estimatedMonths: null, gamesWithoutEstimate: 0, stalledGames: [] },
+          queueRemainingHours: 0, estimatedQueueWeeks: null, currentGame: null, playingGames: [],
+          period: { from: '2026-10-01', to: '2026-10-31' },
+          periodStats: previous
+            ? { playedHours: 8, sessions: 4, gamesPlayed: 2, gamesCompleted: 0 }
+            : { playedHours: 10, sessions: 6, gamesPlayed: 2, gamesCompleted: 1 },
+          queuePreview: [],
+        }), { status: 200 });
+      }
+      return base(input, init);
+    });
+    render(<App />);
+
+    // 10 h contra 8 h → +25%; 6 sessões contra 4 → +50%; mesmos jogos → igual.
+    expect(await screen.findByText('▲ 25% vs. período anterior')).toBeInTheDocument();
+    expect(screen.getByText('▲ 50% vs. período anterior')).toBeInTheDocument();
+    expect(screen.getByText('igual ao período anterior')).toBeInTheDocument();
+    // Período anterior de mesma duração, imediatamente antes de outubro.
+    expect(dashboardUrls[1]).toContain('from=2026-08-31&to=2026-09-30');
+  });
+
+  it('leva a view escolhida para a URL', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fila' }));
+    expect(window.location.pathname).toBe('/fila');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Painel' }));
+    expect(window.location.pathname).toBe('/painel');
+  });
+
+  it('abre o jogo direto pelo link', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    window.history.replaceState(null, '', '/jogos/00000000-0000-4000-8000-000000000001');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Hades' })).toBeInTheDocument();
+  });
+
+  it('volta para a biblioteca quando o link aponta para um jogo desconhecido', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    window.history.replaceState(null, '', '/jogos/00000000-0000-4000-8000-000000000099');
+    render(<App />);
+
+    expect(await screen.findByText('Jogo não encontrado na biblioteca.')).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/biblioteca');
+    expect(screen.queryByRole('heading', { name: 'Hades' })).not.toBeInTheDocument();
+  });
+
+  it('o botão Voltar fecha o detalhe aberto por link direto', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    window.history.replaceState(null, '', '/jogos/00000000-0000-4000-8000-000000000001');
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Hades' });
+
+    fireEvent.click(screen.getByRole('button', { name: /Voltar$/ }));
+
+    expect(window.location.pathname).toBe('/biblioteca');
+    expect(screen.queryByRole('heading', { name: 'Hades' })).not.toBeInTheDocument();
   });
 
   it('summarizes the journal of the most recent sessions in the game details', async () => {
@@ -639,6 +773,24 @@ describe('library page', () => {
       expect(screen.getAllByRole('button', { name: /Mover .* para cima/ })[1]).toBeEnabled();
     });
     expect(screen.getAllByRole('listitem')[0]?.textContent).toContain('Hollow Knight');
+  });
+
+  it('reorders the queue by dragging an entry', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades'), makeGame('00000000-0000-4000-8000-000000000002', 'Hollow Knight')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
+    fireEvent.click(screen.getAllByRole('button', { name: '＋ Adicionar à fila' })[0]!);
+    await screen.findByRole('button', { name: 'Na fila · Remover' });
+    fireEvent.click(screen.getByRole('button', { name: '＋ Adicionar à fila' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Na fila · Remover' })).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: /^Fila/ }));
+    await screen.findByRole('heading', { name: 'Fila de jogos' });
+    expect(screen.getAllByRole('listitem')[0]?.textContent).toContain('Hades');
+    fireEvent.dragStart(screen.getAllByRole('listitem')[1]!);
+    fireEvent.dragOver(screen.getAllByRole('listitem')[0]!);
+    fireEvent.drop(screen.getAllByRole('listitem')[0]!);
+    await waitFor(() => expect(screen.getAllByRole('listitem')[0]?.textContent).toContain('Hollow Knight'));
   });
 
   it('filters library games and displays the dashboard with its weekly goal', async () => {
@@ -1041,6 +1193,29 @@ describe('library sorting and filters', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Excluir filtro' }));
     await waitFor(() => expect(screen.queryByRole('option', { name: 'Em andamento' })).not.toBeInTheDocument());
+  });
+
+  it('reapplies a saved view from the sidebar', async () => {
+    mockApi([
+      makeGame('00000000-0000-4000-8000-000000000001', 'Jogando agora', 'PLAYING'),
+      makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Só no backlog' });
+
+    fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
+    openAdvancedFilters();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
+    fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Em andamento' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));
+    const sidebarView = await screen.findByRole('button', { name: 'Abrir view Em andamento' });
+
+    fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'ALL' } });
+    await waitFor(() => expect(cardTitles()).toHaveLength(2));
+
+    fireEvent.click(sidebarView);
+    await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
   });
 
   it('reports a duplicate saved filter name', async () => {

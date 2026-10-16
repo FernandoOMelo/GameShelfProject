@@ -33,6 +33,15 @@ Toda tela que carrega dados deve possuir estados para:
 - erro;
 - sucesso.
 
+## Navegação
+
+Cada tela de topo e o detalhe de um jogo têm URL própria (ADR-021). Isso permite
+compartilhar o link, recarregar a página na mesma tela e usar o botão voltar do
+navegador — no PWA instalado, ele fecha o detalhe em vez de sair do app.
+
+Caminhos: `/painel`, `/biblioteca`, `/fila`, `/listas`, `/estatisticas`,
+`/atividade` e `/jogos/:id`. Caminhos desconhecidos caem no painel.
+
 ## Acessibilidade
 
 No mínimo:
@@ -46,3 +55,9 @@ No mínimo:
 ## Cores
 
 Não definir identidade visual definitiva nesta fase. O design system deve permitir evolução posterior.
+
+## Referências
+
+Padrões de layout de sistemas parecidos (bibliotecas de jogos, trackers de mídia
+e launchers) e recomendações de modernização estão em
+[Pesquisa de layouts — referências para modernizar a UI](ui-references.md).

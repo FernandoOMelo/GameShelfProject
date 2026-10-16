@@ -7,6 +7,9 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
+    // O app registra um service worker em produção (ADR-015). Sem bloquear, ele
+    // intercepta as chamadas de API e fura o `page.route` dos testes.
+    serviceWorkers: 'block',
   },
   projects: [{
     name: 'chromium',

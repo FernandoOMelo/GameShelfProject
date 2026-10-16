@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { StatsGroup, StatsResponse } from '@gameshelf/contracts';
+import { BarList, ErrorState, LoadingState, StatCard } from '@gameshelf/ui';
 import { ActivityHeatmap } from './activity-heatmap';
 import { ReplayPanel } from './replay-panel';
 import { apiUrl,difficultyLabels, formatCompactHours } from './shared';
@@ -19,13 +20,10 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
     return () => { active = false; };
   }, [refreshKey]);
 
-  if (failed) return <section className="stats-page"><p className="notice" role="alert">Não foi possível carregar as estatísticas.</p></section>;
-  if (!stats) return <section className="stats-page"><p role="status">Carregando estatísticas…</p></section>;
+  if (failed) return <section className="stats-page"><ErrorState>Não foi possível carregar as estatísticas.</ErrorState></section>;
+  if (!stats) return <section className="stats-page"><LoadingState>Carregando estatísticas…</LoadingState></section>;
 
   const { totals } = stats;
-  const maxRating = Math.max(1, ...stats.ratingDistribution.map((entry) => entry.count));
-  const maxDifficulty = Math.max(1, ...stats.difficultyDistribution.map((entry) => entry.count));
-  const maxReleaseYear = Math.max(1, ...stats.byReleaseYear.map((entry) => entry.count));
   // Escalas fixas (notas e dificuldades) chegam completas da API; mostrar só o que
   // o usuário realmente usou evita paredes de barras zeradas.
   const ratedEntries = stats.ratingDistribution.filter((entry) => entry.count > 0);
@@ -37,16 +35,16 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
     <p className="library-subtitle">Números dos jogos zerados. As horas de cada jogo contam no ano em que ele foi zerado.</p>
 
     <div className="kpi-grid" aria-label="Totais">
-      <Tile label="Jogos zerados" value={String(totals.completedCount)} accent />
-      <Tile label="Horas em jogos zerados" value={formatCompactHours(totals.completedHours)} />
-      <Tile label="Média por jogo zerado" value={totals.averageCompletedHours === null ? '—' : formatCompactHours(totals.averageCompletedHours)} />
-      <Tile label="Tempo de jornada" value={journey} small />
+      <StatCard label="Jogos zerados" value={String(totals.completedCount)} accent />
+      <StatCard label="Horas em jogos zerados" value={formatCompactHours(totals.completedHours)} />
+      <StatCard label="Média por jogo zerado" value={totals.averageCompletedHours === null ? '—' : formatCompactHours(totals.averageCompletedHours)} />
+      <StatCard label="Tempo de jornada" value={journey} small />
     </div>
     <div className="kpi-grid kpi-grid-secondary">
-      <Tile label="Taxa de conclusão" value={`${totals.completionRate.toLocaleString('pt-BR')}%`} />
-      <Tile label="Média por jogo jogado" value={totals.averageHoursPerGame === null ? '—' : formatCompactHours(totals.averageHoursPerGame)} />
-      <Tile label="Jogo mais longo" value={totals.longestGame?.title ?? '—'} detail={totals.longestGame ? formatCompactHours(totals.longestGame.hours) : undefined} small />
-      <Tile label="Jogo mais curto" value={totals.shortestGame?.title ?? '—'} detail={totals.shortestGame ? formatCompactHours(totals.shortestGame.hours) : undefined} small />
+      <StatCard label="Taxa de conclusão" value={`${totals.completionRate.toLocaleString('pt-BR')}%`} />
+      <StatCard label="Média por jogo jogado" value={totals.averageHoursPerGame === null ? '—' : formatCompactHours(totals.averageHoursPerGame)} />
+      <StatCard label="Jogo mais longo" value={totals.longestGame?.title ?? '—'} detail={totals.longestGame ? formatCompactHours(totals.longestGame.hours) : undefined} small />
+      <StatCard label="Jogo mais curto" value={totals.shortestGame?.title ?? '—'} detail={totals.shortestGame ? formatCompactHours(totals.shortestGame.hours) : undefined} small />
     </div>
     <small className="stats-note">A taxa de conclusão ignora jogos desejados, que ainda não estão na biblioteca. A média por jogo jogado considera todo jogo com horas registradas, zerado ou não.</small>
 
@@ -64,10 +62,10 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
 
     <div className="dashboard-columns">
       <section className="panel" aria-labelledby="rating-title"><h2 id="rating-title">Pontuação</h2>
-        {ratedEntries.length ? <ul className="hbar-list" aria-label="Jogos por nota">{ratedEntries.map((entry) => <li key={entry.rating} title={`Nota ${entry.rating}: ${entry.count}`}><span className="hbar-label">{entry.rating === 11 ? '11 · Jogo da vida' : entry.rating}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxRating) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul> : <p className="dashboard-empty">Nenhum jogo zerado com nota registrada.</p>}
+        <BarList label="Jogos por nota" empty={<p className="dashboard-empty">Nenhum jogo zerado com nota registrada.</p>} entries={ratedEntries.map((entry) => ({ key: entry.rating, label: entry.rating === 11 ? '11 · Jogo da vida' : entry.rating, value: entry.count, title: `Nota ${entry.rating}: ${entry.count}` }))} />
       </section>
       <section className="panel" aria-labelledby="difficulty-title"><h2 id="difficulty-title">Nível de dificuldade</h2>
-        {difficultyEntries.length ? <ul className="hbar-list" aria-label="Jogos zerados por dificuldade">{difficultyEntries.map((entry) => <li key={entry.difficulty} title={`${difficultyLabels[entry.difficulty]}: ${entry.count}`}><span className="hbar-label">{difficultyLabels[entry.difficulty]}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxDifficulty) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul> : <p className="dashboard-empty">Nenhum jogo zerado com dificuldade informada.</p>}
+        <BarList label="Jogos zerados por dificuldade" empty={<p className="dashboard-empty">Nenhum jogo zerado com dificuldade informada.</p>} entries={difficultyEntries.map((entry) => ({ key: entry.difficulty, label: difficultyLabels[entry.difficulty], value: entry.count, title: `${difficultyLabels[entry.difficulty]}: ${entry.count}` }))} />
       </section>
     </div>
 
@@ -80,7 +78,7 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
     <div className="dashboard-columns">
       <GroupTable title="Top 10 desenvolvedoras" groups={stats.byDeveloper} />
       <section className="panel" aria-labelledby="release-year-title"><h2 id="release-year-title">Por ano de lançamento</h2>
-        {stats.byReleaseYear.length ? <ul className="hbar-list" aria-label="Jogos por ano de lançamento">{stats.byReleaseYear.map((entry) => <li key={entry.year} title={`${entry.year}: ${entry.count}`}><span className="hbar-label">{entry.year}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxReleaseYear) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul> : <p className="dashboard-empty">Nenhum jogo com ano de lançamento informado.</p>}
+        <BarList label="Jogos por ano de lançamento" empty={<p className="dashboard-empty">Nenhum jogo com ano de lançamento informado.</p>} entries={stats.byReleaseYear.map((entry) => ({ key: entry.year, label: entry.year, value: entry.count, title: `${entry.year}: ${entry.count}` }))} />
       </section>
     </div>
 
@@ -95,10 +93,6 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
     </div>
     <small className="stats-note">Rankings de gênero e tipo usam a média das notas dos jogos zerados.</small>
   </section>;
-}
-
-function Tile({ label, value, detail, accent = false, small = false }: { label: string; value: string; detail?: string; accent?: boolean; small?: boolean }) {
-  return <article className={`stat-card${accent ? ' stat-card-accent' : ''}${small ? ' stat-card-small' : ''}`}><span>{label}</span><strong>{value}</strong>{detail && <em>{detail}</em>}</article>;
 }
 
 function GroupTable({ title, groups }: { title: string; groups: StatsGroup[] }) {

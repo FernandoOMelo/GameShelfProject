@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { DashboardResponse, Game, GameListSummary, MainChallenge, QueueItem, Session } from '@gameshelf/contracts';
-import { Button } from '@gameshelf/ui';
+import { Button, Panel, StatCard } from '@gameshelf/ui';
 import { BackupCard } from './backup-card';
 import { GoalsCard } from './goals-card';
 import { apiUrl, formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
@@ -17,8 +17,21 @@ const statusSegments: Array<{ status: keyof typeof statusColors; label: string; 
   { status: 'DESIRED', label: 'Desejados', count: (d) => d.desiredCount },
 ];
 
-export function DashboardView({ dashboard, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onRefresh, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
+/**
+ * Texto curto de comparação com o período anterior. Sem base de comparação
+ * (período anterior zerado) o indicador é omitido em vez de exibir ∞.
+ */
+function formatPeriodDelta(current: number, previous: number): string | undefined {
+  if (previous <= 0) return undefined;
+  const percent = Math.round(((current - previous) / previous) * 100);
+  if (percent === 0) return 'igual ao período anterior';
+  return `${percent > 0 ? '▲' : '▼'} ${Math.abs(percent)}% vs. período anterior`;
+}
+
+export function DashboardView({ dashboard, previousPeriodStats, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onRefresh, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
   dashboard: DashboardResponse | null;
+  /** Indicadores do período imediatamente anterior, quando existe comparação. */
+  previousPeriodStats?: DashboardResponse['periodStats'] | null;
   queue: QueueItem[];
   now: number;
   period: DashboardPeriod;
@@ -50,6 +63,7 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
   }
 
   const periodStats = dashboard?.periodStats ?? { playedHours: 0, sessions: 0, gamesPlayed: 0, gamesCompleted: 0 };
+  const delta = (current: number, previous: number | undefined) => (previous === undefined ? undefined : formatPeriodDelta(current, previous));
   const playingGames = dashboard?.playingGames ?? (dashboard?.currentGame ? [{ ...dashboard.currentGame, activeSession: dashboard.currentGame.activeSession ?? null }] : []);
   const byYear = [...(dashboard?.completionByYear ?? [])].sort((a, b) => a.year - b.year).slice(-10);
   const maxYear = Math.max(1, ...byYear.map((entry) => entry.gameCount));
@@ -63,17 +77,17 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
     </div>
     {!dashboard ? <p role="status">Carregando painel…</p> : <>
       <div className="kpi-grid" aria-label="Indicadores do período">
-        <Kpi label="Horas jogadas no período" value={formatHours(periodStats.playedHours)} accent />
-        <Kpi label="Sessões no período" value={String(periodStats.sessions)} />
-        <Kpi label="Jogos jogados no período" value={String(periodStats.gamesPlayed)} />
-        <Kpi label="Jogos zerados no período" value={String(periodStats.gamesCompleted)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'COMPLETED' }))} />
+        <StatCard label="Horas jogadas no período" value={formatHours(periodStats.playedHours)} delta={delta(periodStats.playedHours, previousPeriodStats?.playedHours)} accent />
+        <StatCard label="Sessões no período" value={String(periodStats.sessions)} delta={delta(periodStats.sessions, previousPeriodStats?.sessions)} />
+        <StatCard label="Jogos jogados no período" value={String(periodStats.gamesPlayed)} delta={delta(periodStats.gamesPlayed, previousPeriodStats?.gamesPlayed)} />
+        <StatCard label="Jogos zerados no período" value={String(periodStats.gamesCompleted)} delta={delta(periodStats.gamesCompleted, previousPeriodStats?.gamesCompleted)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'COMPLETED' }))} />
       </div>
 
       <div className="kpi-grid kpi-grid-secondary" aria-label="Resumo geral">
-        <Kpi label="Tempo jogado · todo período" value={formatCompactHours(dashboard.totalPlayedHours)} />
-        <Kpi label="Horas restantes no backlog" value={formatCompactHours(dashboard.backlogRemainingHours)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'BACKLOG' }))} />
-        <Kpi label="Horas disponíveis por semana" value={formatCompactHours(dashboard.weeklyHours)} />
-        <Kpi label="Em andamento" value={String(dashboard.playingCount)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'PLAYING' }))} />
+        <StatCard label="Tempo jogado · todo período" value={formatCompactHours(dashboard.totalPlayedHours)} />
+        <StatCard label="Horas restantes no backlog" value={formatCompactHours(dashboard.backlogRemainingHours)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'BACKLOG' }))} />
+        <StatCard label="Horas disponíveis por semana" value={formatCompactHours(dashboard.weeklyHours)} />
+        <StatCard label="Em andamento" value={String(dashboard.playingCount)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'PLAYING' }))} />
       </div>
 
       <section className="playing-now"><h2>Jogando agora</h2>
@@ -95,32 +109,30 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
       </section>
 
       <div className="dashboard-columns">
-        <section className="panel" aria-labelledby="status-panel-title">
-          <h2 id="status-panel-title">Biblioteca por estado</h2>
+        <Panel title="Biblioteca por estado" titleId="status-panel-title">
           <p className="panel-figure"><strong>{dashboard.gameCount}</strong> jogos no catálogo{dashboard.archivedCount > 0 ? ` · ${dashboard.archivedCount} arquivados` : ''}</p>
           <div className="stacked-bar" role="img" aria-label="Distribuição dos jogos por estado">{segments.filter((segment) => segment.value > 0).map((segment) => <span key={segment.status} title={`${segment.label}: ${segment.value}`} style={{ flexGrow: segment.value, background: statusColors[segment.status] }} />)}{segmentTotal === 0 && <span className="stacked-empty" />}</div>
           <ul className="legend-list">{segments.filter((segment) => segment.value > 0).map((segment) => <li key={segment.status}>{onFilterLibrary
             ? <button type="button" className="legend-link" aria-label={`${segment.label}: ${segment.value}. Ver na biblioteca`} onClick={() => onFilterLibrary({ status: segment.status })}><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></button>
             : <><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></>}</li>)}{segmentTotal === 0 && <li className="legend-empty">Nenhum jogo na biblioteca ainda.</li>}</ul>
-        </section>
+        </Panel>
 
-        <section className="panel" aria-labelledby="year-panel-title">
-          <h2 id="year-panel-title">Zerados por ano</h2>
+        <Panel title="Zerados por ano" titleId="year-panel-title">
           {byYear.length ? <ol className="bar-chart" aria-label="Jogos zerados por ano">{byYear.map((entry) => <li key={entry.year} title={`${entry.year}: ${entry.gameCount} jogos zerados`}>{onFilterLibrary
             ? <button type="button" className="bar-link" aria-label={`${entry.year}: ${entry.gameCount} jogos zerados. Ver na biblioteca`} onClick={() => onFilterLibrary({ status: 'COMPLETED', completedYear: String(entry.year) })}><span className="bar-value">{entry.gameCount}</span><span className="bar" style={{ height: `${Math.max(4, (entry.gameCount / maxYear) * 100)}%` }} /><span className="bar-label">{entry.year}</span></button>
             : <><span className="bar-value">{entry.gameCount}</span><span className="bar" style={{ height: `${Math.max(4, (entry.gameCount / maxYear) * 100)}%` }} /><span className="bar-label">{entry.year}</span></>}</li>)}</ol> : <p className="dashboard-empty">Nenhuma conclusão com data registrada.</p>}
           <small>Cada jogo conta uma vez por período, mesmo que tenha sido zerado em mais de uma plataforma.</small>
-        </section>
+        </Panel>
       </div>
 
-      <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />
-
-      <GoalsCard />
-
-      <ChallengeCard />
+      <div className="dashboard-bento">
+        <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />
+        <GoalsCard />
+        <ChallengeCard />
+      </div>
 
       <section className="dashboard-bottom">
-        <div className="panel"><div className="section-heading"><h2>Próximos da fila</h2><button type="button" className="session-edit" onClick={onOpenQueue}>Ver fila completa</button></div>{queue.length ? <ol className="dashboard-queue">{queue.slice(0, 3).map((item) => <li key={item.game.id}><button type="button" onClick={() => onSelectGame(item.game)}>{item.position + 1}. {item.game.title}</button></li>)}</ol> : <p className="dashboard-empty">Sua fila está vazia.</p>}<p>{dashboard.queueRemainingHours} h estimadas na fila{dashboard.estimatedQueueWeeks === null ? '' : ` · cerca de ${dashboard.estimatedQueueWeeks} semanas`}</p></div>
+        <Panel title="Próximos da fila" actions={<button type="button" className="session-edit" onClick={onOpenQueue}>Ver fila completa</button>}>{queue.length ? <ol className="dashboard-queue">{queue.slice(0, 3).map((item) => <li key={item.game.id}><button type="button" onClick={() => onSelectGame(item.game)}>{item.position + 1}. {item.game.title}</button></li>)}</ol> : <p className="dashboard-empty">Sua fila está vazia.</p>}<p>{dashboard.queueRemainingHours} h estimadas na fila{dashboard.estimatedQueueWeeks === null ? '' : ` · cerca de ${dashboard.estimatedQueueWeeks} semanas`}</p></Panel>
         <form className="weekly-goal-form panel" onSubmit={(event) => void saveWeeklyGoal(event)}><h2>Meta semanal</h2><label className="form-field">Minutos disponíveis por semana<input aria-label="Minutos disponíveis por semana" type="number" min="0" max="10080" step="15" value={weeklyMinutes} onChange={(event) => setWeeklyMinutes(event.target.value)} /></label><Button type="submit">Salvar meta</Button>{feedback && <p role="status">{feedback}</p>}</form>
       </section>
 
@@ -129,16 +141,9 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
   </section>;
 }
 
-function Kpi({ label, value, accent = false, onClick }: { label: string; value: string; accent?: boolean; onClick?: () => void }) {
-  const className = `stat-card${accent ? ' stat-card-accent' : ''}`;
-  if (!onClick) return <article className={className}><span>{label}</span><strong>{value}</strong></article>;
-  return <button type="button" className={`${className} stat-card-link`} aria-label={`${label}: ${value}. Ver na biblioteca`} onClick={onClick}><span>{label}</span><strong>{value}</strong></button>;
-}
-
 function BacklogForecast({ forecast, remainingHours, onSelectGame }: { forecast: DashboardResponse['backlogForecast']; remainingHours: number; onSelectGame: (game: Game) => void }) {
   const months = forecast.estimatedMonths;
-  return <section className="panel" aria-labelledby="forecast-title">
-    <h2 id="forecast-title">Previsão do backlog</h2>
+  return <Panel title="Previsão do backlog" titleId="forecast-title">
     {months === null
       ? <p className="dashboard-empty">Defina a meta semanal para ver quando o backlog acaba.</p>
       : <p className="panel-figure">No seu ritmo, as {formatCompactHours(remainingHours)} restantes levam cerca de <strong>{months.toLocaleString('pt-BR')} {months === 1 ? 'mês' : 'meses'}</strong> ({forecast.estimatedWeeks?.toLocaleString('pt-BR')} semanas).</p>}
@@ -148,7 +153,7 @@ function BacklogForecast({ forecast, remainingHours, onSelectGame }: { forecast:
       ? <ul className="rank-list">{forecast.stalledGames.map((entry) => <li key={entry.game.id}><button type="button" onClick={() => onSelectGame(entry.game)}>{entry.game.title}</button><span>{entry.daysStalled} dias{entry.remainingHours === null ? '' : ` · faltam ${formatCompactHours(entry.remainingHours)}`}</span></li>)}</ul>
       : <p className="dashboard-empty">Nenhum jogo em andamento ou pausado parado há 30 dias ou mais.</p>}
     <small>Candidatos a pausar de vez ou abandonar: jogos em andamento ou pausados sem sessão recente.</small>
-  </section>;
+  </Panel>;
 }
 
 function ChallengeCard() {
@@ -186,8 +191,7 @@ function ChallengeCard() {
     await load();
   }
 
-  return <section className="panel challenge-card" aria-labelledby="challenge-title">
-    <div className="section-heading"><h2 id="challenge-title">Missão principal</h2>{!editing && <button type="button" className="session-edit" onClick={() => { setTitle(challenge?.title ?? ''); setListId(challenge?.listId ?? lists[0]?.id ?? ''); setEditing(true); }}>{challenge ? 'Editar missão' : 'Definir missão'}</button>}</div>
+  return <Panel className="challenge-card" title="Missão principal" titleId="challenge-title" actions={!editing ? <button type="button" className="session-edit" onClick={() => { setTitle(challenge?.title ?? ''); setListId(challenge?.listId ?? lists[0]?.id ?? ''); setEditing(true); }}>{challenge ? 'Editar missão' : 'Definir missão'}</button> : undefined}>
     {editing ? <form className="challenge-form" onSubmit={(event) => void save(event)}>
       <label className="form-field">Objetivo<input aria-label="Objetivo da missão" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Zerar todos os clássicos do SNES" /></label>
       <label className="form-field">Lista acompanhada<select aria-label="Lista da missão" required value={listId} onChange={(event) => setListId(event.target.value)}><option value="">Selecione uma lista</option>{lists.map((list) => <option key={list.id} value={list.id}>{list.name} ({list.gameCount})</option>)}</select></label>
@@ -199,5 +203,5 @@ function ChallengeCard() {
       <div className="progress-track progress-track-large" role="img" aria-label={`Missão ${challenge.percent}% completa`}><span style={{ width: `${challenge.percent}%` }} /></div>
     </> : <p className="dashboard-empty">Defina um objetivo de longo prazo acompanhando uma lista de jogos.</p>}
     {message && <p role="alert">{message}</p>}
-  </section>;
+  </Panel>;
 }

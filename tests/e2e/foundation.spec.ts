@@ -4,6 +4,7 @@ test('shows the games library shell', async ({ page }) => {
   await page.route('**/api/**', (route) => route.fulfill({ json: new URL(route.request().url()).pathname.endsWith('/dashboard') ? {
     gameCount: 0, desiredCount: 0, backlogCount: 0, completedCount: 0, playingCount: 0, pausedCount: 0, abandonedCount: 0, archivedCount: 0,
     totalPlayedHours: 0, backlogRemainingHours: 0, weeklyHours: 0,
+    backlogForecast: { estimatedWeeks: null, estimatedMonths: null, gamesWithoutEstimate: 0, stalledGames: [] },
     queueRemainingHours: 0, estimatedQueueWeeks: null, currentGame: null, playingGames: [], period: { from: null, to: null }, periodStats: { playedHours: 0, sessions: 0, gamesPlayed: 0, gamesCompleted: 0 }, queuePreview: [],
   } : [] }));
   await page.goto('/');
@@ -34,6 +35,7 @@ test('adds a game to the queue and opens the weekly planning dashboard', async (
     if (url.pathname === '/api/dashboard') return route.fulfill({ json: {
       gameCount: 1, desiredCount: 0, backlogCount: 1, completedCount: 0, playingCount: 0, pausedCount: 0, abandonedCount: 0, archivedCount: 0,
       totalPlayedHours: 0, backlogRemainingHours: 18, weeklyHours: weeklyMinutes / 60,
+      backlogForecast: { estimatedWeeks: null, estimatedMonths: null, gamesWithoutEstimate: 0, stalledGames: [] },
       queueRemainingHours: queue.length ? 18 : 0, estimatedQueueWeeks: queue.length ? 3 : 0,
       currentGame: null, playingGames: [], period: { from: null, to: null }, periodStats: { playedHours: 0, sessions: 0, gamesPlayed: 0, gamesCompleted: 0 }, queuePreview: queue,
     } });
@@ -44,13 +46,13 @@ test('adds a game to the queue and opens the weekly planning dashboard', async (
     return route.fulfill({ json: [] });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Biblioteca' }).click();
+  await page.getByRole('button', { name: 'Biblioteca', exact: true }).click();
   await page.getByRole('button', { name: '＋ Adicionar à fila' }).click();
   await expect(page.getByRole('button', { name: 'Na fila · Remover' })).toBeVisible();
-  await page.getByRole('button', { name: /Fila/ }).click();
+  await page.getByRole('button', { name: 'Fila', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Fila de jogos' })).toBeVisible();
   await expect(page.getByText('Hades')).toBeVisible();
-  await page.getByRole('button', { name: 'Painel' }).click();
+  await page.getByRole('button', { name: 'Painel', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Seu ritmo de jogo' })).toBeVisible();
   await expect(page.getByText('cerca de 3 semanas')).toBeVisible();
 });

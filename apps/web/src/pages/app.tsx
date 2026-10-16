@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
-import { Button } from '@gameshelf/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
+import { readRoute, routePath, type AppView } from '../router';
 import { DashboardView, type LibraryFilter } from './dashboard-view';
-import { StatsView } from './stats-view';
 import { enqueueFailureMessage, OfflineBanner, useOfflineSessions } from './offline-banner';
 import { isNetworkFailure } from './offline-sessions';
 import { SessionScreenshots } from './session-screenshots';
 import { NextGameSuggestion } from './next-game-suggestion';
-import { TimelineView } from './timeline-view';
+
+// Views de uso menos frequente entram em chunks próprios. `ErrorBoundary` +
+// `Suspense` garantem que uma falha de rede (ou offline sem cache) mostre um
+// estado recuperável em vez de derrubar a aplicação.
+const StatsView = lazy(async () => ({ default: (await import('./stats-view')).StatsView }));
+const TimelineView = lazy(async () => ({ default: (await import('./timeline-view')).TimelineView }));
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
 const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente' };
@@ -51,6 +56,19 @@ function periodBounds(period: DashboardPeriod, customFrom: string, customTo: str
   if (period === '7d') { const from = new Date(today); from.setDate(from.getDate() - 6); return { from: todayLocalDate(from), to: todayLocal() }; }
   if (period === 'year') return { from: `${today.getFullYear()}-01-01`, to: todayLocal() };
   return { from: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, to: todayLocal() };
+}
+/** Janela imediatamente anterior de mesma duração, usada para comparar períodos. */
+function previousPeriodBounds(from: string | null, to: string | null): { from: string; to: string } | null {
+  if (!from || !to) return null;
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return null;
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const previousEnd = new Date(start);
+  previousEnd.setDate(previousEnd.getDate() - 1);
+  const previousStart = new Date(previousEnd);
+  previousStart.setDate(previousStart.getDate() - (days - 1));
+  return { from: todayLocalDate(previousStart), to: todayLocalDate(previousEnd) };
 }
 function initialDashboardPeriod(): DashboardPeriod {
   try {
@@ -98,11 +116,19 @@ export function App() {
   const [creatingList, setCreatingList] = useState(false);
   const [listFeedback, setListFeedback] = useState('');
   const [retroactiveHours, setRetroactiveHours] = useState('');
-  const [activeView, setActiveView] = useState<'library' | 'queue' | 'lists' | 'dashboard' | 'stats' | 'timeline'>('dashboard');
+  // A URL é a fonte da verdade da navegação (ADR-021); o estado é a projeção dela.
+  const [initialRoute] = useState(() => readRoute(window.location.pathname));
+  const [activeView, setActiveView] = useState<AppView>(initialRoute.view);
+  const [pendingGameId, setPendingGameId] = useState<string | null>(initialRoute.gameId);
   const [showArchived, setShowArchived] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  // Preferências visuais do shell ficam no navegador (não são dados de domínio).
+  const [navCollapsed, setNavCollapsed] = useState(() => { try { return window.localStorage.getItem('gameshelf-nav-collapsed') === '1'; } catch { return false; } });
+  const [density, setDensity] = useState<'comfortable' | 'compact' | 'list'>(() => { try { const stored = window.localStorage.getItem('gameshelf-library-density'); return stored === 'compact' || stored === 'list' ? stored : 'comfortable'; } catch { return 'comfortable'; } });
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [previousPeriodStats, setPreviousPeriodStats] = useState<DashboardResponse['periodStats'] | null>(null);
   const [dashboardPeriod, setDashboardPeriod] = useState<DashboardPeriod>(initialDashboardPeriod);
   const [customPeriod, setCustomPeriod] = useState(initialCustomPeriod);
   const dashboardUrl = useMemo(() => {
@@ -133,6 +159,8 @@ export function App() {
   const [formTitle, setFormTitle] = useState('');
   const [searchFeedback, setSearchFeedback] = useState('');
   const [resultsDismissed, setResultsDismissed] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ title: string; description: string; confirmLabel: string; action: () => Promise<void> } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const gameFormRef = useRef<HTMLFormElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const metadataTokenRef = useRef(0);
@@ -196,6 +224,44 @@ export function App() {
       fetch(dashboardUrl).then((response) => response.ok ? response.json() as Promise<DashboardResponse> : Promise.reject()),
     ]).then(([items, summary]) => { setQueue(items); setDashboard(summary); }).catch(() => undefined);
   }, [dashboardUrl]);
+  // Comparação com o período anterior: uma segunda consulta à mesma rota com a
+  // janela anterior. Fica em estado separado para não atrasar o painel.
+  useEffect(() => {
+    const from = dashboard?.period.from ?? null;
+    const to = dashboard?.period.to ?? null;
+    const bounds = previousPeriodBounds(from, to);
+    if (!bounds) { setPreviousPeriodStats(null); return; }
+    let active = true;
+    const params = new URLSearchParams({ from: bounds.from, to: bounds.to, timezoneOffsetMinutes: String(new Date().getTimezoneOffset()) });
+    void fetch(`${apiUrl}/dashboard?${params}`).then(async (response) => {
+      if (!response.ok) throw new Error('Falha ao carregar o período anterior');
+      const summary = await response.json() as DashboardResponse;
+      if (active) setPreviousPeriodStats(summary.periodStats);
+    }).catch(() => { if (active) setPreviousPeriodStats(null); });
+    return () => { active = false; };
+  }, [dashboard?.period.from, dashboard?.period.to]);
+  // O botão voltar do navegador reconstrói o estado a partir da URL (ADR-021).
+  useEffect(() => {
+    const onPopState = () => {
+      const route = readRoute(window.location.pathname);
+      setActiveView(route.view);
+      setPendingGameId(route.gameId);
+      if (route.gameId === null) setSelectedGame(null);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  // Link direto para `/jogos/:id`: resolve o jogo pela lista já carregada, sem
+  // requisição extra. Id desconhecido volta para a biblioteca com aviso.
+  useEffect(() => {
+    if (!pendingGameId || selectedGame?.id === pendingGameId) return;
+    const target = games.find((game) => game.id === pendingGameId);
+    if (target) { setSelectedGame(target); return; }
+    if (loading) return;
+    setPendingGameId(null);
+    setError('Jogo não encontrado na biblioteca.');
+    window.history.replaceState(null, '', routePath({ view: activeView, gameId: null }));
+  }, [pendingGameId, games, selectedGame, loading, activeView]);
   useEffect(() => {
     void fetch(`${apiUrl}/franchises`).then(async (response) => {
       if (!response.ok) throw new Error('Falha ao carregar franquias');
@@ -353,8 +419,7 @@ export function App() {
     setShowArchived(false);
     // Vindo do painel, abre os filtros avançados para o usuário ver o que foi aplicado.
     setShowMoreFilters(true);
-    setSelectedGame(null);
-    setActiveView('library');
+    navigate('library');
   }
 
   async function refreshPlanningViews() {
@@ -391,13 +456,38 @@ export function App() {
     await refreshPlanningViews();
   }
 
-  async function deleteGame(game: Game) {
-    if (!window.confirm(`Excluir ${game.title} e todo o histórico de sessões relacionado? Esta ação não pode ser desfeita.`)) return;
-    const response = await fetch(`${apiUrl}/games/${game.id}`, { method: 'DELETE' });
-    if (!response.ok) { setError('Não foi possível excluir o jogo.'); return; }
-    setSelectedGame(null);
-    await loadGames();
+  async function reorderQueue(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
+    const reordered = [...queue];
+    const [moved] = reordered.splice(from, 1);
+    if (!moved) return;
+    reordered.splice(to, 0, moved);
+    const response = await fetch(`${apiUrl}/queue/order`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ gameIds: reordered.map((item) => item.game.id) }) });
+    if (!response.ok) { setError('A fila mudou. Atualize a página e tente novamente.'); return; }
+    setQueue(await response.json() as QueueItem[]);
     await refreshPlanningViews();
+  }
+
+  function deleteGame(game: Game) {
+    setPendingDelete({
+      title: 'Excluir jogo',
+      description: `Excluir ${game.title} e todo o histórico de sessões relacionado? Esta ação não pode ser desfeita.`,
+      confirmLabel: 'Excluir',
+      action: async () => {
+        const response = await fetch(`${apiUrl}/games/${game.id}`, { method: 'DELETE' });
+        if (!response.ok) { setError('Não foi possível excluir o jogo.'); return; }
+        await loadGames();
+        await refreshPlanningViews();
+        navigate(activeView, true);
+      },
+    });
+  }
+
+  async function confirmPendingDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try { await pendingDelete.action(); }
+    finally { setDeleting(false); setPendingDelete(null); }
   }
 
   async function submitGame(event: FormEvent<HTMLFormElement>) {
@@ -632,22 +722,30 @@ export function App() {
     }
   }
 
-  async function deleteSession(session: Session) {
-    if (!selectedGame || !window.confirm('Excluir esta sessão? Esta ação não pode ser desfeita.')) return;
-    setSessionFeedback('');
-    try {
-      const response = await fetch(`${apiUrl}/games/${selectedGame.id}/sessions/${session.id}`, { method: 'DELETE' });
-      if (!response.ok) {
-        const body = await response.json() as { error?: string };
-        throw new Error(body.error ?? 'Não foi possível excluir a sessão.');
-      }
-      setSessions((items) => items.filter((item) => item.id !== session.id));
-      if (editingSession?.id === session.id) setEditingSession(null);
-      await refreshPlanningViews();
-      setSessionFeedback('Sessão excluída.');
-    } catch (cause) {
-      setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível excluir a sessão.');
-    }
+  function deleteSession(session: Session) {
+    if (!selectedGame) return;
+    const gameId = selectedGame.id;
+    setPendingDelete({
+      title: 'Excluir sessão',
+      description: 'Excluir esta sessão? Esta ação não pode ser desfeita.',
+      confirmLabel: 'Excluir',
+      action: async () => {
+        setSessionFeedback('');
+        try {
+          const response = await fetch(`${apiUrl}/games/${gameId}/sessions/${session.id}`, { method: 'DELETE' });
+          if (!response.ok) {
+            const body = await response.json() as { error?: string };
+            throw new Error(body.error ?? 'Não foi possível excluir a sessão.');
+          }
+          setSessions((items) => items.filter((item) => item.id !== session.id));
+          if (editingSession?.id === session.id) setEditingSession(null);
+          await refreshPlanningViews();
+          setSessionFeedback('Sessão excluída.');
+        } catch (cause) {
+          setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível excluir a sessão.');
+        }
+      },
+    });
   }
 
   async function startOrContinueSession() {
@@ -753,14 +851,14 @@ export function App() {
   }
 
   function showDetails(game: Game) {
-    setSelectedGame(game);
+    openGame(game);
   }
 
   function navigateDetails(direction: -1 | 1) {
     if (!selectedGame) return;
     const index = visibleGames.findIndex((game) => game.id === selectedGame.id);
     const next = visibleGames[index + direction];
-    if (next) setSelectedGame(next);
+    if (next) openGame(next);
   }
 
   async function addRetroactiveHours(event: FormEvent<HTMLFormElement>) {
@@ -816,20 +914,77 @@ export function App() {
     if (!response.ok) { setError('Não foi possível encerrar a sessão.'); return; }
     const finished = await response.json() as Session;
     await refreshPlanningViews();
-    setSelectedGame(game);
+    openGame(game);
     setEditingSession(finished);
   }
 
+  const viewTitles: Record<AppView, string> = { library: 'Biblioteca', queue: 'Fila', lists: 'Listas', dashboard: 'Painel', stats: 'Estatísticas', timeline: 'Atividade' };
+  const topbarTitle = selectedGame ? selectedGame.title : viewTitles[activeView];
+
+  /** Muda de view empilhando (ou substituindo) a URL, e fecha o detalhe. */
+  function navigate(view: AppView, replace = false) {
+    const path = routePath({ view, gameId: null });
+    if (window.location.pathname !== path) {
+      if (replace) window.history.replaceState(null, '', path);
+      else window.history.pushState(null, '', path);
+    }
+    setActiveView(view);
+    setSelectedGame(null);
+    setPendingGameId(null);
+  }
+
+  /** Abre o detalhe do jogo empilhando `/jogos/:id`. */
+  function openGame(game: Game) {
+    setSelectedGame(game);
+    setPendingGameId(game.id);
+    const path = routePath({ view: activeView, gameId: game.id });
+    if (window.location.pathname !== path) window.history.pushState({ details: true }, '', path);
+  }
+
+  /** Fecha o detalhe: desempilha quando o app empilhou, senão substitui a URL. */
+  function closeDetails() {
+    if (window.history.state?.details) { window.history.back(); return; }
+    setSelectedGame(null);
+    setPendingGameId(null);
+    window.history.replaceState(null, '', routePath({ view: activeView, gameId: null }));
+  }
+
+  function goTo(view: AppView) { navigate(view); setNavOpen(false); }
+  function toggleNavCollapsed() { setNavCollapsed((value) => { const next = !value; try { window.localStorage.setItem('gameshelf-nav-collapsed', next ? '1' : '0'); } catch { /* Storage pode estar indisponível. */ } return next; }); }
+  function changeDensity(value: 'comfortable' | 'compact' | 'list') { setDensity(value); try { window.localStorage.setItem('gameshelf-library-density', value); } catch { /* Storage pode estar indisponível. */ } }
+
   return (
-    <main className="library-shell">
-      <OfflineBanner pending={offline.pending} online={offline.online} notice={offline.notice} onFinishOpen={offline.finishOpen} onDiscard={offline.discard} onRetry={() => void offline.flush()} />
-      <header className="library-header">
-        <a className="brand" href="/" aria-label="GameShelf início"><span className="brand-mark">G</span><span>Game<span className="brand-accent">Shelf</span></span></a>
-        <nav className="main-nav" aria-label="Navegação principal"><button type="button" aria-current={activeView === 'library' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('library'); }}>Biblioteca</button><button type="button" aria-current={activeView === 'queue' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('queue'); }}>Fila <span>{queue.length}</span></button><button type="button" aria-current={activeView === 'lists' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('lists'); }}>Listas</button><button type="button" aria-current={activeView === 'dashboard' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('dashboard'); }}>Painel</button><button type="button" aria-current={activeView === 'timeline' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('timeline'); }}>Atividade</button><button type="button" aria-current={activeView === 'stats' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('stats'); }}>Estatísticas</button></nav>
-        <span className="local-badge"><span /> LOCAL</span>
-      </header>
+    <div className={`app-shell${navCollapsed ? ' is-collapsed' : ''}${navOpen ? ' is-open' : ''}`}>
+      <aside id="app-sidebar" className="app-sidebar" aria-label="Navegação principal">
+        <div className="app-sidebar-head">
+          <a className="brand" href="/painel" aria-label="GameShelf início" onClick={(event) => { event.preventDefault(); goTo('dashboard'); }}><span className="brand-mark">G</span><span className="brand-name">Game<span className="brand-accent">Shelf</span></span></a>
+          <button type="button" className="sidebar-collapse" aria-label={navCollapsed ? 'Expandir menu' : 'Recolher menu'} aria-pressed={navCollapsed} onClick={toggleNavCollapsed}>‹</button>
+        </div>
+        <nav className="app-nav" aria-label="Seções">
+          <p className="app-nav-group">Coleção</p>
+          <button type="button" className="app-nav-item" aria-label="Biblioteca" aria-current={!selectedGame && activeView === 'library' ? 'page' : undefined} onClick={() => goTo('library')}><span className="app-nav-icon" aria-hidden="true">▦</span><span className="app-nav-label">Biblioteca</span></button>
+          <button type="button" className="app-nav-item" aria-label="Fila" aria-current={!selectedGame && activeView === 'queue' ? 'page' : undefined} onClick={() => goTo('queue')}><span className="app-nav-icon" aria-hidden="true">≣</span><span className="app-nav-label">Fila</span><span className="app-nav-badge" aria-hidden="true">{queue.length}</span></button>
+          <button type="button" className="app-nav-item" aria-label="Listas" aria-current={!selectedGame && activeView === 'lists' ? 'page' : undefined} onClick={() => goTo('lists')}><span className="app-nav-icon" aria-hidden="true">❐</span><span className="app-nav-label">Listas</span></button>
+          <p className="app-nav-group">Análise</p>
+          <button type="button" className="app-nav-item" aria-label="Painel" aria-current={!selectedGame && activeView === 'dashboard' ? 'page' : undefined} onClick={() => goTo('dashboard')}><span className="app-nav-icon" aria-hidden="true">◫</span><span className="app-nav-label">Painel</span></button>
+          <button type="button" className="app-nav-item" aria-label="Estatísticas" aria-current={!selectedGame && activeView === 'stats' ? 'page' : undefined} onClick={() => goTo('stats')}><span className="app-nav-icon" aria-hidden="true">∿</span><span className="app-nav-label">Estatísticas</span></button>
+          <button type="button" className="app-nav-item" aria-label="Atividade" aria-current={!selectedGame && activeView === 'timeline' ? 'page' : undefined} onClick={() => goTo('timeline')}><span className="app-nav-icon" aria-hidden="true">◔</span><span className="app-nav-label">Atividade</span></button>
+        </nav>
+        {savedFilters.length > 0 && <nav className="app-nav app-nav-views" aria-label="Views salvas">
+          <p className="app-nav-group">Views salvas</p>
+          {savedFilters.map((filter) => <button key={filter.id} type="button" className="app-nav-item" aria-label={`Abrir view ${filter.name}`} aria-current={!selectedGame && activeView === 'library' && activeSavedFilter === filter.id ? 'page' : undefined} onClick={() => { navigate('library'); applySavedFilter(filter.id); setNavOpen(false); }}><span className="app-nav-icon" aria-hidden="true">★</span><span className="app-nav-label">{filter.name}</span></button>)}
+        </nav>}
+        <div className="app-sidebar-foot"><span className="local-badge"><span /> LOCAL</span></div>
+      </aside>
+      <div className="app-content">
+        <header className="app-topbar">
+          <button type="button" className="nav-toggle" aria-label="Abrir menu de navegação" aria-expanded={navOpen} aria-controls="app-sidebar" onClick={() => setNavOpen((value) => !value)}>☰</button>
+          <span className="app-topbar-title">{topbarTitle}</span>
+        </header>
+        <main className="library-shell">
+          <OfflineBanner pending={offline.pending} online={offline.online} notice={offline.notice} onFinishOpen={offline.finishOpen} onDiscard={offline.discard} onRetry={() => void offline.flush()} />
       {selectedGame ? <section className="details-page" aria-labelledby="details-title">
-        <button className="back-link" type="button" onClick={() => setSelectedGame(null)}>← Voltar</button>
+        <button className="back-link" type="button" onClick={closeDetails}>← Voltar</button>
         <div className="details-navigation"><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) <= 0} onClick={() => navigateDetails(-1)}>← Jogo anterior</Button><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) < 0 || visibleGames.findIndex((game) => game.id === selectedGame.id) >= visibleGames.length - 1} onClick={() => navigateDetails(1)}>Próximo jogo →</Button></div>
         <div className={`details-layout${selectedGame.backgroundUrl ? ' has-hero' : ''}`}>
           {selectedGame.backgroundUrl && <div className="details-hero" style={{ backgroundImage: `url("${selectedGame.backgroundUrl}")` }} aria-hidden="true" />}
@@ -869,10 +1024,10 @@ export function App() {
               </li>)}</ol>}
             </section>
             {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
-            <div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
           </div>
+          <aside className="details-rail" aria-label="Ações do jogo"><p className="eyebrow">AÇÕES</p><div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div></aside>
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'stats' ? <StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /> : activeView === 'timeline' ? <TimelineView games={games} onSelectGame={showDetails} /> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
+      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
       <section className="library-heading">
         <div><p className="eyebrow">SUA COLEÇÃO</p><h1>Biblioteca</h1><p className="library-subtitle">Seus jogos, reunidos em um só lugar.</p></div>
         <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>
@@ -883,6 +1038,11 @@ export function App() {
         <label className="filter-field">Prioridade<select aria-label="Filtrar por prioridade" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Game['priority'] | 'ALL')}><option value="ALL">Todas</option>{priorities.map((priority) => <option key={priority} value={priority}>{priority === 'LOW' ? 'Baixa' : priority === 'HIGH' ? 'Alta' : 'Normal'}</option>)}</select></label>
         <div className="filter-field"><span>Ordenar por</span><select aria-label="Ordenar jogos" value={sortBy} onChange={(event) => setSortBy(event.target.value as LibrarySort)}>{(Object.keys(sortLabels) as LibrarySort[]).map((option) => <option key={option} value={option}>{sortLabels[option]}</option>)}</select></div>
         <span className="game-count">{games.length} {games.length === 1 ? 'jogo' : 'jogos'}</span>
+        <div className="density-toggle" role="group" aria-label="Densidade da listagem">
+          <button type="button" aria-label="Visualizar em grade" aria-pressed={density === 'comfortable'} onClick={() => changeDensity('comfortable')}>▦</button>
+          <button type="button" aria-label="Visualizar em grade compacta" aria-pressed={density === 'compact'} onClick={() => changeDensity('compact')}>▥</button>
+          <button type="button" aria-label="Visualizar em lista" aria-pressed={density === 'list'} onClick={() => changeDensity('list')}>☰</button>
+        </div>
         <button type="button" className="session-edit" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? 'Ver biblioteca' : 'Ver arquivados'}</button>
         <button type="button" className="session-edit filter-toggle" aria-expanded={showMoreFilters} aria-controls="library-advanced-filters" onClick={() => setShowMoreFilters((value) => !value)}>{showMoreFilters ? 'Menos filtros' : 'Mais filtros'}</button>
         <div id="library-advanced-filters" className={`filter-advanced${showMoreFilters ? ' is-open' : ''}`}>
@@ -903,14 +1063,14 @@ export function App() {
         {listFeedback && <p role="status" className="session-feedback">{listFeedback}</p>}
         </div>
       </section>
-      {error && <div className="notice" role="alert">{error}<button type="button" onClick={() => void loadGames()}>Tentar novamente</button></div>}
-      {loading ? <p className="empty-state">Carregando biblioteca…</p> : visibleGames.length === 0 ? (
-        <section className="empty-state"><span className="empty-icon" aria-hidden="true">▧</span><h2>{query ? 'Nenhum jogo encontrado' : 'Sua biblioteca começa aqui'}</h2><p>{query ? 'Tente buscar por outro título.' : 'Adicione seu primeiro jogo para começar a organizar sua coleção.'}</p>{!query && <Button type="button" onClick={() => openEditor()}>Adicionar primeiro jogo</Button>}</section>
+      {error && <ErrorState action={<button type="button" onClick={() => void loadGames()}>Tentar novamente</button>}>{error}</ErrorState>}
+      {loading ? <LoadingState>Carregando biblioteca…</LoadingState> : visibleGames.length === 0 ? (
+        <EmptyState title={query ? 'Nenhum jogo encontrado' : 'Sua biblioteca começa aqui'} description={query ? 'Tente buscar por outro título.' : 'Adicione seu primeiro jogo para começar a organizar sua coleção.'} action={query ? undefined : <Button type="button" onClick={() => openEditor()}>Adicionar primeiro jogo</Button>} />
       ) : (
-        <section className="game-grid" aria-label="Jogos da biblioteca">{visibleGames.map((game) => <div className="game-card-wrap" key={game.id}><button className="game-card" type="button" onClick={() => showDetails(game)} aria-label={`Ver detalhes de ${game.title}`}>
-          <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span></span>
+        <section className={`game-grid density-${density}`} aria-label="Jogos da biblioteca">{visibleGames.map((game) => <div className="game-card-wrap" key={game.id}><button className="game-card" type="button" onClick={() => showDetails(game)} aria-label={`Ver detalhes de ${game.title}`}>
+          <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span></span>
           <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
-        </button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
+        </button><button type="button" className="game-card-quick" aria-label={`Editar ${game.title}`} onClick={() => openEditor(game)}><span aria-hidden="true">✎</span></button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
       )}
       </>}
       {dialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}><section ref={dialogRef} className="game-dialog" role="dialog" aria-modal="true" aria-labelledby="game-dialog-title" onKeyDown={handleDialogKeyDown}><header><div><p className="eyebrow">BIBLIOTECA</p><h2 id="game-dialog-title">{editing ? 'Editar jogo' : 'Adicionar jogo'}</h2></div><button className="dialog-close" type="button" aria-label="Fechar" onClick={closeEditor}>×</button></header>
@@ -918,7 +1078,7 @@ export function App() {
           {searchMessage && <p role="status" className="form-wide search-status">{searchMessage}</p>}
           {showResults && <div className="form-wide search-results-wrap"><section className="search-results" id="title-results" aria-label="Resultados da busca">
             <div className="search-results-head"><strong>{searching ? 'Buscando…' : `${resultCount} ${resultCount === 1 ? 'resultado' : 'resultados'}`}</strong><div><button type="button" className="session-edit" disabled={searching} onClick={() => void retrySearch()}>Buscar novamente</button><button type="button" className="session-edit" onClick={() => setResultsDismissed(true)}>Fechar</button></div></div>
-            {metadataCandidates.length > 0 && <div className="search-results-group"><h3>Metadata (IGDB)</h3><ul aria-label="Resultados de metadata">{metadataCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyMetadata(candidate)}>{candidate.coverUrl && <img src={candidate.coverUrl} alt="" />}<span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.developer].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul></div>}
+            {metadataCandidates.length > 0 && <div className="search-results-group"><h3>Metadata (IGDB)</h3><ul aria-label="Resultados de metadata">{metadataCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyMetadata(candidate)}>{candidate.coverUrl && <img src={candidate.coverUrl} alt="" loading="lazy" decoding="async" />}<span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.developer].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul></div>}
             {timeEstimateCandidates.length > 0 && <div className="search-results-group"><h3>Tempos (HowLongToBeat)</h3><ul aria-label="Resultados de tempo">{timeEstimateCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyTimeEstimate(candidate)}><span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.mainHours != null ? `Principal ${candidate.mainHours} h` : null, candidate.mainExtraHours != null ? `+extras ${candidate.mainExtraHours} h` : null, candidate.completionistHours != null ? `Completista ${candidate.completionistHours} h` : null].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul></div>}
           </section></div>}
           <label className="form-field">Desenvolvedora<input name="developer" maxLength={200} defaultValue={editing?.developer ?? ''} /></label><label className="form-field">Publicadora<input name="publisher" maxLength={200} defaultValue={editing?.publisher ?? ''} /></label>
@@ -938,18 +1098,25 @@ export function App() {
           <label className="form-field form-wide">Notas<textarea name="notes" rows={2} maxLength={10000} defaultValue={editing?.notes ?? ''} /></label>
           <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={closeEditor}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
         </form></section></div>}
-    </main>
+        <ConfirmDialog open={pendingDelete !== null} title={pendingDelete?.title ?? ''} description={pendingDelete?.description} confirmLabel={pendingDelete?.confirmLabel} tone="danger" busy={deleting} onCancel={() => setPendingDelete(null)} onConfirm={() => void confirmPendingDelete()} />
+        </main>
+      </div>
+            {navOpen && <button type="button" className="nav-scrim" aria-label="Fechar menu de navegação" onClick={() => setNavOpen(false)} />}
+    </div>
   );
 }
 
-function QueueView({ queue, onMove, onRemove, onSelectGame }: {
+function QueueView({ queue, onMove, onReorder, onRemove, onSelectGame }: {
   queue: QueueItem[];
   onMove: (index: number, direction: -1 | 1) => void;
+  onReorder: (from: number, to: number) => void;
   onRemove: (gameId: string) => void;
   onSelectGame: (game: Game) => void;
 }) {
-  return <section className="queue-page" aria-labelledby="queue-title"><p className="eyebrow">SEU PRÓXIMO PASSO</p><h1 id="queue-title">Fila de jogos</h1><p className="library-subtitle">Organize o que pretende jogar. A posição da fila é independente da prioridade.</p><NextGameSuggestion onSelectGame={onSelectGame} />
-    {queue.length ? <ol className="queue-list">{queue.map((item, index) => <li key={item.game.id}><span className="queue-position">{index + 1}</span><button type="button" className="queue-game-link" onClick={() => onSelectGame(item.game)}><strong>{item.game.title}</strong><span>{item.game.personalEstimatedHours ?? item.game.estimatedMainHours ?? 'Sem estimativa'}{item.game.personalEstimatedHours !== null || item.game.estimatedMainHours !== null ? ' h estimadas' : ''}</span></button><div className="queue-actions"><button type="button" aria-label={`Mover ${item.game.title} para cima`} disabled={index === 0} onClick={() => onMove(index, -1)}>↑</button><button type="button" aria-label={`Mover ${item.game.title} para baixo`} disabled={index === queue.length - 1} onClick={() => onMove(index, 1)}>↓</button><button type="button" className="session-delete" onClick={() => onRemove(item.game.id)}>Remover</button></div></li>)}</ol> : <p className="dashboard-empty">Fila vazia. Adicione jogos pela biblioteca.</p>}
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  return <section className="queue-page" aria-labelledby="queue-title"><p className="eyebrow">SEU PRÓXIMO PASSO</p><h1 id="queue-title">Fila de jogos</h1><p className="library-subtitle">Organize o que pretende jogar. Arraste uma posição ou use as setas. A posição da fila é independente da prioridade.</p><NextGameSuggestion onSelectGame={onSelectGame} />
+    {queue.length ? <ol className="queue-list">{queue.map((item, index) => <li key={item.game.id} className={`queue-item${dragIndex === index ? ' is-dragging' : ''}${overIndex === index && dragIndex !== null && dragIndex !== index ? ' is-drop-target' : ''}`} draggable onDragStart={() => setDragIndex(index)} onDragOver={(event) => { event.preventDefault(); if (overIndex !== index) setOverIndex(index); }} onDrop={(event) => { event.preventDefault(); if (dragIndex !== null && dragIndex !== index) onReorder(dragIndex, index); setDragIndex(null); setOverIndex(null); }} onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}><span className="queue-grip" aria-hidden="true">⠿</span><span className="queue-position">{index + 1}</span><button type="button" className="queue-game-link" onClick={() => onSelectGame(item.game)}><strong>{item.game.title}</strong><span>{item.game.personalEstimatedHours ?? item.game.estimatedMainHours ?? 'Sem estimativa'}{item.game.personalEstimatedHours !== null || item.game.estimatedMainHours !== null ? ' h estimadas' : ''}</span></button><div className="queue-actions"><button type="button" aria-label={`Mover ${item.game.title} para cima`} disabled={index === 0} onClick={() => onMove(index, -1)}>↑</button><button type="button" aria-label={`Mover ${item.game.title} para baixo`} disabled={index === queue.length - 1} onClick={() => onMove(index, 1)}>↓</button><button type="button" className="session-delete" onClick={() => onRemove(item.game.id)}>Remover</button></div></li>)}</ol> : <p className="dashboard-empty">Fila vazia. Adicione jogos pela biblioteca.</p>}
   </section>;
 }
 
@@ -963,6 +1130,7 @@ function GameListsView({ games, onSelectGame, onQueueChanged }: { games: Game[];
   const [error, setError] = useState('');
   const [queueNotice, setQueueNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function loadLists(preferredId = selectedId) {
     const response = await fetch(`${apiUrl}/lists`);
@@ -1016,7 +1184,8 @@ function GameListsView({ games, onSelectGame, onQueueChanged }: { games: Game[];
   }
 
   async function deleteList() {
-    if (!selectedList || !window.confirm(`Excluir a lista “${selectedList.name}”? Os jogos continuarão na biblioteca.`)) return;
+    if (!selectedList) return;
+    setConfirmingDelete(false);
     await run(async () => {
       const response = await fetch(`${apiUrl}/lists/${selectedList.id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Não foi possível excluir a lista.');
@@ -1065,12 +1234,13 @@ function GameListsView({ games, onSelectGame, onQueueChanged }: { games: Game[];
         {lists.length ? <ul className="game-list-nav">{lists.map((list) => <li key={list.id}><button type="button" aria-current={selectedId === list.id ? 'true' : undefined} onClick={() => { setSelectedList(null); setQueueNotice(''); setSelectedId(list.id); }}>{list.name}<span>{list.gameCount}</span></button></li>)}</ul> : <p className="dashboard-empty">Você ainda não criou listas.</p>}
       </aside>
       <div className="game-list-content">{selectedList && selectedList.id === selectedId ? <>
-        <div className="game-list-heading"><form className="game-list-rename" onSubmit={(event) => void saveName(event)}><label className="form-field">Nome da lista<input aria-label="Nome da lista selecionada" required maxLength={100} value={rename} onChange={(event) => setRename(event.target.value)} /></label><Button type="submit" disabled={busy || rename.trim() === selectedList.name}>Salvar nome</Button></form><button type="button" className="session-edit" disabled={busy || selectedList.games.length === 0} onClick={() => void enqueueList()}>Adicionar à fila</button><button type="button" className="session-delete" disabled={busy} onClick={() => void deleteList()}>Excluir lista</button></div>
+        <div className="game-list-heading"><form className="game-list-rename" onSubmit={(event) => void saveName(event)}><label className="form-field">Nome da lista<input aria-label="Nome da lista selecionada" required maxLength={100} value={rename} onChange={(event) => setRename(event.target.value)} /></label><Button type="submit" disabled={busy || rename.trim() === selectedList.name}>Salvar nome</Button></form><button type="button" className="session-edit" disabled={busy || selectedList.games.length === 0} onClick={() => void enqueueList()}>Adicionar à fila</button><button type="button" className="session-delete" disabled={busy} onClick={() => setConfirmingDelete(true)}>Excluir lista</button></div>
         {queueNotice && <p role="status" className="session-feedback">{queueNotice}</p>}
         <form className="game-list-add" onSubmit={(event) => void addGame(event)}><label className="form-field">Adicionar jogo<select aria-label="Jogo para adicionar" required value={gameId} onChange={(event) => setGameId(event.target.value)}><option value="">Selecione um jogo</option>{availableGames.map((game) => <option key={game.id} value={game.id}>{game.title}</option>)}</select></label><Button type="submit" disabled={busy || !gameId}>Adicionar</Button></form>
         {selectedList.games.length ? <ul className="game-list-items">{selectedList.games.map((game) => <li key={game.id}><button type="button" onClick={() => onSelectGame(game)}><strong>{game.title}</strong><span>{statusLabels[game.status]}</span></button><button type="button" className="session-delete" disabled={busy} onClick={() => void removeGame(game.id)}>Remover</button></li>)}</ul> : <p className="dashboard-empty">Esta lista ainda não tem jogos.</p>}
       </> : <p className="dashboard-empty">Crie uma lista ou selecione uma existente.</p>}</div>
     </div>
+    <ConfirmDialog open={confirmingDelete} title="Excluir lista" description={selectedList ? `Excluir a lista “${selectedList.name}”? Os jogos continuarão na biblioteca.` : ''} confirmLabel="Excluir" tone="danger" busy={busy} onCancel={() => setConfirmingDelete(false)} onConfirm={() => void deleteList()} />
   </section>;
 }
 
