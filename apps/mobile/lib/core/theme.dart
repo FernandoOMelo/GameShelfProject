@@ -25,12 +25,29 @@ final appTheme = ThemeData(
       fontWeight: FontWeight.w700,
     ),
   ),
-  bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-    backgroundColor: Color(0xFF1A1A26),
-    selectedItemColor: Color(0xFF6C63FF),
-    unselectedItemColor: Color(0xFF6B6B7E),
-    type: BottomNavigationBarType.fixed,
+  navigationBarTheme: NavigationBarThemeData(
+    backgroundColor: const Color(0xFF14141C),
+    indicatorColor: const Color(0xFF2A2A3A),
     elevation: 0,
+    height: 64,
+    labelTextStyle: WidgetStateProperty.resolveWith(
+      (states) => TextStyle(
+        fontSize: 11,
+        fontWeight:
+            states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
+        color: states.contains(WidgetState.selected)
+            ? const Color(0xFF9E97FF)
+            : const Color(0xFF6B6B7E),
+      ),
+    ),
+    iconTheme: WidgetStateProperty.resolveWith(
+      (states) => IconThemeData(
+        size: 24,
+        color: states.contains(WidgetState.selected)
+            ? const Color(0xFF9E97FF)
+            : const Color(0xFF6B6B7E),
+      ),
+    ),
   ),
   dividerTheme: const DividerThemeData(
     color: Color(0xFF2A2A3A),

@@ -69,11 +69,17 @@ class _QueueListState extends ConsumerState<_QueueList> {
           onReorderItem: _onReorder,
           itemBuilder: (context, i) {
             final item = _items[i];
-            return _QueueCard(
-              key: ValueKey(item.game.id),
-              item: item,
-              position: i + 1,
-              onRemove: () => _remove(item),
+            return Dismissible(
+              key: ValueKey('queue-dismiss-${item.game.id}'),
+              direction: DismissDirection.endToStart,
+              onDismissed: (_) => _remove(item),
+              background: const _RemoveBackground(),
+              child: _QueueCard(
+                key: ValueKey(item.game.id),
+                item: item,
+                position: i + 1,
+                onRemove: () => _remove(item),
+              ),
             );
           },
         ),
@@ -91,24 +97,72 @@ class _QueueListState extends ConsumerState<_QueueList> {
   }
 
   Future<void> _remove(QueueItem item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2A),
-        title: const Text('Remover da fila?'),
-        content: Text(item.game.title),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remover', style: TextStyle(color: Color(0xFFE53E3E))),
+    final index = _items.indexWhere((entry) => entry.game.id == item.game.id);
+    if (index < 0) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // Some da lista na hora: deslizar precisa de resposta imediata.
+    setState(() => _items.removeAt(index));
+    try {
+      await ref.read(queueProvider.notifier).remove(item.game.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _items.insert(index, item));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível remover da fila.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('${item.game.title} saiu da fila'),
+        action: SnackBarAction(
+          label: 'Desfazer',
+          onPressed: () => _undo(item, index),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _undo(QueueItem item, int index) async {
+    try {
+      await ref.read(queueProvider.notifier).restore(item, index);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível desfazer.')),
+      );
+    }
+  }
+}
+
+/// Fundo revelado ao deslizar o card da fila para a esquerda.
+class _RemoveBackground extends StatelessWidget {
+  const _RemoveBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.centerRight,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.only(right: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE53E3E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.remove_circle_outline, color: Colors.white, size: 20),
+          SizedBox(width: 8),
+          Text(
+            'Remover',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ],
       ),
     );
-    if (confirmed == true) {
-      await ref.read(queueProvider.notifier).remove(item.game.id);
-    }
   }
 }
 

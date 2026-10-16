@@ -20,6 +20,19 @@ class QueueNotifier extends AsyncNotifier<List<QueueItem>> {
     await QueueApi.reorder(gameIds);
     await refresh();
   }
+
+  /// Recoloca um jogo na fila na posição de origem (usado pelo "Desfazer").
+  Future<void> restore(QueueItem item, int index) async {
+    await QueueApi.add(item.game.id);
+    final items = await QueueApi.list();
+    final gameIds = items
+        .map((entry) => entry.game.id)
+        .where((id) => id != item.game.id)
+        .toList();
+    gameIds.insert(index.clamp(0, gameIds.length), item.game.id);
+    await QueueApi.reorder(gameIds);
+    await refresh();
+  }
 }
 
 final queueProvider = AsyncNotifierProvider<QueueNotifier, List<QueueItem>>(QueueNotifier.new);

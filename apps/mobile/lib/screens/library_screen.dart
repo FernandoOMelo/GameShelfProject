@@ -4,6 +4,7 @@ import '../models/game.dart';
 import '../providers/games_provider.dart';
 import '../widgets/game_cover.dart';
 import 'game_detail_screen.dart';
+import 'quick_log_sheet.dart';
 
 const statusLabels = {
   'DESIRED': 'Desejado',
@@ -138,6 +139,12 @@ class _GameTile extends StatelessWidget {
                     ],
                   ],
                 ),
+              ),
+              IconButton(
+                onPressed: () => showQuickLogSheet(context, game),
+                tooltip: 'Registrar sessão',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.timer_outlined, color: Color(0xFF6B6B7E), size: 20),
               ),
               const Icon(Icons.chevron_right_rounded, color: Color(0xFF4A4A5A)),
             ],

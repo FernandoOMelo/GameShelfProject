@@ -70,12 +70,20 @@ não duplica sessões.
 ## App Flutter (`apps/mobile`)
 
 App nativo Android em Dart/Flutter, com Riverpod para estado e dio para HTTP. O
-endereço do servidor é configurável em Ajustes. Quatro abas:
+endereço do servidor é configurável em Ajustes e o app aceita `http://`: o manifest
+declara `usesCleartextTraffic`, porque o endereço é escolhido por você em tempo de
+execução (não dá para restringir por host) e o self-hosted documentado
+(`http://<ip-do-host>:8080`) não usa TLS. Quatro abas:
 
 - **Jogando**: jogo atual com cronômetro, iniciar e encerrar sessão;
 - **Biblioteca**: lista com busca por título, capa e status; abre o detalhe do jogo
-  com estimativas, total jogado e histórico de sessões (somente leitura);
-- **Fila**: fila ordenável por arrastar, com remoção;
+  com estimativas, total jogado e histórico de sessões (somente leitura). O ícone de
+  relógio no card (e a ação na barra do detalhe) abre o **registro retroativo**:
+  escolher o dia — Hoje, Ontem ou outra data — e a duração em um toque. A sessão
+  entra no dia escolhido, terminando no horário atual;
+- **Fila**: fila ordenável por arrastar (pela alça); deslizar um item para a esquerda
+  remove da fila e o aviso oferece **Desfazer**, que devolve o jogo à posição
+  original;
 - **Progresso**: indicadores e jogos em andamento.
 
 ### Sem conexão no app Flutter

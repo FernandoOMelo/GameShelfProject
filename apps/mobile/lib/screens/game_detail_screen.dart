@@ -6,6 +6,7 @@ import '../models/session.dart';
 import '../providers/games_provider.dart';
 import '../widgets/game_cover.dart';
 import 'library_screen.dart';
+import 'quick_log_sheet.dart';
 
 class GameDetailScreen extends ConsumerWidget {
   final Game game;
@@ -17,7 +18,16 @@ class GameDetailScreen extends ConsumerWidget {
     final sessions = ref.watch(sessionsForGameProvider(game.id));
 
     return Scaffold(
-      appBar: AppBar(title: Text(game.title)),
+      appBar: AppBar(
+        title: Text(game.title),
+        actions: [
+          IconButton(
+            onPressed: () => showQuickLogSheet(context, game),
+            tooltip: 'Registrar sessão',
+            icon: const Icon(Icons.timer_outlined),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
