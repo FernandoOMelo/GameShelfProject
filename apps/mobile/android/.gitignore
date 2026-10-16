@@ -1,0 +1,19 @@
+gradle-wrapper.jar
+/.gradle
+/build/
+/captures/
+/gradlew
+/gradlew.bat
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# Repositorio Maven local do engine Flutter, reconstruido por
+# download_flutter_artifacts.ps1. Sao ~130 MB de JARs.
+/flutter-local-repo/
+
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks
