@@ -28,6 +28,21 @@ Sessões abertas aparecem no card e contam como sessão/jogo quando iniciadas no
 período, mas não entram nas horas fechadas. Uma sessão que cruza o limite
 contribui apenas com os minutos dentro do intervalo.
 
+## Indicadores navegáveis
+
+Alguns indicadores levam à Biblioteca já filtrada, limpando os outros filtros:
+
+- jogos zerados no período → status `COMPLETED`;
+- cada barra de "zerados por ano" → status `COMPLETED` no ano da barra;
+- horas restantes no backlog → status `BACKLOG`;
+- "em andamento" e cada item da legenda de "biblioteca por estado" → o status
+  correspondente.
+
+O período do painel não é aplicado ao filtro: a Biblioteca filtra por status e ano
+de conclusão, que são os filtros que ela tem. "Parados há mais tempo" não navega,
+porque não existe filtro equivalente. Não há link direto nem botão voltar — a troca
+é de tela, não de rota. Ver ADR-016.
+
 ## Fotografia atual
 
 O Painel também mostra a quantidade total de jogos não arquivados, estados

@@ -30,6 +30,7 @@ export function buildBackup(sources: BackupSources, exportedAt: Date = new Date(
       sessions: sources.sessions.map((session) => ({
         id: session.id, gameId: session.gameId, startedAt: session.startedAt.toISOString(), endedAt: session.endedAt?.toISOString() ?? null,
         progress: session.progress, location: session.location, notes: session.notes,
+        keyDecisions: session.keyDecisions, tips: session.tips,
         createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString(),
       })),
       screenshots: sources.screenshots.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() })),

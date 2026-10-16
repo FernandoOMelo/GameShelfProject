@@ -29,10 +29,12 @@ import { registerScreenshotRoutes } from './modules/sessions/screenshot-routes.j
 import type { BackupImporter } from './modules/backup/importer.js';
 import { registerBackupRoutes } from './modules/backup/routes.js';
 import { registerStatsRoutes } from './modules/stats/routes.js';
-import type { MainChallengeRepository } from './modules/challenge/repository.js';
+import type { ChallengeCompletionRepository, MainChallengeRepository } from './modules/challenge/repository.js';
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
+import type { SavedFilterRepository } from './modules/saved-filters/repository.js';
+import { registerSavedFilterRoutes } from './modules/saved-filters/routes.js';
 
-export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   app.addHook('onRequest', async (request, reply) => {
@@ -55,8 +57,11 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
 
   app.register((instance) => registerMetadataRoutes(instance, options.metadataProvider));
 
-  if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!, options.imageStorage, options.backlogRepository, options.screenshotRepository));
+  if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!, options.imageStorage, options.backlogRepository, options.screenshotRepository, options.gameListRepository && options.mainChallengeRepository && options.challengeCompletionRepository
+    ? { lists: options.gameListRepository, challenge: options.mainChallengeRepository, completions: options.challengeCompletionRepository }
+    : undefined));
   if (options.gameRepository && options.gameListRepository) app.register((instance) => registerGameListRoutes(instance, options.gameRepository!, options.gameListRepository!));
+  if (options.savedFilterRepository) app.register((instance) => registerSavedFilterRoutes(instance, options.savedFilterRepository!));
   if (options.imageStorage) app.register((instance) => registerMediaRoutes(instance, options.imageStorage!));
   if (options.franchiseRepository) app.register((instance) => registerFranchiseRoutes(instance, options.franchiseRepository!));
   if (options.platformRepository) app.register((instance) => registerPlatformRoutes(instance, options.platformRepository!));
@@ -75,7 +80,7 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
     app.register((instance) => registerDashboardRoutes(instance, options.gameRepository!, options.sessionRepository!, options.backlogRepository!, options.planningSettingsRepository!));
   }
   if (options.gameRepository && options.sessionRepository && options.platformRepository && options.genreRepository) {
-    app.register((instance) => registerStatsRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!));
+    app.register((instance) => registerStatsRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!, options.challengeCompletionRepository));
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));

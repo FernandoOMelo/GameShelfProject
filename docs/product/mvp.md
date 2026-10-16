@@ -51,7 +51,7 @@ Uma sessão possui:
 - fim;
 - duração calculada;
 - progresso;
-- localização;
+- onde parei;
 - observação.
 
 ### Fila

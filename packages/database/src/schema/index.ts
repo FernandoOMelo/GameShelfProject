@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const franchises = pgTable('franchises', {
@@ -56,6 +56,7 @@ export const games = pgTable('games', {
   completionCondition: text('completion_condition'),
   favorite: boolean('favorite').notNull().default(false),
   gameOfYear: boolean('game_of_year').notNull().default(false),
+  excludedFromSuggestions: boolean('excluded_from_suggestions').notNull().default(false),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -84,6 +85,8 @@ export const sessions = pgTable('sessions', {
   progress: integer('progress'),
   location: text('location'),
   notes: text('notes'),
+  keyDecisions: text('key_decisions'),
+  tips: text('tips'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -128,6 +131,26 @@ export const mainChallenge = pgTable('main_challenge', {
 }, (table) => [
   check('main_challenge_singleton_id', sql`${table.id} = 1`),
   check('main_challenge_title_not_blank', sql`length(trim(${table.title})) > 0`),
+]);
+
+export const savedFilters = pgTable('saved_filters', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull().unique(),
+  filters: jsonb('filters').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check('saved_filters_name_not_blank', sql`length(trim(${table.name})) > 0`)]);
+
+export const challengeCompletions = pgTable('challenge_completions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  title: text('title').notNull(),
+  listId: uuid('list_id').references(() => gameLists.id, { onDelete: 'set null' }),
+  gamesCount: integer('games_count').notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('challenge_completions_list_games_count_unique').on(table.listId, table.gamesCount),
+  check('challenge_completions_games_count_positive', sql`${table.gamesCount} > 0`),
 ]);
 
 export const goals = pgTable('goals', {

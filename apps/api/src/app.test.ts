@@ -19,7 +19,7 @@ const game: GameRecord = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null,
   coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: 'Supergiant Games',
   publisher: null, franchiseId: null, status: 'BACKLOG', priority: 'NORMAL', estimatedMainHours: null,
-  estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null, platformId: null, genreIds: [], rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, owned: true, archived: false, startedAt: null, completedAt: null,
+  estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null, platformId: null, genreIds: [], rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: true, archived: false, startedAt: null, completedAt: null,
   createdAt: now, updatedAt: now,
 };
 
@@ -79,6 +79,7 @@ function createSessionRepository(): SessionRepository {
         id: '00000000-0000-4000-8000-000000000040', gameId,
         startedAt: new Date(input.startedAt), endedAt: input.endedAt ? new Date(input.endedAt) : null,
         progress: input.progress ?? null, location: input.location ?? null, notes: input.notes ?? null,
+        keyDecisions: input.keyDecisions ?? null, tips: input.tips ?? null,
         createdAt, updatedAt: createdAt,
       };
       sessions.push(session);
@@ -92,6 +93,7 @@ function createSessionRepository(): SessionRepository {
         ...existing,
         startedAt: new Date(input.startedAt), endedAt: input.endedAt ? new Date(input.endedAt) : null,
         progress: input.progress ?? null, location: input.location ?? null, notes: input.notes ?? null,
+        keyDecisions: input.keyDecisions ?? null, tips: input.tips ?? null,
         updatedAt: new Date(),
       };
       sessions[index] = updated;
@@ -208,6 +210,10 @@ function createGameListRepository(): GameListRepository {
       const record = lists.find((list) => list.id === listId)!;
       if (record.gameIds.includes(gameId)) throw { code: '23505' };
       record.gameIds.push(gameId);
+    },
+    addGames: async (listId, gameIds) => {
+      const record = lists.find((list) => list.id === listId)!;
+      for (const gameId of gameIds) if (!record.gameIds.includes(gameId)) record.gameIds.push(gameId);
     },
     removeGame: async (listId, gameId) => {
       const record = lists.find((list) => list.id === listId);
@@ -436,6 +442,27 @@ describe('sessions API', () => {
     expect((await app.inject(`/games/${game.id}/sessions`)).json()).toHaveLength(1);
   });
 
+  it('stores the session journal and preserves the fields untouched by a patch', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository() });
+    apps.push(app);
+    const created = await app.inject({
+      method: 'POST', url: `/games/${game.id}/sessions`,
+      payload: {
+        startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T11:00:00.000Z',
+        location: 'Capítulo 3', notes: 'Os Turks apareceram de novo.',
+        keyDecisions: 'Salvei a vila.', tips: 'Guardar as poções para o boss.',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ location: 'Capítulo 3', keyDecisions: 'Salvei a vila.', tips: 'Guardar as poções para o boss.' });
+    const patched = await app.inject({
+      method: 'PATCH', url: `/games/${game.id}/sessions/${created.json().id}`,
+      payload: { progress: 30 },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json()).toMatchObject({ progress: 30, keyDecisions: 'Salvei a vila.', tips: 'Guardar as poções para o boss.' });
+  });
+
   it('rejects invalid session timing and progress', async () => {
     const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository() });
     apps.push(app);
@@ -573,6 +600,75 @@ describe('custom game lists API', () => {
     expect((await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Backlog pessoal' } })).statusCode).toBe(201);
     expect((await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Backlog pessoal' } })).statusCode).toBe(409);
   });
+
+  it('saves, applies, renames and deletes a library filter', async () => {
+    const stored: Array<{ id: string; name: string; filters: unknown; createdAt: Date; updatedAt: Date }> = [];
+    const app = buildApp({
+      savedFilterRepository: {
+        list: async () => stored as never,
+        find: async (id) => stored.find((item) => item.id === id) as never,
+        create: async (name, filters) => {
+          if (stored.some((item) => item.name === name)) throw { code: '23505' };
+          const record = { id: '00000000-0000-4000-8000-000000000080', name, filters, createdAt: now, updatedAt: now };
+          stored.push(record);
+          return record as never;
+        },
+        update: async (id, changes) => {
+          const record = stored.find((item) => item.id === id);
+          if (!record) return undefined;
+          Object.assign(record, changes);
+          return record as never;
+        },
+        delete: async (id) => {
+          const index = stored.findIndex((item) => item.id === id);
+          if (index < 0) return false;
+          stored.splice(index, 1);
+          return true;
+        },
+      },
+    });
+    apps.push(app);
+
+    const filters = { query: 'hades', status: 'COMPLETED', priority: 'ALL', platformId: 'ALL', genreId: 'ALL', franchiseId: 'ALL', developer: 'ALL', listId: 'ALL', completedYear: '2026', archived: false, sortBy: 'COMPLETED_DESC' };
+    const created = await app.inject({ method: 'POST', url: '/saved-filters', payload: { name: 'Zerados 2026', filters } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ name: 'Zerados 2026', filters });
+
+    expect((await app.inject({ method: 'POST', url: '/saved-filters', payload: { name: 'Zerados 2026', filters } })).statusCode).toBe(409);
+    expect((await app.inject('/saved-filters')).json()).toHaveLength(1);
+
+    const filterId = created.json().id as string;
+    const renamed = await app.inject({ method: 'PATCH', url: `/saved-filters/${filterId}`, payload: { name: 'Zerados do ano' } });
+    expect(renamed.json()).toMatchObject({ name: 'Zerados do ano' });
+
+    expect((await app.inject({ method: 'DELETE', url: `/saved-filters/${filterId}` })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'DELETE', url: `/saved-filters/${filterId}` })).statusCode).toBe(404);
+  });
+
+  it('rejects a saved filter with an unknown sort or extra field', async () => {
+    const app = buildApp({ savedFilterRepository: { list: async () => [], find: async () => undefined, create: async () => { throw new Error('unused'); }, update: async () => undefined, delete: async () => false } });
+    apps.push(app);
+    const base = { query: '', status: 'ALL', priority: 'ALL', platformId: 'ALL', genreId: 'ALL', franchiseId: 'ALL', developer: 'ALL', listId: 'ALL', completedYear: 'ALL', archived: false };
+    expect((await app.inject({ method: 'POST', url: '/saved-filters', payload: { name: 'X', filters: { ...base, sortBy: 'RANDOM' } } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/saved-filters', payload: { name: 'X', filters: { ...base, sortBy: 'TITLE', surpresa: 1 } } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/saved-filters', payload: { name: '   ', filters: { ...base, sortBy: 'TITLE' } } })).statusCode).toBe(400);
+  });
+
+  it('creates a list already populated with games', async () => {
+    const app = buildApp({ gameRepository: createRepository(), gameListRepository: createGameListRepository() });
+    apps.push(app);
+    const created = await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Em andamento', gameIds: [game.id] } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ name: 'Em andamento', gameCount: 1 });
+    expect((await app.inject(`/lists/${created.json().id as string}`)).json()).toMatchObject({ games: [{ id: game.id, title: 'Hades' }] });
+  });
+
+  it('rejects a list created with repeated games', async () => {
+    const app = buildApp({ gameRepository: createRepository(), gameListRepository: createGameListRepository() });
+    apps.push(app);
+    const response = await app.inject({ method: 'POST', url: '/lists', payload: { name: 'Repetida', gameIds: [game.id, game.id] } });
+    expect(response.statusCode).toBe(400);
+  });
 });
 
 describe('metadata search API', () => {
@@ -690,6 +786,48 @@ describe('classification, stats and challenge API', () => {
     expect(replay.statusCode).toBe(200);
     expect(replay.json()).toMatchObject({ year: 2026, totalMinutes: 0, sessionCount: 0, mostPlayedGame: null, gameOfYear: null });
     expect((await app.inject({ method: 'GET', url: '/stats/replay?year=1' })).statusCode).toBe(400);
+  });
+
+  it('returns the timeline contract and rejects invalid parameters', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), platformRepository: createPlatformRepository(), genreRepository: createGenreRepository() });
+    apps.push(app);
+    const response = await app.inject({ method: 'GET', url: '/stats/timeline?limit=10&timezoneOffsetMinutes=180' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ nextBefore: null, events: [{ type: 'GAME_ADDED', gameId: game.id, gameTitle: 'Hades' }] });
+    expect((await app.inject({ method: 'GET', url: '/stats/timeline?limit=0' })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/stats/timeline?before=ontem' })).statusCode).toBe(400);
+  });
+
+  it('records a challenge completion when the last game of the mission is finished', async () => {
+    const challengeListId = '00000000-0000-4000-8000-000000000040';
+    const completions: Array<{ title: string; listId: string; gamesCount: number; completedAt: Date }> = [];
+    const app = buildApp({
+      gameRepository: createRepository(),
+      sessionRepository: createSessionRepository(),
+      platformRepository: createPlatformRepository(),
+      genreRepository: createGenreRepository(),
+      gameListRepository: {
+        list: async () => [{ id: challengeListId, name: 'FF7', createdAt: now, updatedAt: now, gameIds: [game.id] }],
+        find: async () => ({ id: challengeListId, name: 'FF7', createdAt: now, updatedAt: now, gameIds: [game.id] }),
+        create: async () => { throw new Error('unused'); }, rename: async () => undefined, delete: async () => false,
+        addGame: async () => undefined, addGames: async () => undefined, removeGame: async () => false,
+      },
+      mainChallengeRepository: { get: async () => ({ title: 'Zerar FF7', listId: challengeListId }), set: async () => undefined, clear: async () => undefined },
+      challengeCompletionRepository: {
+        listAll: async () => completions.map((item, index) => ({ id: `00000000-0000-4000-8000-0000000000${60 + index}`, ...item })),
+        record: async (input) => { completions.push(input); },
+      },
+    });
+    apps.push(app);
+
+    const patch = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, payload: { status: 'COMPLETED', completedAt: '2026-10-09' } });
+    expect(patch.statusCode).toBe(200);
+    expect(completions).toEqual([{ title: 'Zerar FF7', listId: challengeListId, gamesCount: 1, completedAt: new Date('2026-10-09T00:00:00.000Z') }]);
+
+    const timeline = await app.inject({ method: 'GET', url: '/stats/timeline' });
+    expect(timeline.json().events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'CHALLENGE_COMPLETED', title: 'Zerar FF7', gamesCount: 1, date: '2026-10-09' }),
+    ]));
   });
 
   it('returns next game suggestions and validates parameters', async () => {

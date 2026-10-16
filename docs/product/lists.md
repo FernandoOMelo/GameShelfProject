@@ -26,3 +26,14 @@ execução e alimenta as previsões do painel.
 
 Na lista selecionada, "Adicionar à fila" coloca ao final da fila os jogos que podem entrar nela,
 em ordem alfabética. A lista não é alterada. Ver ADR-013.
+
+## Filtrar a biblioteca por lista
+
+A biblioteca tem um filtro "Lista" que mostra apenas os jogos da lista escolhida,
+combinável com os demais filtros. É leitura: não altera a lista nem os jogos.
+
+## Criar uma lista a partir do filtro
+
+Com a biblioteca filtrada, "Criar lista com estes jogos" pede um nome e cria uma lista
+já contendo os jogos visíveis. Nome repetido é recusado, como em qualquer criação de
+lista. Ver ADR-016.

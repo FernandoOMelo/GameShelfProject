@@ -92,6 +92,27 @@
             "when": 1791648361366,
             "tag": "0013_session_screenshots",
             "breakpoints": true
+        },
+        {
+            "idx": 13,
+            "version": "7",
+            "when": 1791734761366,
+            "tag": "0014_challenge_completions",
+            "breakpoints": true
+        },
+        {
+            "idx": 14,
+            "version": "7",
+            "when": 1791821161366,
+            "tag": "0015_saved_filters_and_suggestion_exclusion",
+            "breakpoints": true
+        },
+        {
+            "idx": 15,
+            "version": "7",
+            "when": 1791907561366,
+            "tag": "0016_session_journal_fields",
+            "breakpoints": true
         }
     ]
 }

@@ -27,7 +27,7 @@ export function buildSuggestions({ games, sessions, queue, today = new Date().to
   const dayNumber = (date: string) => Math.floor(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 86_400_000);
 
   return games
-    .filter((game) => game.owned && !game.archived && (game.status === 'BACKLOG' || game.status === 'PAUSED'))
+    .filter((game) => game.owned && !game.archived && !game.excludedFromSuggestions && (game.status === 'BACKLOG' || game.status === 'PAUSED'))
     .map((game) => {
       const reasons: string[] = [];
       let score = PRIORITY_POINTS[game.priority];

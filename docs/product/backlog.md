@@ -45,7 +45,9 @@ Um jogo pode possuir prioridade alta, mas estar em terceira posição porque exi
 tem o botão "Me ajuda a escolher", que mostra a melhor opção e permite ver as outras. Sem IA: a regra é
 determinística e soma pontos.
 
-Candidatos: jogos possuídos, não arquivados, com status Na biblioteca ou Pausado.
+Candidatos: jogos possuídos, não arquivados, com status Na biblioteca ou Pausado, e que
+não estejam marcados como "não sugerir". Essa marcação vence até a primeira posição da
+fila, e não esconde o jogo da biblioteca nem dos relatórios (ADR-017).
 
 | Critério | Pontos |
 | --- | --- |

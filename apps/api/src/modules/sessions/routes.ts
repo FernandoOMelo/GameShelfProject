@@ -49,6 +49,8 @@ export async function registerSessionRoutes(
       progress: existing.progress,
       location: existing.location,
       notes: existing.notes,
+      keyDecisions: existing.keyDecisions,
+      tips: existing.tips,
       ...patch.data,
     });
     if (!merged.success) return reply.code(400).send({ error: 'A sessão resultante possui dados inválidos.', issues: merged.error.issues });

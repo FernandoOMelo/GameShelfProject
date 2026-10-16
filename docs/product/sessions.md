@@ -11,10 +11,32 @@ Registrar cada período em que o usuário jogou.
 - `startedAt`
 - `endedAt`
 - `progress`
-- `location`
-- `notes`
+- `location` — exibido como **Onde parei**
+- `notes` — exibido como **Resumo da história**
+- `keyDecisions` — exibido como **Decisões importantes**
+- `tips` — exibido como **Dicas e lembretes**
 - `createdAt`
 - `updatedAt`
+
+## Diário da sessão
+
+Os quatro campos de texto formam o diário: onde o usuário parou, o que aconteceu na história,
+que escolhas ele fez e o que precisa lembrar na próxima vez. Todos são opcionais.
+
+`location` guarda o ponto de retomada (capítulo, missão) e aceita até 200 caracteres; os outros
+três são texto longo. Os nomes `location` e `notes` são herdados do MVP, quando significavam
+"localização" e "notas"; os dados sempre foram usados no sentido atual. Ver ADR-018.
+
+O detalhe do jogo abre com a seção **Onde parei**, que mostra o valor mais recente não vazio de
+cada um dos quatro campos, com a data da sessão que o registrou. Cada campo é resolvido
+separadamente: uma sessão que só anotou onde parou não apaga as decisões registradas antes.
+
+## Onde aparecem
+
+No detalhe do jogo, onde podem ser criadas, editadas e excluídas, e na linha do tempo
+(aba "Atividade"), que reúne as sessões de todos os jogos junto aos demais eventos da
+biblioteca. Na linha do tempo são somente leitura: o título do jogo leva ao detalhe,
+onde a edição acontece. Ver ADR-016.
 
 ## Regras
 
@@ -26,7 +48,7 @@ Registrar cada período em que o usuário jogou.
 6. O cliente não deve ser a fonte de verdade da duração.
 7. `progress` deve estar entre 0 e 100 quando informado.
 8. `location` pode ser vazia.
-9. `notes` pode ser vazia.
+9. `notes`, `keyDecisions` e `tips` podem ser vazias.
 10. Uma sessão não deve ter duração negativa.
 11. O usuário pode excluir uma sessão; uma sessão inexistente ou pertencente a outro jogo retorna não encontrado.
 
@@ -36,8 +58,8 @@ No celular, o fluxo prioritário é:
 
 1. selecionar jogo;
 2. informar duração ou início/fim;
-3. informar onde parou;
-4. opcionalmente informar progresso;
+3. informar onde parei;
+4. opcionalmente informar progresso e o resto do diário;
 5. salvar.
 
 ## Cálculos
@@ -69,7 +91,7 @@ A página de detalhes do jogo permite registrar, editar e excluir sessões, ence
 Na página de detalhes, a ação **Continuar jogando** cria imediatamente uma sessão
 em andamento e exibe o tempo decorrido. O timer é retomado a partir do horário
 persistido ao reabrir o jogo. **Encerrar sessão** grava o término pela API e abre
-o formulário para registrar progresso, local e notas. A sessão continua editável
+o formulário para registrar progresso e o diário da sessão. A sessão continua editável
 no histórico.
 
 ## Screenshots

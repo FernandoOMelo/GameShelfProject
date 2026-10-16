@@ -45,5 +45,7 @@ function toDatabaseInput(input: SessionInput) {
     progress: input.progress ?? null,
     location: input.location?.trim() || null,
     notes: input.notes?.trim() || null,
+    keyDecisions: input.keyDecisions?.trim() || null,
+    tips: input.tips?.trim() || null,
   };
 }

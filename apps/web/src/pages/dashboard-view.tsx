@@ -6,6 +6,7 @@ import { GoalsCard } from './goals-card';
 import { apiUrl, formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
 
 export type DashboardPeriod = '7d' | 'month' | 'year' | 'custom' | 'all';
+export type LibraryFilter = { status?: Game['status']; completedYear?: string };
 
 const statusSegments: Array<{ status: keyof typeof statusColors; label: string; count: (dashboard: DashboardResponse) => number }> = [
   { status: 'PLAYING', label: 'Jogando', count: (d) => d.playingCount },
@@ -16,7 +17,7 @@ const statusSegments: Array<{ status: keyof typeof statusColors; label: string; 
   { status: 'DESIRED', label: 'Desejados', count: (d) => d.desiredCount },
 ];
 
-export function DashboardView({ dashboard, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onRefresh, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue }: {
+export function DashboardView({ dashboard, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onRefresh, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
   dashboard: DashboardResponse | null;
   queue: QueueItem[];
   now: number;
@@ -31,6 +32,7 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
   onPauseGame: (game: Game) => void;
   onPrepareStatus: (game: Game, status: Game['status']) => void;
   onOpenQueue: () => void;
+  onFilterLibrary?: (filter: LibraryFilter) => void;
 }) {
   const [weeklyMinutes, setWeeklyMinutes] = useState(String(dashboard?.weeklyHours ? Math.round(dashboard.weeklyHours * 60) : 0));
   const [feedback, setFeedback] = useState('');
@@ -64,7 +66,7 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
         <Kpi label="Horas jogadas no período" value={formatHours(periodStats.playedHours)} accent />
         <Kpi label="Sessões no período" value={String(periodStats.sessions)} />
         <Kpi label="Jogos jogados no período" value={String(periodStats.gamesPlayed)} />
-        <Kpi label="Jogos zerados no período" value={String(periodStats.gamesCompleted)} />
+        <Kpi label="Jogos zerados no período" value={String(periodStats.gamesCompleted)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'COMPLETED' }))} />
       </div>
 
       <section className="playing-now"><h2>Jogando agora</h2>
@@ -90,21 +92,25 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
           <h2 id="status-panel-title">Biblioteca por estado</h2>
           <p className="panel-figure"><strong>{dashboard.gameCount}</strong> jogos no catálogo{dashboard.archivedCount > 0 ? ` · ${dashboard.archivedCount} arquivados` : ''}</p>
           <div className="stacked-bar" role="img" aria-label="Distribuição dos jogos por estado">{segments.filter((segment) => segment.value > 0).map((segment) => <span key={segment.status} title={`${segment.label}: ${segment.value}`} style={{ flexGrow: segment.value, background: statusColors[segment.status] }} />)}{segmentTotal === 0 && <span className="stacked-empty" />}</div>
-          <ul className="legend-list">{segments.map((segment) => <li key={segment.status}><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></li>)}</ul>
+          <ul className="legend-list">{segments.map((segment) => <li key={segment.status}>{onFilterLibrary
+            ? <button type="button" className="legend-link" aria-label={`${segment.label}: ${segment.value}. Ver na biblioteca`} onClick={() => onFilterLibrary({ status: segment.status })}><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></button>
+            : <><span className="legend-swatch" style={{ background: statusColors[segment.status] }} aria-hidden="true" /><span>{segment.label}</span><strong>{segment.value}</strong></>}</li>)}</ul>
         </section>
 
         <section className="panel" aria-labelledby="year-panel-title">
           <h2 id="year-panel-title">Zerados por ano</h2>
-          {byYear.length ? <ol className="bar-chart" aria-label="Jogos zerados por ano">{byYear.map((entry) => <li key={entry.year} title={`${entry.year}: ${entry.gameCount} jogos zerados`}><span className="bar-value">{entry.gameCount}</span><span className="bar" style={{ height: `${Math.max(4, (entry.gameCount / maxYear) * 100)}%` }} /><span className="bar-label">{entry.year}</span></li>)}</ol> : <p className="dashboard-empty">Nenhuma conclusão com data registrada.</p>}
+          {byYear.length ? <ol className="bar-chart" aria-label="Jogos zerados por ano">{byYear.map((entry) => <li key={entry.year} title={`${entry.year}: ${entry.gameCount} jogos zerados`}>{onFilterLibrary
+            ? <button type="button" className="bar-link" aria-label={`${entry.year}: ${entry.gameCount} jogos zerados. Ver na biblioteca`} onClick={() => onFilterLibrary({ status: 'COMPLETED', completedYear: String(entry.year) })}><span className="bar-value">{entry.gameCount}</span><span className="bar" style={{ height: `${Math.max(4, (entry.gameCount / maxYear) * 100)}%` }} /><span className="bar-label">{entry.year}</span></button>
+            : <><span className="bar-value">{entry.gameCount}</span><span className="bar" style={{ height: `${Math.max(4, (entry.gameCount / maxYear) * 100)}%` }} /><span className="bar-label">{entry.year}</span></>}</li>)}</ol> : <p className="dashboard-empty">Nenhuma conclusão com data registrada.</p>}
           <small>Cada jogo conta uma vez por período, mesmo que tenha sido zerado em mais de uma plataforma.</small>
         </section>
       </div>
 
       <div className="kpi-grid kpi-grid-secondary" aria-label="Resumo geral">
         <Kpi label="Tempo jogado · todo período" value={formatCompactHours(dashboard.totalPlayedHours)} />
-        <Kpi label="Horas restantes no backlog" value={formatCompactHours(dashboard.backlogRemainingHours)} />
+        <Kpi label="Horas restantes no backlog" value={formatCompactHours(dashboard.backlogRemainingHours)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'BACKLOG' }))} />
         <Kpi label="Horas disponíveis por semana" value={formatCompactHours(dashboard.weeklyHours)} />
-        <Kpi label="Em andamento" value={String(dashboard.playingCount)} />
+        <Kpi label="Em andamento" value={String(dashboard.playingCount)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'PLAYING' }))} />
       </div>
 
       <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />
@@ -123,8 +129,10 @@ export function DashboardView({ dashboard, queue, now, period, customPeriod, onP
   </section>;
 }
 
-function Kpi({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
-  return <article className={`stat-card${accent ? ' stat-card-accent' : ''}`}><span>{label}</span><strong>{value}</strong></article>;
+function Kpi({ label, value, accent = false, onClick }: { label: string; value: string; accent?: boolean; onClick?: () => void }) {
+  const className = `stat-card${accent ? ' stat-card-accent' : ''}`;
+  if (!onClick) return <article className={className}><span>{label}</span><strong>{value}</strong></article>;
+  return <button type="button" className={`${className} stat-card-link`} aria-label={`${label}: ${value}. Ver na biblioteca`} onClick={onClick}><span>{label}</span><strong>{value}</strong></button>;
 }
 
 function BacklogForecast({ forecast, remainingHours, onSelectGame }: { forecast: DashboardResponse['backlogForecast']; remainingHours: number; onSelectGame: (game: Game) => void }) {

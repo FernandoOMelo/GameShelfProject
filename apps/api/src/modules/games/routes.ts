@@ -4,8 +4,28 @@ import type { GameRepository } from './repository.js';
 import type { GameImageStorage } from './image-storage.js';
 import type { BacklogRepository } from '../backlog/repository.js';
 import type { ScreenshotRepository } from '../sessions/screenshot-repository.js';
+import type { GameListRepository } from '../game-lists/repository.js';
+import type { ChallengeCompletionRepository, MainChallengeRepository } from '../challenge/repository.js';
+import { detectChallengeCompletion } from '../challenge/service.js';
 
-export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository) {
+type ChallengeTracking = { lists: GameListRepository; challenge: MainChallengeRepository; completions: ChallengeCompletionRepository };
+
+export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking) {
+  async function recordChallengeCompletion(updated: { id: string; status: string; completedAt: string | null }) {
+    if (!tracking) return;
+    const challenge = await tracking.challenge.get();
+    if (!challenge) return;
+    const list = await tracking.lists.find(challenge.listId);
+    if (!list) return;
+    const stored = await repository.list();
+    const gamesById = new Map<string, { status: string; completedAt: string | null }>(
+      stored.map((game) => [game.id, { status: game.status, completedAt: game.completedAt }]),
+    );
+    gamesById.set(updated.id, { status: updated.status, completedAt: updated.completedAt });
+    const completion = detectChallengeCompletion(challenge, list.gameIds, gamesById);
+    if (completion) await tracking.completions.record(completion);
+  }
+
   app.get('/games', async (_request, reply) => {
     const games = await repository.list();
     return reply.send(games.map((game) => gameSchema.parse(toResponse(game))));
@@ -63,6 +83,7 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
       return reply.code(404).send({ error: 'Jogo não encontrado.' });
     }
     if (backlog && (!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED')) await backlog.removeFromQueue(id);
+    if (game.status === 'COMPLETED' && game.completedAt) await recordChallengeCompletion(game);
     return reply.send(gameSchema.parse(toResponse(game)));
   });
 

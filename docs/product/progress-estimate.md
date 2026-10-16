@@ -15,7 +15,7 @@ Esta estimativa acompanha o estado do roadmap e dos critérios documentados. Per
 | Fundação, execução local e qualidade | 10% | 100% | Monorepo, Compose, migrations, lint, testes, typecheck, build e execução containerizada validados. |
 | Biblioteca e metadados manuais | 25% | 100% | Cadastro, listagem, busca, detalhes, edição, exclusão, campos manuais e filtros por status/prioridade. |
 | Planejamento por jogo | 10% | 100% | Status, prioridade e estimativas persistidos e editáveis; meta semanal configurável. |
-| Sessões | 15% | 100% | Criação, edição, exclusão, histórico, duração calculada, progresso e localização. |
+| Sessões | 15% | 100% | Criação, edição, exclusão, histórico, duração calculada, progresso e diário da sessão. |
 | Fila | 15% | 100% | Adicionar, remover, ordenar e consultar posição; jogos concluídos/abandonados não entram. |
 | Dashboard | 15% | 100% | Jogo atual, sessões, progresso, backlog, fila, estatísticas, meta semanal e previsão. |
 | Uso em celular | 10% | 100% | Layout responsivo, acesso ao jogo atual, formulário de sessão e consulta da fila. |

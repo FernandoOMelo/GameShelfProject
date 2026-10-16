@@ -8,6 +8,8 @@ export type SessionRecord = {
   progress: number | null;
   location: string | null;
   notes: string | null;
+  keyDecisions: string | null;
+  tips: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

@@ -34,7 +34,7 @@
 - [x] histórico
 - [x] cálculo de duração
 - [x] progresso
-- [x] localização
+- [x] onde parei
 
 ## Fase 3 — Backlog
 
@@ -88,6 +88,29 @@ Detalhes em [Plano — Fase 8 em diante](next-phase.md).
 - [x] 7. múltiplas filas: avaliado, lista pode ser enfileirada (ADR-013)
 - [x] 8. exportar, importar e backup
 - [x] 9. PWA offline (HTTPS necessário no celular, ver ADR-015)
+
+## Fase 9 — Histórico e navegação (ADR-016)
+
+- [x] 1. linha do tempo de eventos da biblioteca (aba Atividade)
+- [x] 2. histórico de conclusão de missões (migration 0014)
+- [x] 3. filtro da biblioteca por lista e por ano de conclusão
+- [x] 4. criar lista a partir do filtro da biblioteca
+- [x] 5. ordenação da biblioteca por data de início e de conclusão
+- [x] 6. indicadores do painel navegáveis para a biblioteca filtrada
+- [x] 7. app Flutter: cache de leitura offline
+- [x] 8. app Flutter: biblioteca e detalhe do jogo
+- [x] 9. filtros salvos da biblioteca (ADR-017)
+- [x] 10. não sugerir um jogo, sem arquivá-lo (ADR-017)
+- [x] 11. estatísticas: taxa de conclusão, média por jogo jogado, ano de lançamento e desenvolvedora
+- [ ] 12. estimativas de tempo externas (How Long to Beat) — lib `howlongtobeat-core`
+      está quebrada; API do site levantada, falta implementar cliente próprio
+
+## Fase 10 — Diário da sessão (ADR-018)
+
+- [x] 1. decisões importantes e dicas e lembretes na sessão (migration 0016)
+- [x] 2. seção "Onde parei" no detalhe do jogo, com o registro mais recente de cada campo
+- [x] 3. diário completo no formulário de sessão, no histórico e na linha do tempo
+- [x] 4. app Flutter: diário na folha de encerrar sessão e no detalhe do jogo
 
 ## Depois do MVP
 

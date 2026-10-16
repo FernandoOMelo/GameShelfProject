@@ -14,9 +14,10 @@ function makeGame(id: string, title: string, status: string = 'BACKLOG') {
   };
 }
 
-function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
+function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLists: Array<{ id: string; name: string; gameIds: string[] }> = []) {
   const queue = [...initialQueue] as Array<{ position: number; addedAt: string; game: { id: string; title: string } }>;
-  const lists: Array<{ id: string; name: string; gameIds: string[] }> = [];
+  const lists: Array<{ id: string; name: string; gameIds: string[] }> = initialLists.map((list) => ({ ...list, gameIds: [...list.gameIds] }));
+  const saved: Array<{ id: string; name: string; filters: Record<string, unknown>; createdAt: string; updatedAt: string }> = [];
   let weeklyMinutes = 0;
   const goals: Array<Record<string, unknown>> = [];
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -26,12 +27,26 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
       providerId: 'igdb-123', title: 'Hades', description: 'Escape the Underworld.', releaseYear: 2020,
       coverUrl: 'https://images.example/hades.jpg', developer: 'Supergiant Games', genres: ['Roguelike'], platforms: ['PC'],
     }]), { status: 200 });
+    if (url === '/api/saved-filters' && method === 'GET') return new Response(JSON.stringify(saved), { status: 200 });
+    if (url === '/api/saved-filters' && method === 'POST') {
+      const body = JSON.parse(String(init?.body)) as { name: string; filters: Record<string, unknown> };
+      if (saved.some((item) => item.name === body.name)) return new Response(JSON.stringify({ error: 'duplicado' }), { status: 409 });
+      const record = { id: `00000000-0000-4000-8000-${String(saved.length + 80).padStart(12, '0')}`, ...body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      saved.push(record);
+      return new Response(JSON.stringify(record), { status: 201 });
+    }
+    if (url.match(/^\/api\/saved-filters\/[^/]+$/) && method === 'DELETE') {
+      const index = saved.findIndex((item) => url.endsWith(item.id));
+      if (index >= 0) saved.splice(index, 1);
+      return new Response(null, { status: index >= 0 ? 204 : 404 });
+    }
     if (url === '/api/lists' && method === 'GET') return new Response(JSON.stringify(lists.map((list) => ({ id: list.id, name: list.name, gameCount: list.gameIds.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))), { status: 200 });
     if (url === '/api/lists' && method === 'POST') {
-      const { name } = JSON.parse(String(init?.body)) as { name: string };
-      const list = { id: `00000000-0000-4000-8000-${String(lists.length + 50).padStart(12, '0')}`, name, gameIds: [] };
+      const { name, gameIds } = JSON.parse(String(init?.body)) as { name: string; gameIds?: string[] };
+      if (lists.some((item) => item.name === name)) return new Response(JSON.stringify({ error: 'duplicada' }), { status: 409 });
+      const list = { id: `00000000-0000-4000-8000-${String(lists.length + 50).padStart(12, '0')}`, name, gameIds: gameIds ?? [] };
       lists.push(list);
-      return new Response(JSON.stringify({ id: list.id, name, gameCount: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }), { status: 201 });
+      return new Response(JSON.stringify({ id: list.id, name, gameCount: list.gameIds.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }), { status: 201 });
     }
     if (url.match(/^\/api\/lists\/[^/]+\/games$/) && method === 'POST') {
       const list = lists.find((item) => url.includes(item.id));
@@ -113,20 +128,38 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = []) {
       mostPlayedGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, minutes: 180 },
       topGenre: { name: 'RPG', minutes: 270 }, longestSession: null, busiestMonth: { month: 2, minutes: 180 }, gameOfYear: null,
     }), { status: 200 });
+    if (url.startsWith('/api/stats/timeline')) {
+      const before = new URL(url, 'http://localhost').searchParams.get('before');
+      const all = [
+        { type: 'GAME_STARTED', at: '2026-10-12T00:00:00.000Z', date: '2026-10-12', gameId: (games[0] as { id: string } | undefined)?.id ?? '00000000-0000-4000-8000-000000000001', gameTitle: 'Hades', coverUrl: null },
+        { type: 'CHALLENGE_COMPLETED', at: '2026-10-11T00:00:00.000Z', date: '2026-10-11', title: 'Zerar clássicos', gamesCount: 3 },
+        { type: 'SESSION', at: '2026-10-07T20:00:00.000Z', date: '2026-10-07', gameId: (games[0] as { id: string } | undefined)?.id ?? '00000000-0000-4000-8000-000000000001', gameTitle: 'Hades', coverUrl: null, sessionId: '00000000-0000-4000-8000-000000000040', durationMinutes: 90, progress: 40, location: 'Elysium', notes: 'Boa run' },
+      ];
+      const visible = before ? all.filter((event) => event.at < before) : all.slice(0, 2);
+      return new Response(JSON.stringify({ events: visible, nextBefore: before ? null : all[1]!.at }), { status: 200 });
+    }
     if (url.startsWith('/api/stats/activity')) return new Response(JSON.stringify({
       year: new Date().getFullYear(), days: [{ date: `${new Date().getFullYear()}-03-01`, minutes: 90 }], activeDays: 1, totalMinutes: 90, maxDayMinutes: 90, currentStreak: 0, longestStreak: 3,
     }), { status: 200 });
     if (url === '/api/stats') return new Response(JSON.stringify({
-      totals: { completedCount: 2, completedHours: 42, averageCompletedHours: 21, longestGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30 }, shortestGame: null, journeyStart: '2024-01-01', journeyDays: 400 },
+      totals: { completedCount: 2, completedHours: 42, averageCompletedHours: 21, longestGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30 }, shortestGame: null, journeyStart: '2024-01-01', journeyDays: 400, completionRate: 66.7, averageHoursPerGame: 14 },
       ratingDistribution: [{ rating: 11, count: 1 }, { rating: 10, count: 0 }], difficultyDistribution: [{ difficulty: 'AAA', count: 0 }, { difficulty: 'C', count: 2 }],
       byGenre: [{ key: 'g1', name: 'RPG', completedCount: 2, hours: 42, averageRating: 9 }], byType: [], byPlatform: [],
       byYear: [{ year: 2025, completedCount: 2, hours: 42, gameOfYear: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30 } }],
       favorites: [{ id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30, rating: 11 }], topGenres: [], topTypes: [],
+      byReleaseYear: [{ year: 2020, count: 2 }], byDeveloper: [{ key: 'supergiant games', name: 'Supergiant Games', completedCount: 2, hours: 42, averageRating: 10 }],
     }), { status: 200 });
     if (url === '/api/challenge' && method === 'GET') return new Response(JSON.stringify({ title: 'Zerar clássicos', listId: '00000000-0000-4000-8000-000000000050', listName: 'Clássicos', totalGames: 4, completedGames: 1, percent: 25 }), { status: 200 });
     if (url.startsWith('/api/dashboard')) {
       const playingGames = games.filter((item) => (item as { status?: string }).status === 'PLAYING' && !(item as { archived?: boolean }).archived).map((item) => ({ game: item, playedHours: 0, progress: null, lastSession: null, activeSession: null, estimatedHours: null, remainingHours: null }));
+      const yearCounts = games.reduce<Record<string, number>>((acc, item) => {
+        const completedAt = (item as { completedAt?: string | null }).completedAt;
+        if (completedAt) acc[completedAt.slice(0, 4)] = (acc[completedAt.slice(0, 4)] ?? 0) + 1;
+        return acc;
+      }, {});
+      const completionByYear = Object.entries(yearCounts).map(([year, gameCount]) => ({ year: Number(year), gameCount }));
       return new Response(JSON.stringify({
+      completionByYear,
       gameCount: games.length, desiredCount: 0, backlogCount: 0, completedCount: 0, playingCount: playingGames.length, pausedCount: 0, abandonedCount: 0, archivedCount: 0,
       totalPlayedHours: 0, backlogRemainingHours: 0, weeklyHours: weeklyMinutes / 60,
       queueRemainingHours: 0, estimatedQueueWeeks: weeklyMinutes > 0 ? 0 : null,
@@ -361,7 +394,7 @@ describe('library page', () => {
     fireEvent.change(screen.getByLabelText('Início'), { target: { value: '2026-01-01T10:00' } });
     fireEvent.change(document.querySelector<HTMLInputElement>('input[name="endedAt"]')!, { target: { value: '' } });
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Progresso (%)' }), { target: { value: '50' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Onde parou' }), { target: { value: 'Elysium' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Onde parei' }), { target: { value: 'Elysium' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar sessão' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/sessions/00000000-0000-4000-8000-000000000040`, expect.objectContaining({ method: 'PATCH' })));
@@ -385,7 +418,7 @@ describe('library page', () => {
     await screen.findByText('SESSÃO EM ANDAMENTO');
     fireEvent.click(screen.getByRole('button', { name: 'Encerrar sessão' }));
     expect(await screen.findByRole('button', { name: 'Salvar sessão' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Onde parou')).toBeInTheDocument();
+    expect(screen.getByLabelText('Onde parei')).toBeInTheDocument();
   });
 
   it('deletes a session from the history after confirmation', async () => {
@@ -399,7 +432,7 @@ describe('library page', () => {
     const session = {
       id: '00000000-0000-4000-8000-000000000040', gameId: game.id,
       startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T11:00:00.000Z', durationMinutes: 60,
-      progress: null, location: 'Elysium', notes: null,
+      progress: null, location: 'Elysium', notes: null, keyDecisions: null, tips: null,
       createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z',
     };
     mockApi([game]);
@@ -422,13 +455,44 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
-    await screen.findByText('Elysium');
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir sessão' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir sessão' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/sessions/${session.id}`, { method: 'DELETE' }));
     expect(confirm).toHaveBeenCalled();
     expect(await screen.findByText('Sessão excluída.')).toBeInTheDocument();
     expect(await screen.findByText('Nenhuma sessão registrada.')).toBeInTheDocument();
     confirm.mockRestore();
+  });
+
+  it('summarizes the journal of the most recent sessions in the game details', async () => {
+    const game = makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING');
+    const older = {
+      id: '00000000-0000-4000-8000-000000000041', gameId: game.id,
+      startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T11:00:00.000Z', durationMinutes: 60,
+      progress: 10, location: 'Tártaro', notes: 'Primeiras fugas.', keyDecisions: 'Fiquei com o arco.', tips: 'Guardar obolos.',
+      createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z',
+    };
+    const newer = {
+      ...older, id: '00000000-0000-4000-8000-000000000042',
+      startedAt: '2026-01-05T10:00:00.000Z', endedAt: '2026-01-05T11:00:00.000Z',
+      progress: 30, location: 'Elysium', notes: 'Enfrentei Teseu.', keyDecisions: null, tips: null,
+    };
+    mockApi([game]);
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/sessions') && !init?.method) return new Response(JSON.stringify([newer, older]), { status: 200 });
+      return base(input, init);
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+
+    const panel = (await screen.findByRole('heading', { name: 'Onde parei' })).closest('section')!;
+    expect(panel).toHaveTextContent('Elysium');
+    expect(panel).toHaveTextContent('Enfrentei Teseu.');
+    expect(panel).toHaveTextContent('Fiquei com o arco.');
+    expect(panel).toHaveTextContent('Guardar obolos.');
+    expect(panel).not.toHaveTextContent('Primeiras fugas.');
   });
 
   it('lists, uploads and deletes session screenshots on demand', async () => {
@@ -456,7 +520,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
-    await screen.findByText('Elysium');
+    await screen.findByRole('button', { name: 'Imagens' });
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/screenshots'))).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Imagens' }));
@@ -729,5 +793,198 @@ describe('statistics and classification', () => {
       const call = fetchMock.mock.calls.find(([url, init]) => url === '/api/games' && init?.method === 'POST');
       expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ difficulty: 'B', gameType: 'RPG de Turno', completionCondition: 'Veja os créditos', favorite: true, gameOfYear: false });
     });
+  });
+});
+
+describe('activity timeline', () => {
+  it('groups events by day, shows session details and loads more', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Atividade' }));
+    expect(await screen.findByRole('heading', { name: 'Linha do tempo' })).toBeInTheDocument();
+
+    expect(await screen.findByText(/Iniciou/)).toBeInTheDocument();
+    expect(screen.getByText(/Completou a missão/)).toBeInTheDocument();
+    expect(screen.getByText('Zerar clássicos · 3 jogos', { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Carregar mais' }));
+    expect(await screen.findByText(/Jogou/)).toBeInTheDocument();
+    expect(screen.getByText('Elysium · 40%')).toBeInTheDocument();
+    expect(screen.getByText('Boa run')).toBeInTheDocument();
+  });
+
+  it('opens a game detail from the timeline', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Atividade' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hades' }));
+    expect(await screen.findByRole('heading', { name: 'Hades' })).toBeInTheDocument();
+  });
+
+  it('reports a timeline that could not be loaded', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => (
+      String(input).startsWith('/api/stats/timeline') ? new Response('{}', { status: 500 }) : base(input, init)
+    ));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Atividade' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar a linha do tempo.');
+  });
+});
+
+describe('library sorting and filters', () => {
+  const cardTitles = () => screen.getAllByRole('button', { name: /^Ver detalhes de / }).map((button) => button.getAttribute('aria-label')?.replace('Ver detalhes de ', ''));
+
+  it('sorts by start date with undated games last', async () => {
+    mockApi([
+      makeGame('00000000-0000-4000-8000-000000000001', 'Sem data'),
+      { ...makeGame('00000000-0000-4000-8000-000000000002', 'Começou em março'), startedAt: '2026-03-01' },
+      { ...makeGame('00000000-0000-4000-8000-000000000003', 'Começou em janeiro'), startedAt: '2026-01-01' },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Sem data' });
+    fireEvent.change(screen.getByLabelText('Ordenar jogos'), { target: { value: 'STARTED_DESC' } });
+    await waitFor(() => expect(cardTitles()).toEqual(['Começou em março', 'Começou em janeiro', 'Sem data']));
+  });
+
+  it('sorts by completion date with undated games last', async () => {
+    mockApi([
+      { ...makeGame('00000000-0000-4000-8000-000000000001', 'Zerado em 2025', 'COMPLETED'), completedAt: '2025-06-10' },
+      makeGame('00000000-0000-4000-8000-000000000002', 'Nunca zerado'),
+      { ...makeGame('00000000-0000-4000-8000-000000000003', 'Zerado em 2026', 'COMPLETED'), completedAt: '2026-02-20' },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Nunca zerado' });
+    fireEvent.change(screen.getByLabelText('Ordenar jogos'), { target: { value: 'COMPLETED_DESC' } });
+    await waitFor(() => expect(cardTitles()).toEqual(['Zerado em 2026', 'Zerado em 2025', 'Nunca zerado']));
+  });
+
+  it('filters the library by list', async () => {
+    const inList = makeGame('00000000-0000-4000-8000-000000000001', 'Está na lista');
+    const outOfList = makeGame('00000000-0000-4000-8000-000000000002', 'Fora da lista');
+    mockApi([inList, outOfList], [], [{ id: '00000000-0000-4000-8000-000000000070', name: 'Clássicos', gameIds: [inList.id] }]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Fora da lista' });
+    fireEvent.change(await screen.findByLabelText('Filtrar por lista'), { target: { value: '00000000-0000-4000-8000-000000000070' } });
+    await waitFor(() => expect(cardTitles()).toEqual(['Está na lista']));
+  });
+
+  it('filters the library by completion year', async () => {
+    mockApi([
+      { ...makeGame('00000000-0000-4000-8000-000000000001', 'Zerado em 2025', 'COMPLETED'), completedAt: '2025-06-10' },
+      { ...makeGame('00000000-0000-4000-8000-000000000002', 'Zerado em 2026', 'COMPLETED'), completedAt: '2026-02-20' },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Zerado em 2025' });
+    fireEvent.change(screen.getByLabelText('Filtrar por ano de conclusão'), { target: { value: '2026' } });
+    await waitFor(() => expect(cardTitles()).toEqual(['Zerado em 2026']));
+  });
+
+  it('opens the library filtered by status from a dashboard indicator', async () => {
+    mockApi([
+      makeGame('00000000-0000-4000-8000-000000000001', 'Jogando agora', 'PLAYING'),
+      makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Em andamento: 1\./ }));
+    await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
+    expect(screen.getByLabelText('Filtrar por status')).toHaveValue('PLAYING');
+  });
+
+  it('creates a list from the filtered games', async () => {
+    mockApi([
+      makeGame('00000000-0000-4000-8000-000000000001', 'Jogando agora', 'PLAYING'),
+      makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Jogando agora' });
+    fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
+    await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista com estes jogos' }));
+    fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Em andamento' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar com 1 jogo' }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url, init]) => url === '/api/lists' && init?.method === 'POST');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({ name: 'Em andamento', gameIds: ['00000000-0000-4000-8000-000000000001'] });
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Lista "Em andamento" criada com 1 jogo.');
+    await waitFor(() => expect(screen.getByLabelText('Filtrar por lista')).toContainHTML('Em andamento'));
+  });
+
+  it('reports a duplicate list name without creating it', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')], [], [{ id: '00000000-0000-4000-8000-000000000070', name: 'Clássicos', gameIds: [] }]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar lista com estes jogos' }));
+    fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Clássicos' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar com 1 jogo' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Já existe uma lista com esse nome.');
+  });
+
+  it('saves the current filter, reapplies it and deletes it', async () => {
+    mockApi([
+      makeGame('00000000-0000-4000-8000-000000000001', 'Jogando agora', 'PLAYING'),
+      makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Jogando agora' });
+
+    fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
+    fireEvent.change(screen.getByLabelText('Ordenar jogos'), { target: { value: 'STARTED_DESC' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
+    fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Em andamento' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url, cfg]) => url === '/api/saved-filters' && cfg?.method === 'POST');
+      expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ name: 'Em andamento', filters: { status: 'PLAYING', sortBy: 'STARTED_DESC', archived: false } });
+    });
+
+    fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'ALL' } });
+    await waitFor(() => expect(cardTitles()).toHaveLength(2));
+
+    fireEvent.change(await screen.findByLabelText('Aplicar filtro salvo'), { target: { value: (await screen.findByRole('option', { name: 'Em andamento' })).getAttribute('value')! } });
+    await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
+    expect(screen.getByLabelText('Ordenar jogos')).toHaveValue('STARTED_DESC');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir filtro' }));
+    await waitFor(() => expect(screen.queryByRole('option', { name: 'Em andamento' })).not.toBeInTheDocument());
+  });
+
+  it('reports a duplicate saved filter name', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
+    fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Repetido' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));
+    await waitFor(() => expect(screen.queryByLabelText('Nome do filtro salvo')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
+    fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Repetido' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));
+
+    expect(await screen.findByText('Já existe um filtro com esse nome.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nome do filtro salvo')).toBeInTheDocument();
+  });
+
+  it('opens the library filtered by completion year from the year chart', async () => {
+    mockApi([
+      { ...makeGame('00000000-0000-4000-8000-000000000001', 'Zerado em 2026', 'COMPLETED'), completedAt: '2026-02-20' },
+      { ...makeGame('00000000-0000-4000-8000-000000000002', 'Zerado em 2025', 'COMPLETED'), completedAt: '2025-06-10' },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /^2026: 1 jogos zerados\./ }));
+    await waitFor(() => expect(cardTitles()).toEqual(['Zerado em 2026']));
+    expect(screen.getByLabelText('Filtrar por ano de conclusão')).toHaveValue('2026');
   });
 });

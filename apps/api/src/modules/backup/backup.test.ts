@@ -12,7 +12,7 @@ const now = new Date('2026-03-01T10:00:00.000Z');
 const gameRecord: GameRecord = {
   id: id(10), title: 'Hades', description: null, coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null,
   franchiseId: id(1), platformId: id(2), genreIds: [id(3)], status: 'COMPLETED', archived: false, priority: 'HIGH', rating: 10, difficulty: 'B',
-  gameType: null, completionCondition: null, favorite: true, gameOfYear: false, owned: true, startedAt: '2026-01-01', completedAt: '2026-02-01',
+  gameType: null, completionCondition: null, favorite: true, gameOfYear: false, excludedFromSuggestions: false, owned: true, startedAt: '2026-01-01', completedAt: '2026-02-01',
   estimatedMainHours: '20.50', estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: '5', notes: null, createdAt: now, updatedAt: now,
 };
 
@@ -22,11 +22,11 @@ function validData(): BackupData {
     games: [{
       id: id(10), title: 'Hades', description: null, coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null,
       franchiseId: id(1), platformId: id(2), genreIds: [id(3)], status: 'COMPLETED', rating: 10, difficulty: 'B', gameType: null, completionCondition: null,
-      favorite: true, gameOfYear: false, owned: true, archived: false, startedAt: '2026-01-01', completedAt: '2026-02-01', priority: 'HIGH',
+      favorite: true, gameOfYear: false, excludedFromSuggestions: false, owned: true, archived: false, startedAt: '2026-01-01', completedAt: '2026-02-01', priority: 'HIGH',
       estimatedMainHours: 20.5, estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 5, notes: null,
       createdAt: now.toISOString(), updatedAt: now.toISOString(),
     }],
-    sessions: [{ id: id(20), gameId: id(10), startedAt: now.toISOString(), endedAt: null, progress: null, location: null, notes: null, createdAt: now.toISOString(), updatedAt: now.toISOString() }],
+    sessions: [{ id: id(20), gameId: id(10), startedAt: now.toISOString(), endedAt: null, progress: null, location: null, notes: null, keyDecisions: null, tips: null, createdAt: now.toISOString(), updatedAt: now.toISOString() }],
     screenshots: [{ id: id(30), sessionId: id(20), url: '/media/00000000-0000-4000-8000-000000000999.png', createdAt: now.toISOString() }],
     queue: [{ gameId: id(10), position: 0, addedAt: now.toISOString() }],
     lists: [{ id: id(40), name: 'Favoritos', gameIds: [id(10)], createdAt: now.toISOString(), updatedAt: now.toISOString() }],
@@ -77,7 +77,7 @@ describe('backup API', () => {
       genreRepository: { list: async () => [{ id: id(3), name: 'Roguelike' }], create: async () => ({ id: id(3), name: 'Roguelike' }) },
       sessionRepository: {
         listForGame: async () => [], findForGame: async () => undefined, create: async () => { throw new Error('unused'); }, update: async () => undefined, delete: async () => false,
-        listAll: async () => [{ id: id(20), gameId: id(10), startedAt: now, endedAt: new Date(now.getTime() + 3_600_000), progress: 50, location: 'Elysium', notes: null, createdAt: now, updatedAt: now }],
+        listAll: async () => [{ id: id(20), gameId: id(10), startedAt: now, endedAt: new Date(now.getTime() + 3_600_000), progress: 50, location: 'Elysium', notes: null, keyDecisions: null, tips: null, createdAt: now, updatedAt: now }],
       },
       screenshotRepository: {
         listForSession: async () => [], listForGame: async () => [], add: async () => { throw new Error('unused'); }, remove: async () => undefined,
@@ -86,7 +86,7 @@ describe('backup API', () => {
       backlogRepository: { listQueue: async () => [{ game: gameRecord, position: 0, addedAt: now }], addToQueue: async () => undefined, removeFromQueue: async () => false, reorderQueue: async () => false },
       gameListRepository: {
         list: async () => [{ id: id(40), name: 'Favoritos', createdAt: now, updatedAt: now, gameIds: [id(10)] }], find: async () => undefined,
-        create: async () => { throw new Error('unused'); }, rename: async () => undefined, delete: async () => false, addGame: async () => undefined, removeGame: async () => false,
+        create: async () => { throw new Error('unused'); }, rename: async () => undefined, delete: async () => false, addGame: async () => undefined, addGames: async () => undefined, removeGame: async () => false,
       },
       mainChallengeRepository: { get: async () => ({ title: 'Zerar tudo', listId: id(40) }), set: async () => undefined, clear: async () => undefined },
       goalRepository: { list: async () => [{ id: id(50), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 12 }], create: async () => { throw new Error('unused'); }, updateTarget: async () => undefined, remove: async () => false },

@@ -25,6 +25,7 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
   const { totals } = stats;
   const maxRating = Math.max(1, ...stats.ratingDistribution.map((entry) => entry.count));
   const maxDifficulty = Math.max(1, ...stats.difficultyDistribution.map((entry) => entry.count));
+  const maxReleaseYear = Math.max(1, ...stats.byReleaseYear.map((entry) => entry.count));
   const journey = totals.journeyStart ? `${new Intl.NumberFormat('pt-BR').format(totals.journeyDays)} dias (${(totals.journeyDays / 365.25).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} anos)` : '—';
 
   return <section className="stats-page" aria-labelledby="stats-title">
@@ -38,9 +39,12 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       <Tile label="Tempo de jornada" value={journey} small />
     </div>
     <div className="kpi-grid kpi-grid-secondary">
+      <Tile label="Taxa de conclusão" value={`${totals.completionRate.toLocaleString('pt-BR')}%`} />
+      <Tile label="Média por jogo jogado" value={totals.averageHoursPerGame === null ? '—' : formatCompactHours(totals.averageHoursPerGame)} />
       <Tile label="Jogo mais longo" value={totals.longestGame?.title ?? '—'} detail={totals.longestGame ? formatCompactHours(totals.longestGame.hours) : undefined} small />
       <Tile label="Jogo mais curto" value={totals.shortestGame?.title ?? '—'} detail={totals.shortestGame ? formatCompactHours(totals.shortestGame.hours) : undefined} small />
     </div>
+    <small className="stats-note">A taxa de conclusão ignora jogos desejados, que ainda não estão na biblioteca. A média por jogo jogado considera todo jogo com horas registradas, zerado ou não.</small>
 
     <ReplayPanel refreshKey={refreshKey} onOpenGame={onOpenGame} />
     <ActivityHeatmap refreshKey={refreshKey} />
@@ -68,6 +72,13 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       <GroupTable title="Por plataforma" groups={stats.byPlatform} />
     </div>
     <GroupTable title="Por tipo" groups={stats.byType} />
+
+    <div className="dashboard-columns">
+      <GroupTable title="Top 10 desenvolvedoras" groups={stats.byDeveloper} />
+      <section className="panel" aria-labelledby="release-year-title"><h2 id="release-year-title">Por ano de lançamento</h2>
+        {stats.byReleaseYear.length ? <ul className="hbar-list" aria-label="Jogos por ano de lançamento">{stats.byReleaseYear.map((entry) => <li key={entry.year} title={`${entry.year}: ${entry.count}`}><span className="hbar-label">{entry.year}</span><span className="hbar-track"><span className="hbar-fill" style={{ width: `${(entry.count / maxReleaseYear) * 100}%` }} /></span><strong>{entry.count}</strong></li>)}</ul> : <p className="dashboard-empty">Nenhum jogo com ano de lançamento informado.</p>}
+      </section>
+    </div>
 
     <div className="dashboard-columns">
       <section className="panel" aria-labelledby="favorites-title"><h2 id="favorites-title">Top 10 jogos favoritos</h2>

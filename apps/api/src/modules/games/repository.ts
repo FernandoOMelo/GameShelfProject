@@ -21,6 +21,7 @@ export type GameRecord = {
   completionCondition: string | null;
   favorite: boolean;
   gameOfYear: boolean;
+  excludedFromSuggestions: boolean;
   owned: boolean;
   startedAt: string | null;
   completedAt: string | null;

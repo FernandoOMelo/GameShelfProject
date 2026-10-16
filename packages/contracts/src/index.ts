@@ -57,6 +57,7 @@ const gameInputBaseSchema = z.object({
   completionCondition: z.string().trim().max(300).nullable().optional(),
   favorite: z.boolean().optional(),
   gameOfYear: z.boolean().optional(),
+  excludedFromSuggestions: z.boolean().optional(),
   priority: gamePrioritySchema.optional(),
   estimatedMainHours: optionalHours,
   estimatedCompletionistHours: optionalHours,
@@ -99,6 +100,7 @@ export const gameSchema = z.object({
   completionCondition: z.string().nullable(),
   favorite: z.boolean(),
   gameOfYear: z.boolean(),
+  excludedFromSuggestions: z.boolean(),
   owned: z.boolean(),
   archived: z.boolean(),
   startedAt: calendarDateSchema.nullable(),
@@ -142,6 +144,8 @@ const sessionFieldsSchema = z.object({
   progress: z.number().int().min(0).max(100).nullable().optional(),
   location: z.string().trim().max(200).nullable().optional(),
   notes: optionalText,
+  keyDecisions: optionalText,
+  tips: optionalText,
 }).strict();
 
 export const sessionInputSchema = sessionFieldsSchema.refine((session) => !session.endedAt || Date.parse(session.endedAt) >= Date.parse(session.startedAt), {
@@ -162,6 +166,8 @@ export const sessionSchema = z.object({
   progress: z.number().int().min(0).max(100).nullable(),
   location: z.string().nullable(),
   notes: z.string().nullable(),
+  keyDecisions: z.string().nullable(),
+  tips: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 }).strict();
@@ -179,6 +185,12 @@ export type SessionUpdate = z.infer<typeof sessionUpdateSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 
 export const gameListInputSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
+export const gameListCreateSchema = gameListInputSchema.extend({
+  gameIds: z.array(z.string().uuid()).max(1000).optional(),
+}).strict().refine((value) => !value.gameIds || new Set(value.gameIds).size === value.gameIds.length, {
+  path: ['gameIds'], message: 'A lista não pode conter jogos repetidos.',
+});
+export type GameListCreate = z.infer<typeof gameListCreateSchema>;
 export const gameListSummarySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -190,6 +202,44 @@ export const gameListSchema = gameListSummarySchema.extend({ games: z.array(game
 export type GameListInput = z.infer<typeof gameListInputSchema>;
 export type GameListSummary = z.infer<typeof gameListSummarySchema>;
 export type GameList = z.infer<typeof gameListSchema>;
+
+export const librarySortSchema = z.enum(['TITLE', 'STARTED_DESC', 'COMPLETED_DESC']);
+export type LibrarySort = z.infer<typeof librarySortSchema>;
+
+const filterChoice = z.string().trim().max(200).default('ALL');
+
+export const libraryFilterStateSchema = z.object({
+  query: z.string().trim().max(200).default(''),
+  status: z.union([gameStatusSchema, z.literal('ALL')]).default('ALL'),
+  priority: z.union([gamePrioritySchema, z.literal('ALL')]).default('ALL'),
+  platformId: filterChoice,
+  genreId: filterChoice,
+  franchiseId: filterChoice,
+  developer: filterChoice,
+  listId: filterChoice,
+  completedYear: filterChoice,
+  archived: z.boolean().default(false),
+  sortBy: librarySortSchema.default('TITLE'),
+}).strict();
+export type LibraryFilterState = z.infer<typeof libraryFilterStateSchema>;
+
+export const savedFilterInputSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  filters: libraryFilterStateSchema,
+}).strict();
+export const savedFilterUpdateSchema = savedFilterInputSchema.partial().refine((value) => Object.keys(value).length > 0, {
+  message: 'Informe ao menos um campo para atualizar.',
+});
+export const savedFilterSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  filters: libraryFilterStateSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+export type SavedFilterInput = z.infer<typeof savedFilterInputSchema>;
+export type SavedFilterUpdate = z.infer<typeof savedFilterUpdateSchema>;
+export type SavedFilter = z.infer<typeof savedFilterSchema>;
 
 export const queueItemSchema = z.object({
   position: z.number().int().nonnegative(),
@@ -289,6 +339,8 @@ export const statsResponseSchema = z.object({
     shortestGame: statsGameRefSchema.nullable(),
     journeyStart: calendarDateSchema.nullable(),
     journeyDays: z.number().int().nonnegative(),
+    completionRate: z.number().min(0).max(100),
+    averageHoursPerGame: hoursSchema.nullable(),
   }).strict(),
   ratingDistribution: z.array(z.object({ rating: z.number().int().min(1).max(11), count: z.number().int().nonnegative() }).strict()),
   difficultyDistribution: z.array(z.object({ difficulty: gameDifficultySchema, count: z.number().int().nonnegative() }).strict()),
@@ -304,6 +356,8 @@ export const statsResponseSchema = z.object({
   favorites: z.array(statsGameRefSchema.extend({ rating: z.number().int().nullable() }).strict()),
   topGenres: z.array(statsGroupSchema),
   topTypes: z.array(statsGroupSchema),
+  byReleaseYear: z.array(z.object({ year: z.number().int(), count: z.number().int().positive() }).strict()),
+  byDeveloper: z.array(statsGroupSchema),
 }).strict();
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
 export type StatsGroup = z.infer<typeof statsGroupSchema>;
@@ -322,6 +376,48 @@ export const activityResponseSchema = z.object({
   longestStreak: z.number().int().nonnegative(),
 }).strict();
 export type ActivityResponse = z.infer<typeof activityResponseSchema>;
+
+export const timelineQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  before: z.string().datetime().optional(),
+  timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0),
+}).strict();
+
+const timelineGameRefSchema = z.object({
+  gameId: z.string().uuid(),
+  gameTitle: z.string(),
+  coverUrl: mediaUrl.nullable(),
+});
+const timelineBaseSchema = z.object({ at: z.string().datetime(), date: calendarDateSchema });
+
+export const timelineEventSchema = z.discriminatedUnion('type', [
+  timelineBaseSchema.extend({ type: z.literal('GAME_ADDED') }).merge(timelineGameRefSchema).strict(),
+  timelineBaseSchema.extend({ type: z.literal('GAME_STARTED') }).merge(timelineGameRefSchema).strict(),
+  timelineBaseSchema.extend({ type: z.literal('GAME_COMPLETED') }).merge(timelineGameRefSchema).strict(),
+  timelineBaseSchema.extend({
+    type: z.literal('SESSION'),
+    sessionId: z.string().uuid(),
+    durationMinutes: z.number().int().nonnegative().nullable(),
+    progress: z.number().int().min(0).max(100).nullable(),
+    location: z.string().nullable(),
+    notes: z.string().nullable(),
+    keyDecisions: z.string().nullable(),
+    tips: z.string().nullable(),
+  }).merge(timelineGameRefSchema).strict(),
+  timelineBaseSchema.extend({
+    type: z.literal('CHALLENGE_COMPLETED'),
+    title: z.string(),
+    gamesCount: z.number().int().positive(),
+  }).strict(),
+]);
+
+export const timelineResponseSchema = z.object({
+  events: z.array(timelineEventSchema),
+  nextBefore: z.string().datetime().nullable(),
+}).strict();
+
+export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+export type TimelineResponse = z.infer<typeof timelineResponseSchema>;
 
 export const replayResponseSchema = z.object({
   year: z.number().int(),
@@ -389,7 +485,10 @@ export const backupDataSchema = z.object({
   platforms: z.array(platformSchema),
   genres: z.array(genreSchema),
   games: z.array(gameSchema),
-  sessions: z.array(sessionSchema.omit({ durationMinutes: true })),
+  sessions: z.array(sessionSchema.omit({ durationMinutes: true }).extend({
+    keyDecisions: z.string().nullable().default(null),
+    tips: z.string().nullable().default(null),
+  })),
   screenshots: z.array(sessionScreenshotSchema),
   queue: z.array(z.object({ gameId: z.string().uuid(), position: z.number().int().nonnegative(), addedAt: z.string().datetime() }).strict()),
   lists: z.array(z.object({

@@ -13,5 +13,6 @@ export interface GameListRepository {
   rename(id: string, name: string): Promise<GameListRecord | undefined>;
   delete(id: string): Promise<boolean>;
   addGame(listId: string, gameId: string): Promise<void>;
+  addGames(listId: string, gameIds: string[]): Promise<void>;
   removeGame(listId: string, gameId: string): Promise<boolean>;
 }

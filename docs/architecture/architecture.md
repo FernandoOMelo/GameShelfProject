@@ -24,6 +24,7 @@ PostgreSQL     Filesystem local (imagens)
 apps/
   web/
   api/
+  mobile/
 
 packages/
   contracts/
@@ -31,6 +32,11 @@ packages/
   ui/
   config/
 ```
+
+`apps/mobile` é um app Flutter (Dart) que consome a mesma API HTTP. Não compartilha
+os pacotes TypeScript: os contratos são reimplementados à mão nos seus models, então
+mudanças em `packages/contracts` que afetem as rotas que ele usa precisam ser
+replicadas lá. Ver ADR-016.
 
 ## Frontend
 

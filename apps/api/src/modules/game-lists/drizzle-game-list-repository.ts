@@ -34,6 +34,11 @@ export class DrizzleGameListRepository implements GameListRepository {
     await this.db.insert(gameListEntries).values({ listId, gameId });
   }
 
+  async addGames(listId: string, gameIds: string[]): Promise<void> {
+    if (gameIds.length === 0) return;
+    await this.db.insert(gameListEntries).values(gameIds.map((gameId) => ({ listId, gameId }))).onConflictDoNothing();
+  }
+
   async removeGame(listId: string, gameId: string): Promise<boolean> {
     const deleted = await this.db.delete(gameListEntries).where(and(eq(gameListEntries.listId, listId), eq(gameListEntries.gameId, gameId)))
       .returning({ gameId: gameListEntries.gameId });

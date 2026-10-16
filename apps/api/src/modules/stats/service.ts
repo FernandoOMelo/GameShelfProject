@@ -40,6 +40,15 @@ export function buildStats({ games, sessions, platforms, genres, today = new Dat
   const byGenre = group(completed, (game) => game.genreIds.filter((id) => genreNames.has(id)).map((id): Key => [id, genreNames.get(id)!]), hoursOf);
   const byType = group(completed, (game) => game.gameType ? [[game.gameType.toLocaleLowerCase(), game.gameType]] : [], hoursOf);
   const byPlatform = group(completed, (game) => game.platformId && platformNames.has(game.platformId) ? [[game.platformId, platformNames.get(game.platformId)!]] : [], hoursOf);
+  const byDeveloper = group(completed, (game) => game.developer ? [[game.developer.toLocaleLowerCase(), game.developer]] : [], hoursOf).slice(0, 10);
+
+  const releaseYears = new Map<number, number>();
+  for (const game of games) if (game.releaseYear !== null) releaseYears.set(game.releaseYear, (releaseYears.get(game.releaseYear) ?? 0) + 1);
+  const byReleaseYear = [...releaseYears].sort((a, b) => a[0] - b[0]).map(([year, count]) => ({ year, count }));
+
+  const trackable = games.filter((game) => game.status !== 'DESIRED');
+  const playedHoursTotal = games.reduce((sum, game) => sum + hoursOf(game), 0);
+  const gamesWithAnyHours = games.filter((game) => hoursOf(game) > 0);
 
   const years = new Map<number, Game[]>();
   for (const game of completed) {
@@ -68,10 +77,12 @@ export function buildStats({ games, sessions, platforms, genres, today = new Dat
       shortestGame: shortest ? ref(shortest) : null,
       journeyStart,
       journeyDays,
+      completionRate: trackable.length ? Math.round((completed.length / trackable.length) * 1000) / 10 : 0,
+      averageHoursPerGame: gamesWithAnyHours.length ? round(playedHoursTotal / gamesWithAnyHours.length) : null,
     },
     ratingDistribution: Array.from({ length: 11 }, (_, index) => 11 - index).map((rating) => ({ rating, count: ratingCounts.get(rating) ?? 0 })),
     difficultyDistribution: DIFFICULTIES.map((difficulty) => ({ difficulty, count: difficultyCounts.get(difficulty) ?? 0 })),
-    byGenre, byType, byPlatform, byYear, favorites,
+    byGenre, byType, byPlatform, byYear, favorites, byReleaseYear, byDeveloper,
     topGenres: topByRating(byGenre, 5),
     topTypes: topByRating(byType, 10),
   };

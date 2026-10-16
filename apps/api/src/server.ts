@@ -11,6 +11,8 @@ import { DrizzleBacklogRepository } from './modules/backlog/drizzle-backlog-repo
 import { DrizzleGameListRepository } from './modules/game-lists/drizzle-game-list-repository.js';
 import { DrizzlePlanningSettingsRepository } from './modules/planning/drizzle-planning-settings-repository.js';
 import { DrizzleMainChallengeRepository } from './modules/challenge/drizzle-challenge-repository.js';
+import { DrizzleChallengeCompletionRepository } from './modules/challenge/drizzle-challenge-completion-repository.js';
+import { DrizzleSavedFilterRepository } from './modules/saved-filters/drizzle-saved-filter-repository.js';
 import { DrizzleGoalRepository } from './modules/goals/drizzle-goal-repository.js';
 import { DrizzleScreenshotRepository } from './modules/sessions/drizzle-screenshot-repository.js';
 import { DrizzleBackupImporter } from './modules/backup/drizzle-backup-importer.js';
@@ -35,6 +37,8 @@ const app = buildApp({
   backlogRepository: new DrizzleBacklogRepository(database.db),
   gameListRepository: new DrizzleGameListRepository(database.db),
   mainChallengeRepository: new DrizzleMainChallengeRepository(database.db),
+  challengeCompletionRepository: new DrizzleChallengeCompletionRepository(database.db),
+  savedFilterRepository: new DrizzleSavedFilterRepository(database.db),
   goalRepository: new DrizzleGoalRepository(database.db),
   backupImporter: new DrizzleBackupImporter(database.db),
   screenshotRepository: new DrizzleScreenshotRepository(database.db),

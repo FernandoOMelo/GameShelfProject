@@ -1,16 +1,46 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, Genre, Platform, QueueItem, Session } from '@gameshelf/contracts';
+import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, Genre, LibraryFilterState, LibrarySort, Platform, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
-import { DashboardView } from './dashboard-view';
+import { DashboardView, type LibraryFilter } from './dashboard-view';
 import { StatsView } from './stats-view';
 import { enqueueFailureMessage, OfflineBanner, useOfflineSessions } from './offline-banner';
 import { isNetworkFailure } from './offline-sessions';
 import { SessionScreenshots } from './session-screenshots';
 import { NextGameSuggestion } from './next-game-suggestion';
+import { TimelineView } from './timeline-view';
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
+const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente' };
+function compareDateDesc(left: string | null, right: string | null) {
+  if (left === right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return right.localeCompare(left);
+}
+function sortGames(games: Game[], sortBy: LibrarySort): Game[] {
+  if (sortBy === 'TITLE') return games;
+  const field = sortBy === 'STARTED_DESC' ? 'startedAt' : 'completedAt';
+  return [...games].sort((a, b) => compareDateDesc(a[field], b[field]) || a.title.localeCompare(b.title));
+}
+type JournalField = { key: 'location' | 'notes' | 'keyDecisions' | 'tips'; label: string };
+const journalFields: JournalField[] = [
+  { key: 'location', label: 'Onde parei' },
+  { key: 'notes', label: 'Resumo da história' },
+  { key: 'keyDecisions', label: 'Decisões importantes' },
+  { key: 'tips', label: 'Dicas e lembretes' },
+];
+const recapFields = journalFields.filter((field) => field.key !== 'location');
+function journalEntries(session: Session, fields: JournalField[]) {
+  return fields.flatMap(({ key, label }) => session[key] ? [{ label, value: session[key]! }] : []);
+}
+function latestJournal(sessions: Session[]) {
+  return journalFields.flatMap(({ key, label }) => {
+    const source = sessions.find((session) => session[key]);
+    return source ? [{ label, value: source[key]!, at: source.startedAt }] : [];
+  });
+}
 type DashboardPeriod = '7d' | 'month' | 'year' | 'custom' | 'all';
 const todayLocal = () => todayLocalDate(new Date());
 function todayLocalDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
@@ -54,8 +84,21 @@ export function App() {
   const [genreFilter, setGenreFilter] = useState('ALL');
   const [franchiseFilter, setFranchiseFilter] = useState('ALL');
   const [developerFilter, setDeveloperFilter] = useState('ALL');
+  const [listFilter, setListFilter] = useState('ALL');
+  const [completedYearFilter, setCompletedYearFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState<LibrarySort>('TITLE');
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [activeSavedFilter, setActiveSavedFilter] = useState('ALL');
+  const [newFilterName, setNewFilterName] = useState('');
+  const [namingFilter, setNamingFilter] = useState(false);
+  const [filterFeedback, setFilterFeedback] = useState('');
+  const [lists, setLists] = useState<GameListSummary[]>([]);
+  const [listGameIds, setListGameIds] = useState<Set<string> | null>(null);
+  const [newListName, setNewListName] = useState('');
+  const [creatingList, setCreatingList] = useState(false);
+  const [listFeedback, setListFeedback] = useState('');
   const [retroactiveHours, setRetroactiveHours] = useState('');
-  const [activeView, setActiveView] = useState<'library' | 'queue' | 'lists' | 'dashboard' | 'stats'>('dashboard');
+  const [activeView, setActiveView] = useState<'library' | 'queue' | 'lists' | 'dashboard' | 'stats' | 'timeline'>('dashboard');
   const [showArchived, setShowArchived] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -99,7 +142,27 @@ export function App() {
     }
   }
 
+  async function loadLists() {
+    try {
+      const response = await fetch(`${apiUrl}/lists`);
+      if (!response.ok) throw new Error('Falha ao carregar listas');
+      setLists(await response.json() as GameListSummary[]);
+    } catch {
+      setLists([]);
+    }
+  }
+
   useEffect(() => { void loadGames(); }, []);
+  useEffect(() => { void loadLists(); }, []);
+  useEffect(() => { void loadSavedFilters(); }, []);
+  useEffect(() => {
+    if (listFilter === 'ALL') { setListGameIds(null); return; }
+    void fetch(`${apiUrl}/lists/${listFilter}`).then(async (response) => {
+      if (!response.ok) throw new Error('Falha ao carregar a lista');
+      const list = await response.json() as GameList;
+      setListGameIds(new Set(list.games.map((game) => game.id)));
+    }).catch(() => setListGameIds(new Set()));
+  }, [listFilter]);
   useEffect(() => {
     void Promise.all([
       fetch(`${apiUrl}/queue`).then((response) => response.ok ? response.json() as Promise<QueueItem[]> : Promise.reject()),
@@ -140,14 +203,19 @@ export function App() {
     });
   }, []);
 
-  const visibleGames = useMemo(() => games.filter((game) => (showArchived ? Boolean(game.archived) : !game.archived)
+  const filteredGames = useMemo(() => games.filter((game) => (showArchived ? Boolean(game.archived) : !game.archived)
     && game.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())
     && (statusFilter === 'ALL' || game.status === statusFilter)
     && (priorityFilter === 'ALL' || game.priority === priorityFilter)
     && (platformFilter === 'ALL' || game.platformId === platformFilter)
     && (genreFilter === 'ALL' || game.genreIds.includes(genreFilter))
     && (franchiseFilter === 'ALL' || game.franchiseId === franchiseFilter)
-    && (developerFilter === 'ALL' || game.developer === developerFilter)), [games, query, statusFilter, priorityFilter, platformFilter, genreFilter, franchiseFilter, developerFilter, showArchived]);
+    && (developerFilter === 'ALL' || game.developer === developerFilter)
+    && (listGameIds === null || listGameIds.has(game.id))
+    && (completedYearFilter === 'ALL' || (game.completedAt ?? '').startsWith(completedYearFilter))), [games, query, statusFilter, priorityFilter, platformFilter, genreFilter, franchiseFilter, developerFilter, showArchived, listGameIds, completedYearFilter]);
+  const visibleGames = useMemo(() => sortGames(filteredGames, sortBy), [filteredGames, sortBy]);
+  const journal = useMemo(() => latestJournal(sessions), [sessions]);
+  const completedYears = useMemo(() => [...new Set(games.map((game) => game.completedAt?.slice(0, 4)).filter((year): year is string => Boolean(year)))].sort((a, b) => b.localeCompare(a)), [games]);
 
   useEffect(() => {
     if (!selectedGame) return;
@@ -160,6 +228,105 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedGame, visibleGames]);
+
+  async function loadSavedFilters() {
+    try {
+      const response = await fetch(`${apiUrl}/saved-filters`);
+      if (!response.ok) throw new Error('Falha ao carregar filtros salvos');
+      setSavedFilters(await response.json() as SavedFilter[]);
+    } catch {
+      setSavedFilters([]);
+    }
+  }
+
+  function currentFilterState(): LibraryFilterState {
+    return {
+      query, status: statusFilter, priority: priorityFilter, platformId: platformFilter,
+      genreId: genreFilter, franchiseId: franchiseFilter, developer: developerFilter,
+      listId: listFilter, completedYear: completedYearFilter, archived: showArchived, sortBy,
+    };
+  }
+
+  function applySavedFilter(id: string) {
+    setActiveSavedFilter(id);
+    setFilterFeedback('');
+    if (id === 'ALL') return;
+    const saved = savedFilters.find((item) => item.id === id);
+    if (!saved) return;
+    const state = saved.filters;
+    setQuery(state.query);
+    setStatusFilter(state.status);
+    setPriorityFilter(state.priority);
+    setPlatformFilter(state.platformId);
+    setGenreFilter(state.genreId);
+    setFranchiseFilter(state.franchiseId);
+    setDeveloperFilter(state.developer);
+    setListFilter(state.listId);
+    setCompletedYearFilter(state.completedYear);
+    setShowArchived(state.archived);
+    setSortBy(state.sortBy);
+  }
+
+  async function saveCurrentFilter(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newFilterName.trim();
+    if (!name) return;
+    const response = await fetch(`${apiUrl}/saved-filters`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, filters: currentFilterState() }),
+    });
+    if (!response.ok) {
+      setFilterFeedback(response.status === 409 ? 'Já existe um filtro com esse nome.' : 'Não foi possível salvar o filtro.');
+      return;
+    }
+    const saved = await response.json() as SavedFilter;
+    setNewFilterName('');
+    setNamingFilter(false);
+    setFilterFeedback(`Filtro "${saved.name}" salvo.`);
+    setActiveSavedFilter(saved.id);
+    await loadSavedFilters();
+  }
+
+  async function deleteSavedFilter(id: string) {
+    const response = await fetch(`${apiUrl}/saved-filters/${id}`, { method: 'DELETE' });
+    if (!response.ok) { setFilterFeedback('Não foi possível excluir o filtro.'); return; }
+    setActiveSavedFilter('ALL');
+    setFilterFeedback('Filtro excluído.');
+    await loadSavedFilters();
+  }
+
+  async function createListFromFilter(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newListName.trim();
+    if (!name) return;
+    const gameIds = visibleGames.map((game) => game.id);
+    const response = await fetch(`${apiUrl}/lists`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, gameIds }),
+    });
+    if (!response.ok) {
+      setListFeedback(response.status === 409 ? 'Já existe uma lista com esse nome.' : 'Não foi possível criar a lista.');
+      return;
+    }
+    setListFeedback(`Lista "${name}" criada com ${gameIds.length} ${gameIds.length === 1 ? 'jogo' : 'jogos'}.`);
+    setNewListName('');
+    setCreatingList(false);
+    await loadLists();
+  }
+
+  function applyLibraryFilter(filter: LibraryFilter) {
+    setQuery('');
+    setStatusFilter(filter.status ?? 'ALL');
+    setCompletedYearFilter(filter.completedYear ?? 'ALL');
+    setPriorityFilter('ALL');
+    setPlatformFilter('ALL');
+    setGenreFilter('ALL');
+    setFranchiseFilter('ALL');
+    setDeveloperFilter('ALL');
+    setListFilter('ALL');
+    setShowArchived(false);
+    setSelectedGame(null);
+    setActiveView('library');
+  }
 
   async function refreshPlanningViews() {
     const [queueResponse, dashboardResponse] = await Promise.all([fetch(`${apiUrl}/queue`), fetch(dashboardUrl)]);
@@ -343,6 +510,8 @@ export function App() {
           progress: numberOrNull(form.get('progress')),
           location: nullableString(form.get('location')),
           notes: nullableString(form.get('notes')),
+          keyDecisions: nullableString(form.get('keyDecisions')),
+          tips: nullableString(form.get('tips')),
         }),
       });
       if (!response.ok) {
@@ -523,7 +692,7 @@ export function App() {
       <OfflineBanner pending={offline.pending} online={offline.online} notice={offline.notice} onFinishOpen={offline.finishOpen} onDiscard={offline.discard} onRetry={() => void offline.flush()} />
       <header className="library-header">
         <a className="brand" href="/" aria-label="GameShelf início"><span className="brand-mark">G</span><span>Game<span className="brand-accent">Shelf</span></span></a>
-        <nav className="main-nav" aria-label="Navegação principal"><button type="button" aria-current={activeView === 'library' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('library'); }}>Biblioteca</button><button type="button" aria-current={activeView === 'queue' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('queue'); }}>Fila <span>{queue.length}</span></button><button type="button" aria-current={activeView === 'lists' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('lists'); }}>Listas</button><button type="button" aria-current={activeView === 'dashboard' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('dashboard'); }}>Painel</button><button type="button" aria-current={activeView === 'stats' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('stats'); }}>Estatísticas</button></nav>
+        <nav className="main-nav" aria-label="Navegação principal"><button type="button" aria-current={activeView === 'library' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('library'); }}>Biblioteca</button><button type="button" aria-current={activeView === 'queue' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('queue'); }}>Fila <span>{queue.length}</span></button><button type="button" aria-current={activeView === 'lists' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('lists'); }}>Listas</button><button type="button" aria-current={activeView === 'dashboard' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('dashboard'); }}>Painel</button><button type="button" aria-current={activeView === 'timeline' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('timeline'); }}>Atividade</button><button type="button" aria-current={activeView === 'stats' ? 'page' : undefined} onClick={() => { setSelectedGame(null); setActiveView('stats'); }}>Estatísticas</button></nav>
         <span className="local-badge"><span /> LOCAL</span>
       </header>
       {selectedGame ? <section className="details-page" aria-labelledby="details-title">
@@ -536,6 +705,7 @@ export function App() {
             <h1 id="details-title">{selectedGame.title}</h1>
             <p className="details-byline">{[selectedGame.releaseYear, selectedGame.developer, selectedGame.publisher, franchises.find((franchise) => franchise.id === selectedGame.franchiseId)?.name].filter(Boolean).join(' · ') || 'Metadata ainda não informada'}</p>
             <div className="details-badges"><span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
+            {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
             {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
             <section className="details-section"><h2>Minha jornada</h2><p>Plataforma: {platforms.find((platform) => platform.id === selectedGame.platformId)?.name ?? 'Não selecionada'}</p><p>{selectedGame.owned ? 'Possuo este jogo' : 'Não possuo este jogo'} · {statusLabels[selectedGame.status]}</p>{selectedGame.startedAt && <p>Início: {formatDateOnly(selectedGame.startedAt)}</p>}{selectedGame.completedAt && <p>Conclusão: {formatDateOnly(selectedGame.completedAt)}</p>}{selectedGame.gameType && <p>Tipo: {selectedGame.gameType}</p>}{selectedGame.completionCondition && <p>Condição de zeramento: {selectedGame.completionCondition}</p>}<p className="genre-summary">Gêneros: {selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || 'Não informados'}</p></section>
             <section className="details-section"><h2>Estimativas de duração</h2><dl className="estimate-list">
@@ -549,24 +719,26 @@ export function App() {
                 <label className="form-field">Início<input name="startedAt" type="datetime-local" required defaultValue={toDateTimeLocal(editingSession ? new Date(editingSession.startedAt) : new Date(Date.now() - 60 * 60_000))} /></label>
                 <label className="form-field">Término<input name="endedAt" type="datetime-local" defaultValue={editingSession?.endedAt ? toDateTimeLocal(new Date(editingSession.endedAt)) : editingSession ? '' : toDateTimeLocal(new Date())} /><small>Deixe vazio para manter a sessão em andamento.</small></label>
                 <label className="form-field">Progresso (%)<input name="progress" type="number" min="0" max="100" step="1" defaultValue={editingSession?.progress ?? ''} /></label>
-                <label className="form-field">Onde parou<input name="location" maxLength={200} defaultValue={editingSession?.location ?? ''} /></label>
-                <label className="form-field form-wide">Notas<textarea name="notes" rows={2} maxLength={10000} defaultValue={editingSession?.notes ?? ''} /></label>
+                <label className="form-field">Onde parei<input name="location" maxLength={200} placeholder="A missão, capítulo ou ponto exato" defaultValue={editingSession?.location ?? ''} /></label>
+                <label className="form-field form-wide">Resumo da história<textarea name="notes" rows={3} maxLength={10000} defaultValue={editingSession?.notes ?? ''} /></label>
+                <label className="form-field form-wide">Decisões importantes<textarea name="keyDecisions" rows={2} maxLength={10000} defaultValue={editingSession?.keyDecisions ?? ''} /></label>
+                <label className="form-field form-wide">Dicas e lembretes<textarea name="tips" rows={2} maxLength={10000} defaultValue={editingSession?.tips ?? ''} /></label>
                 <div className="form-wide session-actions"><Button type="submit" disabled={savingSession}>{savingSession ? 'Salvando…' : editingSession ? 'Salvar sessão' : 'Registrar sessão'}</Button>{editingSession && <button type="button" className="cancel-button" onClick={() => setEditingSession(null)}>Cancelar edição</button>}</div>
               </form>}
               {sessionFeedback && <p role="status" className="session-feedback">{sessionFeedback}</p>}
               {sessions.length === 0 ? <p className="session-empty">Nenhuma sessão registrada.</p> : <ol className="session-list">{sessions.map((session) => <li key={session.id}>
                 <div><strong>{formatDateTime(session.startedAt)}</strong><span>{session.endedAt ? formatDuration(session.durationMinutes) : 'Em andamento'}</span>{!session.endedAt && <small className="session-live-duration">{formatElapsed(session.startedAt, clockNow)}</small>}</div>
                 <p>{[session.location, session.progress === null ? null : `${session.progress}%`].filter(Boolean).join(' · ') || 'Sem progresso informado'}</p>
-                {session.notes && <p>{session.notes}</p>}
+                {journalEntries(session, recapFields).map((entry) => <p key={entry.label} className="session-journal-entry"><strong>{entry.label}</strong>{entry.value}</p>)}
                 <div className="session-item-actions"><button type="button" className="session-edit" onClick={() => setEditingSession(session)}>Editar sessão</button><button type="button" className="session-delete" onClick={() => void deleteSession(session)}>Excluir sessão</button></div>
                 <SessionScreenshots gameId={session.gameId} sessionId={session.id} />
               </li>)}</ol>}
             </section>
             {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
-            <div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><Button type="button" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</Button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
+            <div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><Button type="button" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</Button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
           </div>
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} /> : activeView === 'stats' ? <StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
+      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'stats' ? <StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /> : activeView === 'timeline' ? <TimelineView games={games} onSelectGame={showDetails} /> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
       <section className="library-heading">
         <div><p className="eyebrow">SUA COLEÇÃO</p><h1>Biblioteca</h1><p className="library-subtitle">Seus jogos, reunidos em um só lugar.</p></div>
         <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>
@@ -579,8 +751,20 @@ export function App() {
         <div className="filter-field"><span>Gênero</span><select aria-label="Agrupar por gênero" value={genreFilter} onChange={(event) => setGenreFilter(event.target.value)}><option value="ALL">Todos</option>{genres.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Franquia</span><select aria-label="Agrupar por franquia" value={franchiseFilter} onChange={(event) => setFranchiseFilter(event.target.value)}><option value="ALL">Todas</option>{franchises.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Desenvolvedora</span><select aria-label="Agrupar por desenvolvedora" value={developerFilter} onChange={(event) => setDeveloperFilter(event.target.value)}><option value="ALL">Todas</option>{[...new Set(games.map((game) => game.developer).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b)).map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
+        <div className="filter-field"><span>Lista</span><select aria-label="Filtrar por lista" value={listFilter} onChange={(event) => setListFilter(event.target.value)}><option value="ALL">Todas</option>{lists.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+        <div className="filter-field"><span>Zerado em</span><select aria-label="Filtrar por ano de conclusão" value={completedYearFilter} onChange={(event) => setCompletedYearFilter(event.target.value)}><option value="ALL">Todos</option>{completedYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
+        <div className="filter-field"><span>Ordenar por</span><select aria-label="Ordenar jogos" value={sortBy} onChange={(event) => setSortBy(event.target.value as LibrarySort)}>{(Object.keys(sortLabels) as LibrarySort[]).map((option) => <option key={option} value={option}>{sortLabels[option]}</option>)}</select></div>
         <span className="game-count">{games.length} {games.length === 1 ? 'jogo' : 'jogos'}</span>
         <button type="button" className="session-edit" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? 'Ver biblioteca' : 'Ver arquivados'}</button>
+        <div className="filter-field"><span>Filtro salvo</span><select aria-label="Aplicar filtro salvo" value={activeSavedFilter} onChange={(event) => applySavedFilter(event.target.value)}><option value="ALL">Nenhum</option>{savedFilters.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{activeSavedFilter !== 'ALL' && <button type="button" className="session-delete" onClick={() => void deleteSavedFilter(activeSavedFilter)}>Excluir filtro</button>}</div>
+        {namingFilter
+          ? <form className="list-from-filter" onSubmit={(event) => void saveCurrentFilter(event)}><label className="form-field">Nome do filtro<input aria-label="Nome do filtro salvo" required maxLength={100} value={newFilterName} onChange={(event) => setNewFilterName(event.target.value)} autoFocus /></label><Button type="submit">Salvar filtro</Button><button type="button" className="cancel-button" onClick={() => { setNamingFilter(false); setNewFilterName(''); }}>Cancelar</button></form>
+          : <button type="button" className="session-edit" onClick={() => { setFilterFeedback(''); setNamingFilter(true); }}>Salvar filtro atual</button>}
+        {filterFeedback && <p role="status" className="session-feedback">{filterFeedback}</p>}
+        {creatingList
+          ? <form className="list-from-filter" onSubmit={(event) => void createListFromFilter(event)}><label className="form-field">Nome da lista<input aria-label="Nome da nova lista" required maxLength={100} value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /></label><Button type="submit">Criar com {visibleGames.length} {visibleGames.length === 1 ? 'jogo' : 'jogos'}</Button><button type="button" className="cancel-button" onClick={() => { setCreatingList(false); setNewListName(''); }}>Cancelar</button></form>
+          : <button type="button" className="session-edit" disabled={visibleGames.length === 0} onClick={() => { setListFeedback(''); setCreatingList(true); }}>Criar lista com estes jogos</button>}
+        {listFeedback && <p role="status" className="session-feedback">{listFeedback}</p>}
       </section>
       {error && <div className="notice" role="alert">{error}<button type="button" onClick={() => void loadGames()}>Tentar novamente</button></div>}
       {loading ? <p className="empty-state">Carregando biblioteca…</p> : visibleGames.length === 0 ? (

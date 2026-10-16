@@ -1,5 +1,9 @@
 # Experiência Mobile
 
+Há duas formas de usar o GameShelf no celular: a **PWA** (o próprio `apps/web`
+instalado pelo navegador) e o **app Flutter** (`apps/mobile`). As duas falam com a
+mesma API. Este documento cobre as duas; o objetivo e os princípios valem para ambas.
+
 ## Objetivo
 
 O celular serve principalmente para registrar sessões, consultar o jogo atual e verificar a fila.
@@ -29,7 +33,9 @@ O celular serve principalmente para registrar sessões, consultar o jogo atual e
 
 O fluxo de registro deve ser concluído em poucos toques.
 
-Não transformar o mobile em uma cópia reduzida do dashboard desktop.
+Não transformar o mobile em uma cópia reduzida do dashboard desktop. Consultar a
+biblioteca e o detalhe de um jogo é permitido — o que não entra no celular é a
+edição: cadastrar e alterar jogos, listas e metas continua só no desktop. Ver ADR-016.
 
 ## PWA
 
@@ -61,6 +67,30 @@ celular, coloque o GameShelf atrás de um reverse proxy com HTTPS.
 exatamente no mesmo horário; a fila trata isso como "já registrada", então reenviar
 não duplica sessões.
 
-## Implementação inicial
+## App Flutter (`apps/mobile`)
 
-A interface adapta biblioteca, fila, painel e formulários para telas estreitas. O botão de registro no jogo atual abre os detalhes com início e término pré-preenchidos; o usuário pode alterar horários e informar localização, progresso e notas antes de salvar.
+App nativo Android em Dart/Flutter, com Riverpod para estado e dio para HTTP. O
+endereço do servidor é configurável em Ajustes. Quatro abas:
+
+- **Jogando**: jogo atual com cronômetro, iniciar e encerrar sessão;
+- **Biblioteca**: lista com busca por título, capa e status; abre o detalhe do jogo
+  com estimativas, total jogado e histórico de sessões (somente leitura);
+- **Fila**: fila ordenável por arrastar, com remoção;
+- **Progresso**: indicadores e jogos em andamento.
+
+### Sem conexão no app Flutter
+
+Mesma doutrina do ADR-015, implementada em sqflite:
+
+- a última resposta de cada GET fica guardada; offline o app mostra esses dados e o
+  banner avisa que podem estar defasados, em vez de falhar com "Tentar novamente";
+- o cache só entra em erro de conexão — erro HTTP do servidor continua aparecendo;
+- iniciar e encerrar sessão offline entram numa fila local e são enviados em ordem ao
+  reconectar; 409 é tratado como "já registrada" e a operação sai da fila.
+
+Para compilar sem acesso ao CDN do Google, ver
+`apps/mobile/android/download_flutter_artifacts.ps1`.
+
+## Implementação inicial da PWA
+
+A interface adapta biblioteca, fila, painel e formulários para telas estreitas. O botão de registro no jogo atual abre os detalhes com início e término pré-preenchidos; o usuário pode alterar horários e informar progresso e os quatro campos do diário da sessão antes de salvar.

@@ -21,10 +21,19 @@ gêneros e plataformas e quais foram os melhores jogos de cada ano.
 - linha do tempo anual: zerados, horas e jogo do ano de cada ano;
 - distribuição de notas (11 a 1) e de dificuldade (AAA a C);
 - quadros por gênero, tipo e plataforma: zerados, tempo e nota média;
-- Top 10 favoritos (por nota), Top 5 gêneros e Top 10 tipos (por nota média).
+- Top 10 favoritos (por nota), Top 5 gêneros e Top 10 tipos (por nota média);
+- Top 10 desenvolvedoras: zerados, tempo e nota média;
+- taxa de conclusão: zerados sobre os jogos da biblioteca, **ignorando Desejados** —
+  querer um jogo não é progresso nem regressão;
+- média de horas por jogo jogado: considera todo jogo com horas registradas, zerado ou
+  não (diferente da média por jogo zerado, que é só dos zerados);
+- distribuição por ano de lançamento: conta a biblioteca inteira, não só os zerados,
+  porque a pergunta é sobre a composição do acervo.
 
-Considera jogos com status Zerado, inclusive arquivados. As horas de um jogo
-contam no ano em que ele foi zerado. Um jogo com vários gêneros entra em cada um.
+Considera jogos com status Zerado, inclusive arquivados — exceto a taxa de conclusão e a
+distribuição por ano de lançamento, cujos recortes estão descritos acima. As horas de um
+jogo contam no ano em que ele foi zerado. Um jogo com vários gêneros entra em cada um.
+Ver ADR-017.
 
 ## Atividade (`GET /stats/activity?year=&timezoneOffsetMinutes=`)
 

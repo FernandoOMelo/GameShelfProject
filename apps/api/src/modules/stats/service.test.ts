@@ -6,7 +6,7 @@ import { buildChallengeProgress } from '../challenge/service.js';
 const base: Game = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Base', description: null, coverUrl: null, backgroundUrl: null,
   releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, genreIds: [], status: 'COMPLETED',
-  rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false,
+  rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false,
   owned: true, archived: false, startedAt: null, completedAt: '2025-03-01', priority: 'NORMAL', estimatedMainHours: null,
   estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null,
   createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
@@ -20,7 +20,7 @@ const switchPlatform = { id: id(200), name: 'Switch' };
 describe('stats', () => {
   it('summarises completed games with longest, shortest and average duration', () => {
     const games = [make(1, { retroactivePlayedHours: 10 }), make(2, { retroactivePlayedHours: 30 }), make(3, { status: 'PLAYING', retroactivePlayedHours: 99 })];
-    const session: Session = { id: id(50), gameId: id(1), startedAt: '2025-02-01T10:00:00.000Z', endedAt: '2025-02-01T12:00:00.000Z', durationMinutes: 120, progress: null, location: null, notes: null, createdAt: '2025-02-01T12:00:00.000Z', updatedAt: '2025-02-01T12:00:00.000Z' };
+    const session: Session = { id: id(50), gameId: id(1), startedAt: '2025-02-01T10:00:00.000Z', endedAt: '2025-02-01T12:00:00.000Z', durationMinutes: 120, progress: null, location: null, notes: null, keyDecisions: null, tips: null, createdAt: '2025-02-01T12:00:00.000Z', updatedAt: '2025-02-01T12:00:00.000Z' };
     const { totals } = buildStats({ games, sessions: [session], platforms: [], genres: [], today: '2025-03-11' });
     expect(totals).toMatchObject({ completedCount: 2, completedHours: 42, averageCompletedHours: 21, journeyStart: '2025-02-01', journeyDays: 38 });
     expect(totals.longestGame).toMatchObject({ title: 'Jogo 2', hours: 30 });
