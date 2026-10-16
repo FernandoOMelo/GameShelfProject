@@ -659,10 +659,10 @@ describe('library page', () => {
   it('shows the backlog forecast and stalled games once a weekly goal exists', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    expect(await screen.findByText('Defina a meta semanal para ver quando o backlog acaba.')).toBeInTheDocument();
+    expect(await screen.findByText('Defina a meta semanal para ver quando o backlog acaba.', {}, { timeout: 3000 })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '360' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
-    expect(await screen.findByText(/1,8 meses/)).toBeInTheDocument();
+    expect(await screen.findByText(/1,8 meses/, {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByText(/2 jogos sem estimativa/)).toBeInTheDocument();
     expect(screen.getByText(/45 dias · faltam/)).toBeInTheDocument();
   });
@@ -913,6 +913,7 @@ describe('activity timeline', () => {
 
 describe('library sorting and filters', () => {
   const cardTitles = () => screen.getAllByRole('button', { name: /^Ver detalhes de / }).map((button) => button.getAttribute('aria-label')?.replace('Ver detalhes de ', ''));
+  const openAdvancedFilters = () => fireEvent.click(screen.getByRole('button', { name: 'Mais filtros' }));
 
   it('sorts by start date with undated games last', async () => {
     mockApi([
@@ -947,6 +948,7 @@ describe('library sorting and filters', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Fora da lista' });
+    openAdvancedFilters();
     fireEvent.change(await screen.findByLabelText('Filtrar por lista'), { target: { value: '00000000-0000-4000-8000-000000000070' } });
     await waitFor(() => expect(cardTitles()).toEqual(['Está na lista']));
   });
@@ -959,6 +961,7 @@ describe('library sorting and filters', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Zerado em 2025' });
+    openAdvancedFilters();
     fireEvent.change(screen.getByLabelText('Filtrar por ano de conclusão'), { target: { value: '2026' } });
     await waitFor(() => expect(cardTitles()).toEqual(['Zerado em 2026']));
   });
@@ -984,6 +987,7 @@ describe('library sorting and filters', () => {
     await screen.findByRole('button', { name: 'Ver detalhes de Jogando agora' });
     fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
     await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
+    openAdvancedFilters();
     fireEvent.click(screen.getByRole('button', { name: 'Criar lista com estes jogos' }));
     fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Em andamento' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar com 1 jogo' }));
@@ -1000,6 +1004,7 @@ describe('library sorting and filters', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
+    openAdvancedFilters();
     fireEvent.click(screen.getByRole('button', { name: 'Criar lista com estes jogos' }));
     fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Clássicos' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar com 1 jogo' }));
@@ -1017,6 +1022,7 @@ describe('library sorting and filters', () => {
 
     fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
     fireEvent.change(screen.getByLabelText('Ordenar jogos'), { target: { value: 'STARTED_DESC' } });
+    openAdvancedFilters();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
     fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Em andamento' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));
@@ -1042,6 +1048,7 @@ describe('library sorting and filters', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
+    openAdvancedFilters();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
     fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Repetido' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));

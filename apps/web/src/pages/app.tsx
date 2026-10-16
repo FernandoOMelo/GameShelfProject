@@ -100,6 +100,7 @@ export function App() {
   const [retroactiveHours, setRetroactiveHours] = useState('');
   const [activeView, setActiveView] = useState<'library' | 'queue' | 'lists' | 'dashboard' | 'stats' | 'timeline'>('dashboard');
   const [showArchived, setShowArchived] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [dashboardPeriod, setDashboardPeriod] = useState<DashboardPeriod>(initialDashboardPeriod);
@@ -350,6 +351,8 @@ export function App() {
     setDeveloperFilter('ALL');
     setListFilter('ALL');
     setShowArchived(false);
+    // Vindo do painel, abre os filtros avançados para o usuário ver o que foi aplicado.
+    setShowMoreFilters(true);
     setSelectedGame(null);
     setActiveView('library');
   }
@@ -828,7 +831,8 @@ export function App() {
       {selectedGame ? <section className="details-page" aria-labelledby="details-title">
         <button className="back-link" type="button" onClick={() => setSelectedGame(null)}>← Voltar</button>
         <div className="details-navigation"><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) <= 0} onClick={() => navigateDetails(-1)}>← Jogo anterior</Button><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) < 0 || visibleGames.findIndex((game) => game.id === selectedGame.id) >= visibleGames.length - 1} onClick={() => navigateDetails(1)}>Próximo jogo →</Button></div>
-        <div className="details-layout">
+        <div className={`details-layout${selectedGame.backgroundUrl ? ' has-hero' : ''}`}>
+          {selectedGame.backgroundUrl && <div className="details-hero" style={{ backgroundImage: `url("${selectedGame.backgroundUrl}")` }} aria-hidden="true" />}
           <div className="details-cover">{selectedGame.coverUrl ? <img src={selectedGame.coverUrl} alt={`Capa de ${selectedGame.title}`} /> : <span aria-hidden="true">▧</span>}</div>
           <div className="details-content">
             <p className="eyebrow">DETALHES DO JOGO</p>
@@ -865,7 +869,7 @@ export function App() {
               </li>)}</ol>}
             </section>
             {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
-            <div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><Button type="button" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</Button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
+            <div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
           </div>
         </div>
       </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'stats' ? <StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /> : activeView === 'timeline' ? <TimelineView games={games} onSelectGame={showDetails} /> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
@@ -877,15 +881,17 @@ export function App() {
         <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="Buscar jogos" placeholder="Buscar na biblioteca" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         <label className="filter-field">Status<select aria-label="Filtrar por status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Game['status'] | 'ALL')}><option value="ALL">Todos</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label>
         <label className="filter-field">Prioridade<select aria-label="Filtrar por prioridade" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Game['priority'] | 'ALL')}><option value="ALL">Todas</option>{priorities.map((priority) => <option key={priority} value={priority}>{priority === 'LOW' ? 'Baixa' : priority === 'HIGH' ? 'Alta' : 'Normal'}</option>)}</select></label>
+        <div className="filter-field"><span>Ordenar por</span><select aria-label="Ordenar jogos" value={sortBy} onChange={(event) => setSortBy(event.target.value as LibrarySort)}>{(Object.keys(sortLabels) as LibrarySort[]).map((option) => <option key={option} value={option}>{sortLabels[option]}</option>)}</select></div>
+        <span className="game-count">{games.length} {games.length === 1 ? 'jogo' : 'jogos'}</span>
+        <button type="button" className="session-edit" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? 'Ver biblioteca' : 'Ver arquivados'}</button>
+        <button type="button" className="session-edit filter-toggle" aria-expanded={showMoreFilters} aria-controls="library-advanced-filters" onClick={() => setShowMoreFilters((value) => !value)}>{showMoreFilters ? 'Menos filtros' : 'Mais filtros'}</button>
+        <div id="library-advanced-filters" className={`filter-advanced${showMoreFilters ? ' is-open' : ''}`}>
         <div className="filter-field"><span>Plataforma</span><select aria-label="Agrupar por plataforma" value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="ALL">Todas</option>{platforms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Gênero</span><select aria-label="Agrupar por gênero" value={genreFilter} onChange={(event) => setGenreFilter(event.target.value)}><option value="ALL">Todos</option>{genres.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Franquia</span><select aria-label="Agrupar por franquia" value={franchiseFilter} onChange={(event) => setFranchiseFilter(event.target.value)}><option value="ALL">Todas</option>{franchises.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Desenvolvedora</span><select aria-label="Agrupar por desenvolvedora" value={developerFilter} onChange={(event) => setDeveloperFilter(event.target.value)}><option value="ALL">Todas</option>{[...new Set(games.map((game) => game.developer).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b)).map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
         <div className="filter-field"><span>Lista</span><select aria-label="Filtrar por lista" value={listFilter} onChange={(event) => setListFilter(event.target.value)}><option value="ALL">Todas</option>{lists.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Zerado em</span><select aria-label="Filtrar por ano de conclusão" value={completedYearFilter} onChange={(event) => setCompletedYearFilter(event.target.value)}><option value="ALL">Todos</option>{completedYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
-        <div className="filter-field"><span>Ordenar por</span><select aria-label="Ordenar jogos" value={sortBy} onChange={(event) => setSortBy(event.target.value as LibrarySort)}>{(Object.keys(sortLabels) as LibrarySort[]).map((option) => <option key={option} value={option}>{sortLabels[option]}</option>)}</select></div>
-        <span className="game-count">{games.length} {games.length === 1 ? 'jogo' : 'jogos'}</span>
-        <button type="button" className="session-edit" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? 'Ver biblioteca' : 'Ver arquivados'}</button>
         <div className="filter-field"><span>Filtro salvo</span><select aria-label="Aplicar filtro salvo" value={activeSavedFilter} onChange={(event) => applySavedFilter(event.target.value)}><option value="ALL">Nenhum</option>{savedFilters.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{activeSavedFilter !== 'ALL' && <button type="button" className="session-delete" onClick={() => void deleteSavedFilter(activeSavedFilter)}>Excluir filtro</button>}</div>
         {namingFilter
           ? <form className="list-from-filter" onSubmit={(event) => void saveCurrentFilter(event)}><label className="form-field">Nome do filtro<input aria-label="Nome do filtro salvo" required maxLength={100} value={newFilterName} onChange={(event) => setNewFilterName(event.target.value)} autoFocus /></label><Button type="submit">Salvar filtro</Button><button type="button" className="cancel-button" onClick={() => { setNamingFilter(false); setNewFilterName(''); }}>Cancelar</button></form>
@@ -895,6 +901,7 @@ export function App() {
           ? <form className="list-from-filter" onSubmit={(event) => void createListFromFilter(event)}><label className="form-field">Nome da lista<input aria-label="Nome da nova lista" required maxLength={100} value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /></label><Button type="submit">Criar com {visibleGames.length} {visibleGames.length === 1 ? 'jogo' : 'jogos'}</Button><button type="button" className="cancel-button" onClick={() => { setCreatingList(false); setNewListName(''); }}>Cancelar</button></form>
           : <button type="button" className="session-edit" disabled={visibleGames.length === 0} onClick={() => { setListFeedback(''); setCreatingList(true); }}>Criar lista com estes jogos</button>}
         {listFeedback && <p role="status" className="session-feedback">{listFeedback}</p>}
+        </div>
       </section>
       {error && <div className="notice" role="alert">{error}<button type="button" onClick={() => void loadGames()}>Tentar novamente</button></div>}
       {loading ? <p className="empty-state">Carregando biblioteca…</p> : visibleGames.length === 0 ? (
