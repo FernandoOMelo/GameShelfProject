@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 
@@ -268,8 +268,51 @@ describe('library page', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Hades/ }));
 
     expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
+    expect(screen.getByLabelText('Estimativa pessoal (h)')).toHaveValue(40);
     expect(screen.getByLabelText('Estimativa completista (h)')).toHaveValue(80);
-    expect(screen.getByRole('status')).toHaveTextContent('História principal + extras: 40 h');
+    expect(screen.getByRole('status')).toHaveTextContent('pessoal (principal + extras)');
+  });
+
+  it('searches metadata and time estimates while the title is typed', async () => {
+    mockApi();
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/metadata/time-estimates?'))).toBe(true));
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/metadata/games?'))).toBe(true);
+
+    const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
+    fireEvent.click(within(timeResults).getByRole('button', { name: /Hades/ }));
+
+    expect(screen.getByLabelText('Estimativa pessoal (h)')).toHaveValue(40);
+  });
+
+  it('queries HowLongToBeat when opening a game without estimates', async () => {
+    const game = { ...makeGame('00000000-0000-4000-8000-000000000006', 'Hades', 'PLAYING'), estimatedMainHours: null, estimatedCompletionistHours: null, personalEstimatedHours: null };
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Editar jogo' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/metadata/time-estimates?'))).toBe(true));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Hades/ }));
+    expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
+  });
+
+  it('keeps quiet when opening a game that already has all estimates', async () => {
+    const game = { ...makeGame('00000000-0000-4000-8000-000000000005', 'Hades', 'PLAYING'), estimatedMainHours: 25, estimatedCompletionistHours: 80, personalEstimatedHours: 40 };
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Editar jogo' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Título')).toHaveValue('Hades'));
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/metadata/time-estimates?'))).toBe(false);
   });
 
   it('shows an empty state when the API has no games', async () => {

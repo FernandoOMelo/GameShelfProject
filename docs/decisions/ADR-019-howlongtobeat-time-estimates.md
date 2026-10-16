@@ -45,11 +45,23 @@ rede, bloqueio do Cloudflare ou rotação não tratada viram `502` e não afetam
 biblioteca local nem o restante da API. Nada é gravado automaticamente: o usuário
 escolhe um candidato e revisa antes de salvar, como na busca IGDB.
 
-**5. Três estimativas continuam sendo três.** `comp_main` → `estimatedMainHours` e
-`comp_100` → `estimatedCompletionistHours`. `comp_plus` ("história principal +
-extras") aparece no resultado como referência, mas **não** ganha coluna nova: o
-ADR-003 define exatamente três valores, e criar um quarto campo seria mudança de
-domínio sem necessidade demonstrada.
+**5. Três valores do site preenchem as três estimativas do jogo.**
+`comp_main` → `estimatedMainHours`, `comp_plus` ("história principal + extras") →
+`personalEstimatedHours` e `comp_100` → `estimatedCompletionistHours`. O `comp_plus`
+é a melhor aproximação de um "meu tempo" realista (principal + o que se faz de
+extra), então recebe o campo pessoal em vez de virar uma quarta coluna: o ADR-003
+continua com exatamente três valores. Como o preenchimento é uma sugestão para
+revisão — nada é salvo sem confirmação —, a `personalEstimatedHours` segue sendo do
+usuário e mantendo a precedência no planejamento depois de ajustada.
+
+**6. Busca automática, mas só quando não sobrescreve nada.** Na tela de jogo a busca
+por título (IGDB e HowLongToBeat) dispara sozinha conforme o usuário digita, com
+debounce de 450 ms, mínimo de 3 caracteres e sem exibir erro/lista vazia nas buscas
+automáticas — o botão continua existindo como caminho explícito e diagnóstico. Ao
+abrir um jogo existente, o HowLongToBeat é consultado automaticamente **apenas se
+faltar alguma das três estimativas**; jogos já completos abrem sem requisição. A
+busca em tempo real não cancela a outra fonte: cada uma tem seu próprio token, e
+respostas antigas são descartadas.
 
 ## Consequências
 
@@ -62,6 +74,9 @@ domínio sem necessidade demonstrada.
   para o restante do sistema e visível apenas na ação de buscar tempos.
 - O casamento é por nome: o usuário escolhe entre os candidatos retornados, então
   nomes parecidos (remaster, DLC, edição) não são resolvidos automaticamente.
+- A digitação gera consultas ao IGDB e ao HowLongToBeat; o debounce, o mínimo de três
+  caracteres e a checagem de "título já buscado" limitam o volume. A busca automática
+  é silenciosa por design, então uma falha só aparece quando o usuário usa o botão.
 - `profile_steam`, o endpoint de importação da biblioteca Steam e a verificação por
   Steam App ID existem no site, mas ficam fora do escopo (a integração com Steam
   está explicitamente descartada em `docs/product/next-phase.md`).

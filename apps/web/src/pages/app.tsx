@@ -129,7 +129,21 @@ export function App() {
   const [timeEstimateCandidates, setTimeEstimateCandidates] = useState<GameTimeEstimate[]>([]);
   const [timeEstimateError, setTimeEstimateError] = useState('');
   const [searchingTimeEstimates, setSearchingTimeEstimates] = useState(false);
+  const [formTitle, setFormTitle] = useState('');
   const gameFormRef = useRef<HTMLFormElement>(null);
+  const metadataTokenRef = useRef(0);
+  const timesTokenRef = useRef(0);
+  const searchedTitleRef = useRef('');
+
+  /** Busca metadata (IGDB) e tempos (HowLongToBeat) conforme o título é digitado. */
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const query = formTitle.trim();
+    if (query.length < 3) { searchedTitleRef.current = ''; return; }
+    if (query === searchedTitleRef.current) return;
+    const timer = setTimeout(() => void searchWhileTyping(query), 450);
+    return () => clearTimeout(timer);
+  }, [formTitle, dialogOpen]);
 
   async function loadGames() {
     setLoading(true);
@@ -445,8 +459,7 @@ export function App() {
         throw new Error(body.error ?? 'Não foi possível salvar o jogo.');
       }
       if (editing) setSelectedGame(await response.json() as Game);
-      setDialogOpen(false);
-      setEditing(null);
+      closeEditor();
       await loadGames();
       await refreshPlanningViews();
     } catch (cause) {
@@ -456,29 +469,91 @@ export function App() {
     }
   }
 
-  async function searchMetadata() {
-    const title = String(new FormData(gameFormRef.current ?? undefined).get('title') ?? '').trim();
-    if (!title) { setMetadataError('Digite um título para pesquisar.'); return; }
-    setSearchingMetadata(true);
-    setMetadataError('');
-    setMetadataCandidates([]);
-    try {
-      const response = await fetch(`${apiUrl}/metadata/games?query=${encodeURIComponent(title)}`);
-      const body = await response.json() as GameMetadataCandidate[] | { error?: string };
-      if (!response.ok) throw new Error('error' in body ? body.error : undefined);
-      setMetadataCandidates(body as GameMetadataCandidate[]);
-      if ((body as GameMetadataCandidate[]).length === 0) setMetadataError('Nenhum resultado encontrado.');
-    } catch (cause) {
-      setMetadataError(cause instanceof Error && cause.message ? cause.message : 'Não foi possível buscar metadata externa.');
-    } finally {
-      setSearchingMetadata(false);
-    }
+  function errorMessage(cause: unknown, fallback: string) {
+    return cause instanceof Error && cause.message ? cause.message : fallback;
   }
 
   function setGameFormField(name: string, value: string | number | null | undefined) {
     if (value === undefined) return;
+    if (name === 'title') { setFormTitle(value == null ? '' : String(value)); return; }
     const control = gameFormRef.current?.elements.namedItem(name);
     if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) control.value = value == null ? '' : String(value);
+  }
+
+  async function requestMetadata(query: string) {
+    const response = await fetch(`${apiUrl}/metadata/games?query=${encodeURIComponent(query)}`);
+    const body = await response.json() as GameMetadataCandidate[] | { error?: string };
+    if (!response.ok) throw new Error('error' in body ? body.error : undefined);
+    return body as GameMetadataCandidate[];
+  }
+
+  async function requestTimeEstimates(query: string) {
+    const response = await fetch(`${apiUrl}/metadata/time-estimates?query=${encodeURIComponent(query)}`);
+    const body = await response.json() as GameTimeEstimate[] | { error?: string };
+    if (!response.ok) throw new Error('error' in body ? body.error : undefined);
+    return body as GameTimeEstimate[];
+  }
+
+  /** Busca sob demanda (botões). A busca automática usa `searchWhileTyping`. */
+  async function searchMetadata() {
+    const query = formTitle.trim();
+    if (!query) { setMetadataError('Digite um título para pesquisar.'); return; }
+    await runSearch('metadata', query);
+  }
+
+  async function searchTimeEstimates() {
+    const query = formTitle.trim();
+    if (!query) { setTimeEstimateError('Digite um título para pesquisar.'); return; }
+    await runSearch('times', query);
+  }
+
+  /**
+   * `live` é a busca automática (digitação e abertura do jogo): não limpa a lista
+   * nem exibe mensagens, para não piscar a tela a cada tecla. Um token por fonte
+   * descarta respostas fora de ordem sem cancelar a outra busca em andamento.
+   */
+  async function runSearch(source: 'metadata' | 'times', query: string, { live = false }: { live?: boolean } = {}) {
+    if (!live) searchedTitleRef.current = query;
+    if (source === 'metadata') {
+      const token = ++metadataTokenRef.current;
+      setSearchingMetadata(true);
+      setMetadataError('');
+      if (!live) setMetadataCandidates([]);
+      try {
+        const candidates = await requestMetadata(query);
+        if (token !== metadataTokenRef.current) return;
+        setMetadataCandidates(candidates);
+        if (!live && candidates.length === 0) setMetadataError('Nenhum resultado encontrado.');
+      } catch (cause) {
+        if (token !== metadataTokenRef.current || live) return;
+        setMetadataError(errorMessage(cause, 'Não foi possível buscar metadata externa.'));
+      } finally {
+        if (token === metadataTokenRef.current) setSearchingMetadata(false);
+      }
+      return;
+    }
+
+    const token = ++timesTokenRef.current;
+    setSearchingTimeEstimates(true);
+    setTimeEstimateError('');
+    if (!live) setTimeEstimateCandidates([]);
+    try {
+      const candidates = await requestTimeEstimates(query);
+      if (token !== timesTokenRef.current) return;
+      setTimeEstimateCandidates(candidates);
+      if (!live && candidates.length === 0) setTimeEstimateError('Nenhum tempo encontrado no HowLongToBeat.');
+    } catch (cause) {
+      if (token !== timesTokenRef.current || live) return;
+      setTimeEstimateError(errorMessage(cause, 'Não foi possível buscar os tempos no HowLongToBeat.'));
+    } finally {
+      if (token === timesTokenRef.current) setSearchingTimeEstimates(false);
+    }
+  }
+
+  async function searchWhileTyping(query: string) {
+    if (query === searchedTitleRef.current) return;
+    searchedTitleRef.current = query;
+    await Promise.allSettled([runSearch('metadata', query, { live: true }), runSearch('times', query, { live: true })]);
   }
 
   function applyMetadata(candidate: GameMetadataCandidate) {
@@ -491,35 +566,18 @@ export function App() {
     setGameFormField('publisher', candidate.publisher);
     setGameFormField('franchiseName', candidate.franchise);
     setGameFormField('genreNames', candidate.genres?.join(', '));
+    searchedTitleRef.current = candidate.title.trim();
     setMetadataCandidates([]);
     setMetadataError('Metadata preenchida para revisão. As plataformas do catálogo não foram selecionadas como suas cópias.');
   }
 
-  async function searchTimeEstimates() {
-    const title = String(new FormData(gameFormRef.current ?? undefined).get('title') ?? '').trim();
-    if (!title) { setTimeEstimateError('Digite um título para pesquisar.'); return; }
-    setSearchingTimeEstimates(true);
-    setTimeEstimateError('');
-    setTimeEstimateCandidates([]);
-    try {
-      const response = await fetch(`${apiUrl}/metadata/time-estimates?query=${encodeURIComponent(title)}`);
-      const body = await response.json() as GameTimeEstimate[] | { error?: string };
-      if (!response.ok) throw new Error('error' in body ? body.error : undefined);
-      setTimeEstimateCandidates(body as GameTimeEstimate[]);
-      if ((body as GameTimeEstimate[]).length === 0) setTimeEstimateError('Nenhum tempo encontrado no HowLongToBeat.');
-    } catch (cause) {
-      setTimeEstimateError(cause instanceof Error && cause.message ? cause.message : 'Não foi possível buscar os tempos no HowLongToBeat.');
-    } finally {
-      setSearchingTimeEstimates(false);
-    }
-  }
-
   function applyTimeEstimate(candidate: GameTimeEstimate) {
     setGameFormField('estimatedMainHours', candidate.mainHours);
+    setGameFormField('personalEstimatedHours', candidate.mainExtraHours);
     setGameFormField('estimatedCompletionistHours', candidate.completionistHours);
+    searchedTitleRef.current = formTitle.trim();
     setTimeEstimateCandidates([]);
-    const extra = candidate.mainExtraHours != null ? ` História principal + extras: ${candidate.mainExtraHours} h.` : '';
-    setTimeEstimateError(`Tempos preenchidos para revisão.${extra} A estimativa pessoal continua sendo sua.`);
+    setTimeEstimateError('Tempos preenchidos para revisão: principal, pessoal (principal + extras) e completista.');
   }
 
   async function submitSession(event: FormEvent<HTMLFormElement>) {
@@ -641,14 +699,27 @@ export function App() {
     }
   }
 
+  function closeEditor() {
+    setDialogOpen(false);
+    setEditing(null);
+  }
+
   function openEditor(game: Game | null = null) {
+    const title = game?.title ?? '';
     setEditing(game);
     setFormStatus(game?.status ?? 'BACKLOG');
+    setFormTitle(title);
     setMetadataCandidates([]);
     setMetadataError('');
     setTimeEstimateCandidates([]);
     setTimeEstimateError('');
+    setSearchingMetadata(false);
+    setSearchingTimeEstimates(false);
+    searchedTitleRef.current = title.trim();
     setDialogOpen(true);
+    const missingEstimates = game != null
+      && (game.estimatedMainHours == null || game.personalEstimatedHours == null || game.estimatedCompletionistHours == null);
+    if (missingEstimates) void runSearch('times', title, { live: true });
   }
 
   function showDetails(game: Game) {
@@ -808,9 +879,9 @@ export function App() {
         </button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
       )}
       </>}
-      {dialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-labelledby="game-dialog-title"><header><div><p className="eyebrow">BIBLIOTECA</p><h2 id="game-dialog-title">{editing ? 'Editar jogo' : 'Adicionar jogo'}</h2></div><button className="dialog-close" type="button" aria-label="Fechar" onClick={() => setDialogOpen(false)}>×</button></header>
-        <form ref={gameFormRef} onSubmit={submitGame}><label className="form-field form-wide">Título<input name="title" required maxLength={200} defaultValue={editing?.title ?? ''} autoFocus /></label>
-          <div className="metadata-search form-wide"><Button type="button" disabled={searchingMetadata} onClick={() => void searchMetadata()}>{searchingMetadata ? 'Buscando…' : 'Buscar metadata'}</Button><small>Os dados encontrados serão preenchidos para revisão e só serão salvos quando você salvar o jogo.</small>{metadataError && <p role="status">{metadataError}</p>}{metadataCandidates.length > 0 && <ul aria-label="Resultados de metadata">{metadataCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyMetadata(candidate)}>{candidate.coverUrl && <img src={candidate.coverUrl} alt="" />}<span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.developer].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul>}</div>
+      {dialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}><section className="game-dialog" role="dialog" aria-modal="true" aria-labelledby="game-dialog-title"><header><div><p className="eyebrow">BIBLIOTECA</p><h2 id="game-dialog-title">{editing ? 'Editar jogo' : 'Adicionar jogo'}</h2></div><button className="dialog-close" type="button" aria-label="Fechar" onClick={closeEditor}>×</button></header>
+        <form ref={gameFormRef} onSubmit={submitGame}><label className="form-field form-wide">Título<input name="title" required maxLength={200} value={formTitle} onChange={(event) => setFormTitle(event.target.value)} autoFocus /></label>
+          <div className="metadata-search form-wide"><Button type="button" disabled={searchingMetadata} onClick={() => void searchMetadata()}>{searchingMetadata ? 'Buscando…' : 'Buscar metadata'}</Button><small>A busca acontece conforme você digita. Os dados encontrados são preenchidos para revisão e só são salvos quando você salvar o jogo.</small>{metadataError && <p role="status">{metadataError}</p>}{metadataCandidates.length > 0 && <ul aria-label="Resultados de metadata">{metadataCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyMetadata(candidate)}>{candidate.coverUrl && <img src={candidate.coverUrl} alt="" />}<span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.developer].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul>}</div>
           <label className="form-field">Desenvolvedora<input name="developer" maxLength={200} defaultValue={editing?.developer ?? ''} /></label><label className="form-field">Publicadora<input name="publisher" maxLength={200} defaultValue={editing?.publisher ?? ''} /></label>
           <label className="form-field">Ano<input name="releaseYear" type="number" min="1" max="9999" defaultValue={editing?.releaseYear ?? ''} /></label><label className="form-field">Capa<input name="coverUrl" type="text" inputMode="url" maxLength={2048} defaultValue={editing?.coverUrl ?? ''} /><small>Aceita uma URL ou um caminho local do GameShelf, como /media/imagem.jpg.</small></label><label className="form-field form-wide">Imagem de fundo<input name="backgroundUrl" type="text" inputMode="url" maxLength={2048} defaultValue={editing?.backgroundUrl ?? ''} /></label>
           <label className="form-field form-wide">Franquia<input name="franchiseName" maxLength={200} defaultValue={franchises.find((franchise) => franchise.id === editing?.franchiseId)?.name ?? ''} placeholder="Ex.: The Legend of Zelda" /></label>
@@ -824,10 +895,10 @@ export function App() {
           <label className="form-field checkbox-field"><span>Favorito</span><input type="checkbox" name="favorite" defaultChecked={editing?.favorite ?? false} /></label><label className="form-field checkbox-field"><span>Jogo do ano (exige data que zerei)</span><input type="checkbox" name="gameOfYear" defaultChecked={editing?.gameOfYear ?? false} /></label>
           <label className="form-field">Estimativa principal (h)<input name="estimatedMainHours" type="number" min="0" step="0.25" defaultValue={editing?.estimatedMainHours ?? ''} /></label><label className="form-field">Estimativa completista (h)<input name="estimatedCompletionistHours" type="number" min="0" step="0.25" defaultValue={editing?.estimatedCompletionistHours ?? ''} /></label>
           <label className="form-field">Estimativa pessoal (h)<input name="personalEstimatedHours" type="number" min="0" step="0.25" defaultValue={editing?.personalEstimatedHours ?? ''} /></label>
-          <div className="metadata-search form-wide"><Button type="button" disabled={searchingTimeEstimates} onClick={() => void searchTimeEstimates()}>{searchingTimeEstimates ? 'Buscando…' : 'Buscar tempos (HowLongToBeat)'}</Button><small>Preenche as estimativas principal e completista para revisão; a estimativa pessoal continua sendo sua.</small>{timeEstimateError && <p role="status">{timeEstimateError}</p>}{timeEstimateCandidates.length > 0 && <ul aria-label="Resultados de tempo">{timeEstimateCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyTimeEstimate(candidate)}><span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.mainHours != null ? `Principal ${candidate.mainHours} h` : null, candidate.completionistHours != null ? `Completista ${candidate.completionistHours} h` : null].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul>}</div>
+          <div className="metadata-search form-wide"><Button type="button" disabled={searchingTimeEstimates} onClick={() => void searchTimeEstimates()}>{searchingTimeEstimates ? 'Buscando…' : 'Buscar tempos (HowLongToBeat)'}</Button><small>A busca acontece conforme você digita. Preenche principal, pessoal (principal + extras) e completista para revisão.</small>{timeEstimateError && <p role="status">{timeEstimateError}</p>}{timeEstimateCandidates.length > 0 && <ul aria-label="Resultados de tempo">{timeEstimateCandidates.map((candidate) => <li key={candidate.providerId}><button type="button" onClick={() => applyTimeEstimate(candidate)}><span><strong>{candidate.title}</strong><small>{[candidate.releaseYear, candidate.mainHours != null ? `Principal ${candidate.mainHours} h` : null, candidate.mainExtraHours != null ? `+extras ${candidate.mainExtraHours} h` : null, candidate.completionistHours != null ? `Completista ${candidate.completionistHours} h` : null].filter(Boolean).join(' · ')}</small></span></button></li>)}</ul>}</div>
           <label className="form-field form-wide">Descrição<textarea name="description" rows={2} maxLength={10000} defaultValue={editing?.description ?? ''} /></label>
           <label className="form-field form-wide">Notas<textarea name="notes" rows={2} maxLength={10000} defaultValue={editing?.notes ?? ''} /></label>
-          <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={() => setDialogOpen(false)}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
+          <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={closeEditor}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
         </form></section></div>}
     </main>
   );

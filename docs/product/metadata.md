@@ -82,11 +82,17 @@ devolve até dez candidatos com `mainHours`, `mainExtraHours` e `completionistHo
 (em horas, convertidas dos segundos do site) e, quando disponível, `releaseYear`.
 Diferente do IGDB, não exige credenciais e fica sempre disponível.
 
-No formulário da biblioteca, o botão "Buscar tempos (HowLongToBeat)" usa o título
-digitado, mostra os candidatos e, escolhido um, preenche **Estimativa principal** e
-**Estimativa completista** para revisão. "História principal + extras" aparece como
-referência e não é gravado. A **Estimativa pessoal** nunca é preenchida
-automaticamente: é a adaptação do usuário e tem precedência (ADR-003).
+No formulário da biblioteca, a busca por título acontece **automaticamente** conforme
+se digita (debounce de 450 ms, a partir de 3 caracteres) e também pelos botões
+"Buscar metadata" e "Buscar tempos (HowLongToBeat)", que servem de caminho explícito
+e mostram erros e listas vazias. Escolhido um candidato de tempo, são preenchidas
+**Estimativa principal** (`comp_main`), **Estimativa pessoal** (`comp_plus`) e
+**Estimativa completista** (`comp_100`) para revisão. O preenchimento é uma sugestão:
+nada é salvo sem confirmação e a `personalEstimatedHours` ajustada pelo usuário
+mantém a precedência no planejamento (ADR-003).
+
+Ao abrir um jogo existente, o HowLongToBeat é consultado sozinho **apenas quando falta
+alguma das três estimativas**; jogos já completos abrem sem requisição.
 
 O HowLongToBeat não tem API pública; o cliente descobre o endpoint no build do site e
 renova um token de curta duração. Se o site mudar ou bloquear a requisição, a busca
