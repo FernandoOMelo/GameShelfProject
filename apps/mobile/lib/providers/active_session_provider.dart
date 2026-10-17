@@ -72,7 +72,7 @@ class ActiveSessionNotifier extends Notifier<ActiveSessionState> {
       current.session!.id,
       {
         'endedAt': now.toIso8601String(),
-        if (progress != null) 'progress': progress,
+        'progress': ?progress,
         if (location != null && location.isNotEmpty) 'location': location,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (keyDecisions != null && keyDecisions.isNotEmpty) 'keyDecisions': keyDecisions,

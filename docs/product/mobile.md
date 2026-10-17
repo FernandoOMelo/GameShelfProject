@@ -33,9 +33,11 @@ O celular serve principalmente para registrar sessões, consultar o jogo atual e
 
 O fluxo de registro deve ser concluído em poucos toques.
 
-Não transformar o mobile em uma cópia reduzida do dashboard desktop. Consultar a
-biblioteca e o detalhe de um jogo é permitido — o que não entra no celular é a
-edição: cadastrar e alterar jogos, listas e metas continua só no desktop. Ver ADR-016.
+Como decidido em [ADR-022](../decisions/ADR-022-mobile-web-parity.md), o app Flutter
+tem **paridade funcional com a web**: além de consultar a biblioteca, o detalhe e os
+indicadores, o celular também cria e altera jogos, listas e metas. O princípio de
+"poucos toques" continua valendo para o registro de sessão, que segue sendo o fluxo
+primário.
 
 ## PWA
 
@@ -73,18 +75,30 @@ App nativo Android em Dart/Flutter, com Riverpod para estado e dio para HTTP. O
 endereço do servidor é configurável em Ajustes e o app aceita `http://`: o manifest
 declara `usesCleartextTraffic`, porque o endereço é escolhido por você em tempo de
 execução (não dá para restringir por host) e o self-hosted documentado
-(`http://<ip-do-host>:8080`) não usa TLS. Quatro abas:
+(`http://<ip-do-host>:8080`) não usa TLS.
+
+Cinco abas, com paridade funcional em relação à web
+([ADR-022](../decisions/ADR-022-mobile-web-parity.md)):
 
 - **Jogando**: jogo atual com cronômetro, iniciar e encerrar sessão;
-- **Biblioteca**: lista com busca por título, capa e status; abre o detalhe do jogo
-  com estimativas, total jogado e histórico de sessões (somente leitura). O ícone de
-  relógio no card (e a ação na barra do detalhe) abre o **registro retroativo**:
-  escolher o dia — Hoje, Ontem ou outra data — e a duração em um toque. A sessão
-  entra no dia escolhido, terminando no horário atual;
-- **Fila**: fila ordenável por arrastar (pela alça); deslizar um item para a esquerda
-  remove da fila e o aviso oferece **Desfazer**, que devolve o jogo à posição
-  original;
-- **Progresso**: indicadores e jogos em andamento.
+- **Biblioteca**: busca, filtros (status, prioridade, plataforma, gênero, franquia,
+  lista, ano de conclusão, arquivados) e ordenação, sobre `GET /games`; cadastro,
+  edição e exclusão de jogos, com busca de metadata (IGDB) e tempos (HowLongToBeat)
+  nas mesmas rotas da web. O detalhe do jogo traz estimativas, total jogado, histórico
+  de sessões (registrar, editar, excluir), horas retroativas, favorito e entrada/
+  saída da fila. O ícone de relógio no card abre o **registro retroativo** — dia
+  (Hoje, Ontem ou outra data) e duração em um toque, com a sessão terminando no
+  horário atual;
+- **Fila**: ordenável por arrastar (pela alça) e por ações de mover para cima/baixo;
+  deslizar um item para a esquerda remove e o aviso oferece **Desfazer**, que devolve
+  o jogo à posição original; inclui jogos da biblioteca e monta a fila a partir de
+  uma lista;
+- **Progresso**: painel com indicadores, período, sugestão do próximo jogo, missão
+  principal (definir/editar objetivo e lista acompanhada), metas (criar, ajustar alvo,
+  excluir) e meta semanal (minutos disponíveis por semana, usados na previsão do
+  backlog);
+- **Mais**: Listas (ver, criar, renomear, excluir e editar os jogos), Estatísticas,
+  Atividade (linha do tempo paginada), Metas e Configurações.
 
 ### Sem conexão no app Flutter
 

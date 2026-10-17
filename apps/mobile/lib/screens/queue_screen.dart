@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/queue_provider.dart';
-import '../providers/active_session_provider.dart';
+import '../core/queue_api.dart';
+import '../models/game.dart';
+import '../models/game_list.dart';
 import '../models/queue_item.dart';
+import '../providers/active_session_provider.dart';
+import '../providers/games_provider.dart';
+import '../providers/lists_provider.dart';
+import '../providers/queue_provider.dart';
 import '../widgets/game_cover.dart';
 
 class QueueScreen extends ConsumerWidget {
@@ -13,12 +18,216 @@ class QueueScreen extends ConsumerWidget {
     final queueAsync = ref.watch(queueProvider);
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openAddSource(context, ref),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Adicionar'),
+      ),
       body: queueAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _ErrorView(onRetry: () => ref.invalidate(queueProvider)),
         data: (items) => items.isEmpty
             ? const _EmptyView()
             : _QueueList(items: items),
+      ),
+    );
+  }
+
+  Future<void> _openAddSource(BuildContext context, WidgetRef ref) async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _AddSourceSheet(),
+    );
+    if (!context.mounted || source == null) return;
+    if (source == 'library') {
+      await _pickFromLibrary(context, ref);
+    } else if (source == 'list') {
+      await _pickList(context, ref);
+    }
+  }
+
+  Future<void> _pickFromLibrary(BuildContext context, WidgetRef ref) async {
+    final queue = ref.read(queueProvider).valueOrNull ?? const <QueueItem>[];
+    final inQueue = queue.map((item) => item.game.id).toSet();
+    final games = (ref.read(gamesProvider).valueOrNull ?? const <Game>[])
+        .where((game) => game.owned && !game.archived && !inQueue.contains(game.id))
+        .toList()
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+
+    if (games.isEmpty) {
+      _snack(context, 'Nenhum jogo disponível para adicionar à fila.');
+      return;
+    }
+
+    final chosen = await showModalBottomSheet<Game>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E1E2A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _LibraryPicker(games: games),
+    );
+    if (chosen == null) return;
+    try {
+      await ref.read(queueProvider.notifier).add(chosen);
+      if (context.mounted) _snack(context, '${chosen.title} entrou na fila.');
+    } catch (_) {
+      if (context.mounted) _snack(context, 'Não foi possível adicionar à fila.');
+    }
+  }
+
+  Future<void> _pickList(BuildContext context, WidgetRef ref) async {
+    final lists = ref.read(listsProvider).valueOrNull ?? const <GameListSummary>[];
+    if (lists.isEmpty) {
+      _snack(context, 'Crie uma lista na aba Mais para montar a fila a partir dela.');
+      return;
+    }
+    final chosen = await showDialog<GameListSummary>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Montar a fila a partir de uma lista'),
+        children: [
+          for (final list in lists)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, list),
+              child: Text('${list.name} (${list.gameCount})'),
+            ),
+        ],
+      ),
+    );
+    if (chosen == null) return;
+    try {
+      final result = await QueueApi.addFromList(chosen.id);
+      await ref.read(queueProvider.notifier).refresh();
+      if (context.mounted) {
+        _snack(
+          context,
+          '${result.added} ${result.added == 1 ? 'jogo entrou' : 'jogos entraram'} na fila'
+          '${result.skipped > 0 ? ' · ${result.skipped} ignorado(s)' : ''}.',
+        );
+      }
+    } catch (_) {
+      if (context.mounted) _snack(context, 'Não foi possível montar a fila a partir da lista.');
+    }
+  }
+
+  static void _snack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// Escolha da origem dos jogos adicionados à fila.
+class _AddSourceSheet extends StatelessWidget {
+  const _AddSourceSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Adicionar à fila',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.video_library_outlined, color: Color(0xFF6C63FF)),
+            title: const Text('Da biblioteca'),
+            subtitle: const Text('Escolha um jogo da sua coleção'),
+            onTap: () => Navigator.pop(context, 'library'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.bookmarks_outlined, color: Color(0xFF6C63FF)),
+            title: const Text('De uma lista'),
+            subtitle: const Text('Enfileira os jogos elegíveis da lista'),
+            onTap: () => Navigator.pop(context, 'list'),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+}
+
+/// Seletor de jogo da biblioteca com busca.
+class _LibraryPicker extends StatefulWidget {
+  final List<Game> games;
+
+  const _LibraryPicker({required this.games});
+
+  @override
+  State<_LibraryPicker> createState() => _LibraryPickerState();
+}
+
+class _LibraryPickerState extends State<_LibraryPicker> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final term = _search.text.trim().toLowerCase();
+    final visible = widget.games
+        .where((game) => term.isEmpty || game.title.toLowerCase().contains(term))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Escolher jogo',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _search,
+                decoration: const InputDecoration(
+                  hintText: 'Buscar',
+                  prefixIcon: Icon(Icons.search_rounded, color: Color(0xFF6B6B7E)),
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: visible.isEmpty
+                  ? const Center(
+                      child: Text('Nenhum jogo encontrado',
+                          style: TextStyle(color: Color(0xFF8888A0))),
+                    )
+                  : ListView.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (_, index) => ListTile(
+                        leading: GameCover(coverUrl: visible[index].coverUrl, width: 36, height: 46),
+                        title: Text(visible[index].title),
+                        onTap: () => Navigator.pop(context, visible[index]),
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -78,6 +287,10 @@ class _QueueListState extends ConsumerState<_QueueList> {
                 key: ValueKey(item.game.id),
                 item: item,
                 position: i + 1,
+                canMoveUp: i > 0,
+                canMoveDown: i < _items.length - 1,
+                onMoveUp: () => _moveBy(i, -1),
+                onMoveDown: () => _moveBy(i, 1),
                 onRemove: () => _remove(item),
               ),
             );
@@ -92,7 +305,22 @@ class _QueueListState extends ConsumerState<_QueueList> {
       final item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
     });
-    final gameIds = _items.map((e) => e.game.id).toList();
+    _persistOrder();
+  }
+
+  /// Move o item uma posição para cima ou para baixo (equivalente às setas da web).
+  void _moveBy(int index, int delta) {
+    final target = index + delta;
+    if (target < 0 || target >= _items.length) return;
+    setState(() {
+      final item = _items.removeAt(index);
+      _items.insert(target, item);
+    });
+    _persistOrder();
+  }
+
+  void _persistOrder() {
+    final gameIds = _items.map((item) => item.game.id).toList();
     ref.read(queueProvider.notifier).reorder(gameIds);
   }
 
@@ -169,12 +397,20 @@ class _RemoveBackground extends StatelessWidget {
 class _QueueCard extends ConsumerWidget {
   final QueueItem item;
   final int position;
+  final bool canMoveUp;
+  final bool canMoveDown;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
   final VoidCallback onRemove;
 
   const _QueueCard({
     super.key,
     required this.item,
     required this.position,
+    required this.canMoveUp,
+    required this.canMoveDown,
+    required this.onMoveUp,
+    required this.onMoveDown,
     required this.onRemove,
   });
 
@@ -242,13 +478,32 @@ class _QueueCard extends ConsumerWidget {
                 labelStyle: TextStyle(color: Color(0xFF48BB78)),
                 padding: EdgeInsets.zero,
               ),
-            const SizedBox(width: 4),
-            IconButton(
-              onPressed: onRemove,
-              icon: const Icon(Icons.remove_circle_outline, size: 20),
-              color: const Color(0xFF6B6B7E),
+            PopupMenuButton<String>(
+              tooltip: 'Ações',
+              icon: const Icon(Icons.more_vert_rounded, size: 20, color: Color(0xFF6B6B7E)),
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onSelected: (value) {
+                if (value == 'up') onMoveUp();
+                if (value == 'down') onMoveDown();
+                if (value == 'remove') onRemove();
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'up',
+                  enabled: canMoveUp,
+                  child: const Text('Mover para cima'),
+                ),
+                PopupMenuItem(
+                  value: 'down',
+                  enabled: canMoveDown,
+                  child: const Text('Mover para baixo'),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: Text('Remover', style: TextStyle(color: Color(0xFFE53E3E))),
+                ),
+              ],
             ),
           ],
         ),
@@ -292,7 +547,7 @@ class _EmptyView extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Adicione jogos no site para ver aqui',
+            'Adicione jogos pela biblioteca ou por uma lista',
             style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 14),
           ),
         ],

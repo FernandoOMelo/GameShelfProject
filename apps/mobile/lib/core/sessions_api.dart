@@ -52,6 +52,10 @@ class SessionsApi {
     }
   }
 
+  static Future<void> remove(String gameId, String sessionId) async {
+    await ApiClient.instance.delete('/games/$gameId/sessions/$sessionId');
+  }
+
   static Future<void> _enqueueCreate(String gameId, Map<String, dynamic> body) async {
     await LocalDb.instance.enqueue(OfflineOp(
       method: 'POST',

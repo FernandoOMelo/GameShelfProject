@@ -18,4 +18,25 @@ class QueueApi {
   static Future<void> reorder(List<String> gameIds) async {
     await ApiClient.instance.put('/queue/order', data: {'gameIds': gameIds});
   }
+
+  /// Enfileira os jogos elegíveis de uma lista, ao final da fila (ADR-013).
+  /// Devolve quantos entraram e quantos foram ignorados.
+  static Future<QueueFromListResult> addFromList(String listId) async {
+    final response = await ApiClient.instance.post<Map<String, dynamic>>(
+      '/queue/from-list',
+      data: {'listId': listId},
+    );
+    final body = response.data!;
+    return QueueFromListResult(
+      added: body['added'] as int,
+      skipped: body['skipped'] as int,
+    );
+  }
+}
+
+class QueueFromListResult {
+  final int added;
+  final int skipped;
+
+  const QueueFromListResult({required this.added, required this.skipped});
 }

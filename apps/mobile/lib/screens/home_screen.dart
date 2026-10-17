@@ -5,6 +5,7 @@ import '../widgets/offline_banner.dart';
 import '../widgets/session_timer.dart';
 import 'end_session_sheet.dart';
 import 'library_screen.dart';
+import 'more_screen.dart';
 import 'now_playing_screen.dart';
 import 'progress_screen.dart';
 import 'queue_screen.dart';
@@ -25,6 +26,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     LibraryScreen(),
     QueueScreen(),
     ProgressScreen(),
+    MoreScreen(),
   ];
 
   @override
@@ -75,6 +77,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: Icon(Icons.bar_chart_outlined),
             selectedIcon: Icon(Icons.bar_chart_rounded),
             label: 'Progresso',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.more_horiz_outlined),
+            selectedIcon: Icon(Icons.more_horiz_rounded),
+            label: 'Mais',
           ),
         ],
       ),

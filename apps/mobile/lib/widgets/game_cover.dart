@@ -32,7 +32,7 @@ class GameCover extends StatelessWidget {
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, e) => _placeholder(),
+        errorBuilder: (_, _, _) => _placeholder(),
         loadingBuilder: (_, child, progress) {
           if (progress == null) return child;
           return _placeholder();
