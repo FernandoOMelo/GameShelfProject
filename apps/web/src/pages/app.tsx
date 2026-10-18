@@ -884,14 +884,33 @@ export function App() {
     if (next) openGame(next);
   }
 
+  // Lançar soma ao que já existe; corrigir grava o valor informado; zerar limpa.
+  // São três intenções diferentes sobre o mesmo campo, e sem as duas últimas um
+  // lançamento errado ficava permanente.
+  async function changeRetroactiveHours(mode: 'add' | 'set' | 'clear') {
+    if (!selectedGame) return;
+    const current = selectedGame.retroactivePlayedHours ?? 0;
+    if (mode === 'clear') {
+      if (current === 0) return;
+      await updateGame(selectedGame, { retroactivePlayedHours: 0 });
+      setRetroactiveHours('');
+      setSessionFeedback('Horas retroativas zeradas.');
+      return;
+    }
+    const amount = Number(retroactiveHours);
+    if (!Number.isFinite(amount) || amount < 0 || (mode === 'add' && amount <= 0)) {
+      setSessionFeedback('Informe um número de horas válido.');
+      return;
+    }
+    const next = mode === 'add' ? current + amount : amount;
+    await updateGame(selectedGame, { retroactivePlayedHours: Number(next.toFixed(2)) });
+    setRetroactiveHours('');
+    setSessionFeedback(mode === 'add' ? 'Horas retroativas adicionadas.' : 'Horas retroativas corrigidas.');
+  }
+
   async function addRetroactiveHours(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedGame) return;
-    const amount = Number(retroactiveHours);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    await updateGame(selectedGame, { retroactivePlayedHours: Number(((selectedGame.retroactivePlayedHours ?? 0) + amount).toFixed(2)) });
-    setRetroactiveHours('');
-    setSessionFeedback('Horas retroativas adicionadas.');
+    await changeRetroactiveHours('add');
   }
 
   function prepareGameStatus(game: Game, status: Game['status']) {
@@ -1033,7 +1052,7 @@ export function App() {
                 onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
               />
             </Suspense>
-            <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Adicionar horas retroativas<input aria-label="Horas retroativas" type="number" min="0.01" step="0.01" required value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /></label><Button type="submit">Lançar horas</Button></form><h3>Sessões</h3>
+            <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Horas retroativas<input aria-label="Horas retroativas" type="number" min="0" step="0.01" value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /><small>Lançar soma ao total; corrigir substitui pelo valor informado.</small></label><div className="form-wide session-actions"><Button type="submit">Lançar horas</Button><button type="button" className="session-edit" onClick={() => void changeRetroactiveHours('set')}>Corrigir total</button><button type="button" className="session-delete" disabled={(selectedGame.retroactivePlayedHours ?? 0) === 0} onClick={() => void changeRetroactiveHours('clear')}>Zerar</button></div></form><h3>Sessões</h3>
               {sessions.find((session) => session.endedAt === null) ? <div className="session-timer"><div><p className="eyebrow">SESSÃO EM ANDAMENTO</p><strong>{formatElapsed(sessions.find((session) => session.endedAt === null)!.startedAt, clockNow)}</strong></div><Button type="button" disabled={savingSession} onClick={() => void finishActiveSession()}>{savingSession ? 'Encerrando…' : 'Encerrar sessão'}</Button></div> : <div className="session-timer"><div><p className="eyebrow">PRÓXIMA SESSÃO</p><strong>Pronto para jogar?</strong></div><Button type="button" disabled={savingSession} onClick={() => void startOrContinueSession()}>{savingSession ? 'Iniciando…' : 'Continuar jogando'}</Button></div>}
               {editingSession !== null && <form key={editingSession.id} className="session-form" onSubmit={submitSession}>
                 <label className="form-field">Início<input name="startedAt" type="datetime-local" required defaultValue={toDateTimeLocal(editingSession ? new Date(editingSession.startedAt) : new Date(Date.now() - 60 * 60_000))} /></label>

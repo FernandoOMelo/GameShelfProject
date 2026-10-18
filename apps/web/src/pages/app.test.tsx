@@ -4,6 +4,13 @@ import { App } from './app';
 
 const fetchMock = vi.fn();
 
+/** Corpo do último PATCH enviado para a URL, para verificar o que a tela gravou. */
+function bodyOf(url: string): unknown {
+  const calls = fetchMock.mock.calls.filter(([called, init]) => called === url && init?.method === 'PATCH');
+  const last = calls.at(-1);
+  return last ? JSON.parse(String(last[1]?.body)) : undefined;
+}
+
 function makeGame(id: string, title: string, status: string = 'BACKLOG') {
   return {
     id, title, description: null, coverUrl: null, backgroundUrl: null, releaseYear: null,
@@ -523,6 +530,28 @@ describe('library page', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/platforms/00000000-0000-4000-8000-000000000022', expect.objectContaining({ method: 'PATCH' })));
     const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/platforms/00000000-0000-4000-8000-000000000022' && init?.method === 'PATCH');
     expect(JSON.parse(String(request?.[1]?.body))).toEqual({ parentId: '00000000-0000-4000-8000-000000000020' });
+  });
+
+  it('corrects and clears retroactive hours instead of only adding to them', async () => {
+    const game = { ...makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING'), retroactivePlayedHours: 10 };
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    await screen.findByRole('heading', { name: 'Horas Jogadas' });
+
+    // Lançar soma ao total existente.
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas retroativas' }), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar horas' }));
+    await waitFor(() => expect(bodyOf(`/api/games/${game.id}`)).toMatchObject({ retroactivePlayedHours: 15 }));
+
+    // Corrigir grava o valor informado, sem somar.
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas retroativas' }), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Corrigir total' }));
+    await waitFor(() => expect(bodyOf(`/api/games/${game.id}`)).toMatchObject({ retroactivePlayedHours: 3 }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zerar' }));
+    await waitFor(() => expect(bodyOf(`/api/games/${game.id}`)).toMatchObject({ retroactivePlayedHours: 0 }));
   });
 
   it('associates a platform and starts a playthrough from the game detail page', async () => {
