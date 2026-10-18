@@ -127,6 +127,13 @@
             "when": 1792499461366,
             "tag": "0018_external_match_queue",
             "breakpoints": true
+        },
+        {
+            "idx": 18,
+            "version": "7",
+            "when": 1792499461366,
+            "tag": "0019_platform_groups",
+            "breakpoints": true
         }
     ]
 }

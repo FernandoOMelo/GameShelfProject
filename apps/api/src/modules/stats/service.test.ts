@@ -79,3 +79,59 @@ describe('main challenge progress', () => {
     expect(buildChallengeProgress({ title: 'x', listId: id(9) }, { name: 'Vazia', gameIds: [] }, statuses).percent).toBe(0);
   });
 });
+
+// Agregação por grupo de plataforma (ADR-025).
+describe('estatísticas por grupo de plataforma', () => {
+  const PC = '00000000-0000-4000-8000-000000000f01';
+  const STEAM = '00000000-0000-4000-8000-000000000f02';
+  const PS5 = '00000000-0000-4000-8000-000000000f03';
+  const platforms = [
+    { id: PC, name: 'PC', parentId: null },
+    { id: STEAM, name: 'Steam', parentId: PC },
+    { id: PS5, name: 'PlayStation 5', parentId: null },
+  ];
+  const link = (gameId: string, platformId: string, minutes: number | null) => ({
+    id: `${gameId}-${platformId}`, gameId, platformId, edition: null, format: null, owned: true, isPrimary: false,
+    externalSource: 'achievist', externalId: '1', externalAccountLabel: null, externalPlaytimeMinutes: minutes,
+    externalLastPlayedAt: null, externalSyncedAt: null, notes: null,
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  it('soma no grupo as horas dos jogos zerados em um subgrupo', () => {
+    const games = [
+      { ...base, id: '00000000-0000-4000-8000-000000000a01', platformId: STEAM },
+      { ...base, id: '00000000-0000-4000-8000-000000000a02', platformId: PC },
+      { ...base, id: '00000000-0000-4000-8000-000000000a03', platformId: PS5 },
+    ];
+    const result = buildStats({ games, sessions: [], platforms, genres: [], today: '2026-01-01' });
+    const names = result.byPlatform.map((entry) => `${entry.name}:${entry.completedCount}`).sort();
+    expect(names).toEqual(['PC:2', 'PlayStation 5:1']);
+  });
+
+  it('soma no grupo o tempo informado por plataforma, sem duplicar', () => {
+    const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01' }];
+    const result = buildStats({
+      games, sessions: [], platforms, genres: [], today: '2026-01-01',
+      gamePlatforms: [
+        link(games[0]!.id, STEAM, 120),
+        link(games[0]!.id, PC, 60),
+        link(games[0]!.id, PS5, 30),
+      ],
+    });
+    expect(result.library.externalPlaytimeHours).toBe(3.5);
+    expect(result.library.externalPlaytimeByPlatform).toEqual([
+      { key: PC, name: 'PC', hours: 3 },
+      { key: PS5, name: 'PlayStation 5', hours: 0.5 },
+    ]);
+  });
+
+  it('ignora o tempo não informado em vez de tratá-lo como zero', () => {
+    const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01' }];
+    const result = buildStats({
+      games, sessions: [], platforms, genres: [], today: '2026-01-01',
+      gamePlatforms: [link(games[0]!.id, STEAM, null)],
+    });
+    expect(result.library.externalPlaytimeHours).toBe(0);
+    expect(result.library.externalPlaytimeByPlatform).toEqual([]);
+  });
+});

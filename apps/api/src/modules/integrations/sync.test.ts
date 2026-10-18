@@ -44,14 +44,18 @@ function gameRepository(titles: Array<[string, string]> = [[HADES, 'Hades']]): G
   };
 }
 
-function platformRepository(initial: Platform[] = [{ id: STEAM, name: 'Steam' }, { id: PS5, name: 'PlayStation 5' }]): PlatformRepository & { created: string[] } {
+function platformRepository(initial: Platform[] = [{ id: STEAM, name: 'Steam', parentId: null }, { id: PS5, name: 'PlayStation 5', parentId: null }]): PlatformRepository & { created: string[] } {
   const platforms = [...initial];
   const created: string[] = [];
   return {
     created,
     list: async () => platforms,
+    setParent: async (id, parentId) => {
+      const platform = platforms.find((item) => item.id === id);
+      return platform ? Object.assign(platform, { parentId }) : undefined;
+    },
     create: async (name) => {
-      const platform = { id: id(90 + platforms.length), name };
+      const platform = { id: id(90 + platforms.length), name, parentId: null };
       platforms.push(platform);
       created.push(name);
       return platform;

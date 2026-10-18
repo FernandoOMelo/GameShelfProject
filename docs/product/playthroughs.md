@@ -10,6 +10,19 @@ Um jogo tem um cadastro único. A partir dele o usuário registra:
 - quantas vezes jogou, com datas e estado de cada rodada;
 - quanto tempo registrou aqui, separado do tempo que a plataforma informa.
 
+## Grupos de plataforma
+
+O catálogo tem dois níveis (ADR-025). Uma plataforma sem grupo é um grupo em si
+(PC, PlayStation 5); dentro dela cabem lojas e variantes (Steam, GOG, Epic).
+O jogo é associado à plataforma específica, e as estatísticas agregam pelo grupo
+— as horas de Steam aparecem em PC. A lista de associações do jogo continua
+mostrando cada plataforma separadamente.
+
+Isso também resolve duplicatas antigas do catálogo: colocar "PC (Microsoft
+Windows)" dentro de "PC" consolida os números sem renomear nem apagar nada. O
+grupo é definido por você no painel "Grupos de plataforma"; a sincronização
+nunca adivinha.
+
 ## Plataformas associadas
 
 Cada associação liga o jogo a uma plataforma do catálogo e guarda, opcionalmente,

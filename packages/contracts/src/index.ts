@@ -24,8 +24,23 @@ const lifecycleFields = {
 export const franchiseInputSchema = z.object({ name: z.string().trim().min(1).max(200) }).strict();
 export const franchiseSchema = franchiseInputSchema.extend({ id: z.string().uuid() }).strict();
 export type Franchise = z.infer<typeof franchiseSchema>;
-export const platformInputSchema = franchiseInputSchema;
-export const platformSchema = franchiseSchema;
+// Plataformas têm dois níveis (ADR-025): sem `parentId` é um grupo (PC,
+// PlayStation); com `parentId` é uma loja ou variante dentro dele (Steam, GOG).
+// O padrão nulo mantém backups anteriores importáveis.
+export const platformInputSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  parentId: z.string().uuid().nullable().optional(),
+}).strict();
+export const platformUpdateSchema = z.object({
+  parentId: z.string().uuid().nullable(),
+}).strict();
+export const platformSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  parentId: z.string().uuid().nullable().default(null),
+}).strict();
+export type PlatformInput = z.infer<typeof platformInputSchema>;
+export type PlatformUpdate = z.infer<typeof platformUpdateSchema>;
 export const genreInputSchema = franchiseInputSchema;
 export const genreSchema = franchiseSchema;
 export type Platform = z.infer<typeof platformSchema>;

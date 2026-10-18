@@ -33,8 +33,9 @@ function gameRepository(): GameRepository {
 }
 
 const platformRepository: PlatformRepository = {
-  list: async () => [{ id: PC, name: 'PC' }, { id: PS5, name: 'PlayStation 5' }],
-  create: async (name) => ({ id: id(12), name }),
+  list: async () => [{ id: PC, name: 'PC', parentId: null }, { id: PS5, name: 'PlayStation 5', parentId: null }],
+  create: async (name) => ({ id: id(12), name, parentId: null }),
+  setParent: async (platformId, parentId) => ({ id: platformId, name: 'PC', parentId }),
 };
 
 function gamePlatformRepository(): GamePlatformRepository {

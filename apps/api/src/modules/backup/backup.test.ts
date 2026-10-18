@@ -31,7 +31,7 @@ const playthroughRecord: PlaythroughRecord = {
 
 function validData(): BackupData {
   return {
-    franchises: [{ id: id(1), name: 'Supergiant' }], platforms: [{ id: id(2), name: 'PC' }], genres: [{ id: id(3), name: 'Roguelike' }],
+    franchises: [{ id: id(1), name: 'Supergiant' }], platforms: [{ id: id(2), name: 'PC', parentId: null }], genres: [{ id: id(3), name: 'Roguelike' }],
     games: [{
       id: id(10), title: 'Hades', description: null, coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null,
       franchiseId: id(1), platformId: id(2), platformIds: [id(2)], genreIds: [id(3)], status: 'COMPLETED', rating: 10, difficulty: 'B', gameType: null, completionCondition: null,
@@ -97,7 +97,10 @@ describe('backup API', () => {
     const app = buildApp({
       gameRepository: { list: async () => [gameRecord], find: async () => gameRecord, create: async () => gameRecord, update: async () => gameRecord, delete: async () => true },
       franchiseRepository: { list: async () => [{ id: id(1), name: 'Supergiant' }], create: async () => ({ id: id(1), name: 'Supergiant' }) },
-      platformRepository: { list: async () => [{ id: id(2), name: 'PC' }], create: async () => ({ id: id(2), name: 'PC' }) },
+      platformRepository: {
+        list: async () => [{ id: id(2), name: 'PC', parentId: null }], create: async () => ({ id: id(2), name: 'PC', parentId: null }),
+        setParent: async () => undefined,
+      },
       genreRepository: { list: async () => [{ id: id(3), name: 'Roguelike' }], create: async () => ({ id: id(3), name: 'Roguelike' }) },
       sessionRepository: {
         listForGame: async () => [], findForGame: async () => undefined, create: async () => { throw new Error('unused'); }, update: async () => undefined, delete: async () => false,

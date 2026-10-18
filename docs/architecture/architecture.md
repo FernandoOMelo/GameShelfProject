@@ -85,7 +85,7 @@ O domínio deve ser organizado por módulos:
 
 - games;
 - franchises;
-- platforms;
+- platforms (catálogo em dois níveis: grupo e subgrupo, ADR-025);
 - game-platforms (plataformas e edições associadas a um jogo, ADR-023);
 - playthroughs (jornadas e fator replay, ADR-023);
 - integrations (importação da fonte externa e fila de correspondências, ADR-024);

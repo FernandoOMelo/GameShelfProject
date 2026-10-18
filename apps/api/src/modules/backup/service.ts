@@ -11,7 +11,7 @@ import { toGame, toGamePlatform, toPlaythrough } from '../shared/serialize.js';
 
 export type BackupSources = {
   franchises: Array<{ id: string; name: string }>;
-  platforms: Array<{ id: string; name: string }>;
+  platforms: Array<{ id: string; name: string; parentId: string | null }>;
   genres: Array<{ id: string; name: string }>;
   games: GameRecord[];
   sessions: SessionRecord[];

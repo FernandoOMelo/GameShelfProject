@@ -12,7 +12,7 @@ const games = [
   { id: 'game-1', title: 'Hades' },
   { id: 'game-2', title: 'HADES!' },
 ] as unknown as Game[];
-const platforms: Platform[] = [{ id: 'platform-1', name: 'Steam' }];
+const platforms: Platform[] = [{ id: 'platform-1', name: 'Steam', parentId: null }];
 
 const state = (overrides: Partial<ExternalSyncState> = {}): ExternalSyncState => ({
   source: 'achievist', status: 'succeeded', startedAt: '2026-06-01T12:00:00.000Z', finishedAt: '2026-06-01T12:00:05.000Z',

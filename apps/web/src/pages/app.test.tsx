@@ -126,7 +126,14 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLis
       queue.forEach((item, position) => { item.position = position; });
       return new Response(JSON.stringify(queue), { status: 200 });
     }
-    if (url === '/api/platforms' && method === 'GET') return new Response(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000020', name: 'Nintendo Switch' }]), { status: 200 });
+    if (url === '/api/platforms' && method === 'GET') return new Response(JSON.stringify([
+      { id: '00000000-0000-4000-8000-000000000020', name: 'Nintendo Switch', parentId: null },
+      { id: '00000000-0000-4000-8000-000000000022', name: 'Steam', parentId: null },
+    ]), { status: 200 });
+    if (url.startsWith('/api/platforms/') && method === 'PATCH') {
+      const parentId = (JSON.parse(String(init?.body)) as { parentId: string | null }).parentId;
+      return new Response(JSON.stringify({ id: url.split('/').at(-1), name: 'Steam', parentId }), { status: 200 });
+    }
     if (url.startsWith('/api/games/') && url.endsWith('/platforms')) {
       if (method === 'GET') return new Response('[]', { status: 200 });
       return new Response(JSON.stringify({
@@ -502,6 +509,20 @@ describe('library page', () => {
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Excluir lista' })).getByRole('button', { name: 'Excluir' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/lists/00000000-0000-4000-8000-000000000050', { method: 'DELETE' }));
     expect(await screen.findByText('Você ainda não criou listas.')).toBeInTheDocument();
+  });
+
+  it('puts one platform inside another as a group from the dashboard', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Painel' }));
+    await screen.findByRole('heading', { name: 'Grupos de plataforma' });
+
+    const select = await screen.findByRole('combobox', { name: 'Grupo de Steam' });
+    fireEvent.change(select, { target: { value: '00000000-0000-4000-8000-000000000020' } });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/platforms/00000000-0000-4000-8000-000000000022', expect.objectContaining({ method: 'PATCH' })));
+    const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/platforms/00000000-0000-4000-8000-000000000022' && init?.method === 'PATCH');
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ parentId: '00000000-0000-4000-8000-000000000020' });
   });
 
   it('associates a platform and starts a playthrough from the game detail page', async () => {

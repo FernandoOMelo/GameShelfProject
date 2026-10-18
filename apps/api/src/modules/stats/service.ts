@@ -1,8 +1,9 @@
 import type { Game, GamePlatform, LibraryStats, Playthrough, Session, StatsGroup, StatsResponse } from '@gameshelf/contracts';
 
 type Catalog = { id: string; name: string };
+type PlatformCatalog = Catalog & { parentId?: string | null };
 type Input = {
-  games: Game[]; sessions: Session[]; platforms: Catalog[]; genres: Catalog[]; today?: string;
+  games: Game[]; sessions: Session[]; platforms: PlatformCatalog[]; genres: Catalog[]; today?: string;
   gamePlatforms?: GamePlatform[]; playthroughs?: Playthrough[];
 };
 type Key = [key: string, name: string];
@@ -39,10 +40,16 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
   for (const game of completed) if (game.difficulty) difficultyCounts.set(game.difficulty, (difficultyCounts.get(game.difficulty) ?? 0) + 1);
 
   const genreNames = new Map(genres.map((item) => [item.id, item.name]));
-  const platformNames = new Map(platforms.map((item) => [item.id, item.name]));
+  // Plataformas agregam pelo grupo (ADR-025): horas de Steam e GOG aparecem em
+  // PC, que é a pergunta que o usuário faz. A associação individual continua
+  // visível nos detalhes do jogo, então nada se perde.
+  const platformGroup = groupResolver(platforms);
   const byGenre = group(completed, (game) => game.genreIds.filter((id) => genreNames.has(id)).map((id): Key => [id, genreNames.get(id)!]), hoursOf);
   const byType = group(completed, (game) => game.gameType ? [[game.gameType.toLocaleLowerCase(), game.gameType]] : [], hoursOf);
-  const byPlatform = group(completed, (game) => game.platformId && platformNames.has(game.platformId) ? [[game.platformId, platformNames.get(game.platformId)!]] : [], hoursOf);
+  const byPlatform = group(completed, (game) => {
+    const resolved = game.platformId ? platformGroup(game.platformId) : undefined;
+    return resolved ? [[resolved.id, resolved.name] as Key] : [];
+  }, hoursOf);
   const byDeveloper = group(completed, (game) => game.developer ? [[game.developer.toLocaleLowerCase(), game.developer]] : [], hoursOf).slice(0, 10);
 
   const releaseYears = new Map<number, number>();
@@ -72,7 +79,7 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
     .slice(0, 10).map((game) => ({ ...ref(game), rating: game.rating }));
 
   return {
-    library: buildLibraryStats({ games, platformNames, gamePlatforms, playthroughs, localMinutes: minutesByGame }),
+    library: buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, localMinutes: minutesByGame }),
     totals: {
       completedCount: completed.length,
       completedHours: round(completed.reduce((sum, game) => sum + hoursOf(game), 0)),
@@ -96,8 +103,20 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
 // `gameCount` conta jogos canônicos e `platformLinkCount` conta associações, que
 // são coisas diferentes. Tempo local e tempo informado por plataforma ficam em
 // campos separados e nunca são somados.
-function buildLibraryStats({ games, platformNames, gamePlatforms, playthroughs, localMinutes }: {
-  games: Game[]; platformNames: Map<string, string>; gamePlatforms: GamePlatform[]; playthroughs: Playthrough[];
+/** Resolve uma plataforma no grupo a que pertence; ela mesma, quando é um grupo. */
+function groupResolver(platforms: PlatformCatalog[]): (id: string) => Catalog | undefined {
+  const byId = new Map(platforms.map((item) => [item.id, item]));
+  return (id) => {
+    const platform = byId.get(id);
+    if (!platform) return undefined;
+    const parent = platform.parentId ? byId.get(platform.parentId) : undefined;
+    const resolved = parent ?? platform;
+    return { id: resolved.id, name: resolved.name };
+  };
+}
+
+function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, localMinutes }: {
+  games: Game[]; platformGroup: (id: string) => Catalog | undefined; gamePlatforms: GamePlatform[]; playthroughs: Playthrough[];
   localMinutes: Map<string, number>;
 }): LibraryStats {
   const started = playthroughs.filter((item) => item.status !== 'PLANNED');
@@ -109,7 +128,9 @@ function buildLibraryStats({ games, platformNames, gamePlatforms, playthroughs, 
   for (const link of gamePlatforms) {
     if (link.externalPlaytimeMinutes === null) continue;
     externalMinutes += link.externalPlaytimeMinutes;
-    externalByPlatform.set(link.platformId, (externalByPlatform.get(link.platformId) ?? 0) + link.externalPlaytimeMinutes);
+    const resolved = platformGroup(link.platformId);
+    const key = resolved?.id ?? link.platformId;
+    externalByPlatform.set(key, (externalByPlatform.get(key) ?? 0) + link.externalPlaytimeMinutes);
   }
 
   const localTotalMinutes = [...localMinutes.values()].reduce((sum, minutes) => sum + minutes, 0);
@@ -125,7 +146,7 @@ function buildLibraryStats({ games, platformNames, gamePlatforms, playthroughs, 
     localPlayedHours: round(localTotalMinutes / 60 + games.reduce((sum, game) => sum + game.retroactivePlayedHours, 0)),
     externalPlaytimeHours: round(externalMinutes / 60),
     externalPlaytimeByPlatform: [...externalByPlatform]
-      .map(([key, minutes]) => ({ key, name: platformNames.get(key) ?? 'Plataforma removida', hours: round(minutes / 60) }))
+      .map(([key, minutes]) => ({ key, name: platformGroup(key)?.name ?? 'Plataforma removida', hours: round(minutes / 60) }))
       .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'pt-BR')),
   };
 }

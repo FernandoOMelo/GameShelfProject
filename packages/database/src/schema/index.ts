@@ -7,11 +7,19 @@ export const franchises = pgTable('franchises', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Catálogo em dois níveis (ADR-025): uma plataforma sem `parent_id` é um grupo
+// (PC, PlayStation); uma com `parent_id` é uma loja ou variante dentro dele
+// (Steam, GOG). Só dois níveis: um grupo não pode ter avô. A profundidade é
+// garantida na fronteira da API, não no banco, porque exigiria um gatilho.
 export const platforms = pgTable('platforms', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull().unique(),
+  parentId: uuid('parent_id').references((): AnyPgColumn => platforms.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('platforms_parent_idx').on(table.parentId),
+  check('platforms_parent_not_self', sql`${table.parentId} IS NULL OR ${table.parentId} <> ${table.id}`),
+]);
 
 export const genres = pgTable('genres', {
   id: uuid('id').defaultRandom().primaryKey(),

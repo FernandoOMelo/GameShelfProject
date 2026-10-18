@@ -56,8 +56,9 @@ function createFranchiseRepository(): FranchiseRepository {
 
 function createPlatformRepository(): PlatformRepository {
   return {
-    list: async () => [{ id: '00000000-0000-4000-8000-000000000020', name: 'PC' }],
-    create: async (name) => ({ id: '00000000-0000-4000-8000-000000000021', name }),
+    list: async () => [{ id: '00000000-0000-4000-8000-000000000020', name: 'PC', parentId: null }],
+    create: async (name) => ({ id: '00000000-0000-4000-8000-000000000021', name, parentId: null }),
+    setParent: async (id, parentId) => ({ id, name: 'PC', parentId }),
   };
 }
 

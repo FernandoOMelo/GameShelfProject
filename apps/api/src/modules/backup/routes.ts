@@ -44,7 +44,7 @@ export async function registerBackupRoutes(app: FastifyInstance, deps: BackupDep
     ]);
     const exportedAt = new Date();
     const backup = backupSchema.parse(buildBackup({
-      franchises: franchises.map(({ id, name }) => ({ id, name })), platforms: platforms.map(({ id, name }) => ({ id, name })), genres: genres.map(({ id, name }) => ({ id, name })),
+      franchises: franchises.map(({ id, name }) => ({ id, name })), platforms: platforms.map(({ id, name, parentId }) => ({ id, name, parentId })), genres: genres.map(({ id, name }) => ({ id, name })),
       games, sessions, screenshots, queue, lists, challenge, goals, weeklyMinutes, gamePlatforms, playthroughs,
     }, exportedAt));
     return reply

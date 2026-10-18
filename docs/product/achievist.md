@@ -59,6 +59,13 @@ Não existe tabela de sessão de jogo.
 - Autenticação é só por cookie de sessão, com usuário e senha. Não há token de
   serviço nem chave de API.
 
+## Nomes de plataforma
+
+O Achievist informa a loja ("Steam", "Google Play"), não o aparelho. Para que
+isso não vire uma associação paralela à que você já tem, coloque a loja dentro
+do grupo correspondente no painel "Grupos de plataforma" (ADR-025). A
+sincronização continua gravando a loja, e as estatísticas agregam pelo grupo.
+
 ## Como a integração consome isso
 
 - Tempo acumulado por plataforma vai para

@@ -6,6 +6,10 @@ e concluídas, replays iniciados, horas registradas aqui e horas informadas pela
 plataformas (ADR-023). Um jogo em três plataformas é contado uma única vez, e as
 duas medidas de tempo nunca são somadas.
 
+As quebras por plataforma agregam pelo grupo (ADR-025): jogos e horas de Steam
+e GOG aparecem em PC. Somar entre lojas do mesmo aparelho é legítimo; somar
+tempo externo com tempo local continua não sendo.
+
 ## Objetivo
 
 Mostrar a jornada de jogos zerados: quantos, quanto tempo, quais notas, quais
