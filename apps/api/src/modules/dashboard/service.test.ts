@@ -5,7 +5,7 @@ import { buildDashboard, estimateRemainingHours } from './service.js';
 const game: Game = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null, coverUrl: null,
   backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null, franchiseId: null,
-  platformId: null, genreIds: [], status: 'PLAYING', rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: 20,
+  platformId: null, platformIds: [], genreIds: [], status: 'PLAYING', rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: 20,
   estimatedCompletionistHours: null, personalEstimatedHours: 18, retroactivePlayedHours: 0, notes: null, archived: false,
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -13,7 +13,7 @@ const game: Game = {
 const session: Session = {
   id: '00000000-0000-4000-8000-000000000002', gameId: game.id,
   startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T12:00:00.000Z',
-  durationMinutes: 120, progress: 45, location: 'Elysium', notes: null, keyDecisions: null, tips: null,
+  durationMinutes: 120, progress: 45, location: 'Elysium', notes: null, keyDecisions: null, tips: null, playthroughId: null, platformId: null,
   createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z',
 };
 

@@ -1,6 +1,6 @@
 import {
-  franchises, gameGenres, gameListEntries, gameLists, games, genres, goals, mainChallenge, planningSettings, platforms,
-  queueEntries, sessions, sessionScreenshots, type Database,
+  franchises, gameGenres, gameListEntries, gameLists, gamePlatforms, games, genres, goals, mainChallenge, planningSettings,
+  platforms, playthroughs, queueEntries, sessions, sessionScreenshots, type Database,
 } from '@gameshelf/database';
 import type { BackupData } from '@gameshelf/contracts';
 import { LibraryNotEmptyError, type BackupImporter } from './importer.js';
@@ -37,6 +37,16 @@ export class DrizzleBackupImporter implements BackupImporter {
         createdAt: date(game.createdAt), updatedAt: date(game.updatedAt),
       }))));
       await insert(data.games.flatMap((game) => game.genreIds.map((genreId) => ({ gameId: game.id, genreId }))), (rows) => tx.insert(gameGenres).values(rows));
+      await insert(data.gamePlatforms, (rows) => tx.insert(gamePlatforms).values(rows.map((link) => ({
+        ...link,
+        externalLastPlayedAt: link.externalLastPlayedAt ? date(link.externalLastPlayedAt) : null,
+        externalSyncedAt: link.externalSyncedAt ? date(link.externalSyncedAt) : null,
+        createdAt: date(link.createdAt), updatedAt: date(link.updatedAt),
+      }))));
+      // As jornadas entram antes das sessões: uma sessão pode referenciar a jornada.
+      await insert(data.playthroughs, (rows) => tx.insert(playthroughs).values(rows.map((playthrough) => ({
+        ...playthrough, createdAt: date(playthrough.createdAt), updatedAt: date(playthrough.updatedAt),
+      }))));
       await insert(data.sessions, (rows) => tx.insert(sessions).values(rows.map((session) => ({
         ...session, startedAt: date(session.startedAt), endedAt: session.endedAt ? date(session.endedAt) : null,
         createdAt: date(session.createdAt), updatedAt: date(session.updatedAt),

@@ -1,18 +1,20 @@
-import { eq, games, gameGenres, genres, sql, type Database } from '@gameshelf/database';
+import { eq, games, gameGenres, gamePlatforms, genres, sql, type Database } from '@gameshelf/database';
 import type { GameInput, GameUpdate } from '@gameshelf/contracts';
 import type { GameRepository, GameRecord } from './repository.js';
+
+type Relationless = Omit<GameRecord, 'genreIds' | 'platformIds'>;
 
 export class DrizzleGameRepository implements GameRepository {
   constructor(private readonly db: Database) {}
 
   async list(): Promise<GameRecord[]> {
     const records = await this.db.select().from(games).orderBy(games.title);
-    return Promise.all(records.map((game) => this.withRelations(game as unknown as Omit<GameRecord, 'genreIds'>)));
+    return Promise.all(records.map((game) => this.withRelations(game as unknown as Relationless)));
   }
 
   async find(id: string): Promise<GameRecord | undefined> {
     const [game] = await this.db.select().from(games).where(eq(games.id, id)).limit(1);
-    return game ? this.withRelations(game as unknown as Omit<GameRecord, 'genreIds'>) : undefined;
+    return game ? this.withRelations(game as unknown as Relationless) : undefined;
   }
 
   async create(input: GameInput): Promise<GameRecord> {
@@ -21,7 +23,7 @@ export class DrizzleGameRepository implements GameRepository {
       const [game] = await tx.insert(games).values(normalizeCreateInput({ ...fields, startedAt: startedAt ?? null, completedAt: completedAt ?? null })).returning();
       if (genreIds?.length) await tx.insert(gameGenres).values(genreIds.map((genreId) => ({ gameId: game.id, genreId })));
       await keepSingleGameOfYear(tx, game);
-      return { ...(game as unknown as GameRecord), genreIds: genreIds ?? [] };
+      return { ...(game as unknown as GameRecord), genreIds: genreIds ?? [], platformIds: [] };
     });
   }
 
@@ -37,7 +39,12 @@ export class DrizzleGameRepository implements GameRepository {
         if (genreIds.length) await tx.insert(gameGenres).values(genreIds.map((genreId) => ({ gameId: id, genreId })));
       }
       const genreRows = await tx.select({ id: gameGenres.genreId }).from(gameGenres).where(eq(gameGenres.gameId, id));
-      return { ...(game as unknown as GameRecord), genreIds: genreIds ?? genreRows.map((row) => row.id) };
+      const platformRows = await tx.select({ id: gamePlatforms.platformId }).from(gamePlatforms).where(eq(gamePlatforms.gameId, id));
+      return {
+        ...(game as unknown as GameRecord),
+        genreIds: genreIds ?? genreRows.map((row) => row.id),
+        platformIds: platformRows.map((row) => row.id),
+      };
     });
   }
 
@@ -46,10 +53,12 @@ export class DrizzleGameRepository implements GameRepository {
     return deleted.length > 0;
   }
 
-  private async withRelations(game: Omit<GameRecord, 'genreIds'>): Promise<GameRecord> {
+  private async withRelations(game: Relationless): Promise<GameRecord> {
     const genreRows = await this.db.select({ id: gameGenres.genreId }).from(gameGenres)
       .innerJoin(genres, eq(gameGenres.genreId, genres.id)).where(eq(gameGenres.gameId, game.id));
-    return { ...game, genreIds: genreRows.map((row) => row.id) };
+    const platformRows = await this.db.select({ id: gamePlatforms.platformId }).from(gamePlatforms)
+      .where(eq(gamePlatforms.gameId, game.id));
+    return { ...game, genreIds: genreRows.map((row) => row.id), platformIds: platformRows.map((row) => row.id) };
   }
 }
 

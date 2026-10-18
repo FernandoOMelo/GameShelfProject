@@ -1,14 +1,17 @@
-import type { Game, Session, StatsGroup, StatsResponse } from '@gameshelf/contracts';
+import type { Game, GamePlatform, LibraryStats, Playthrough, Session, StatsGroup, StatsResponse } from '@gameshelf/contracts';
 
 type Catalog = { id: string; name: string };
-type Input = { games: Game[]; sessions: Session[]; platforms: Catalog[]; genres: Catalog[]; today?: string };
+type Input = {
+  games: Game[]; sessions: Session[]; platforms: Catalog[]; genres: Catalog[]; today?: string;
+  gamePlatforms?: GamePlatform[]; playthroughs?: Playthrough[];
+};
 type Key = [key: string, name: string];
 
 const DIFFICULTIES = ['AAA', 'AA', 'A', 'B', 'C'] as const;
 
 // Estatísticas históricas: consideram jogos zerados (inclusive arquivados) e atribuem as horas
 // de cada jogo ao ano da sua conclusão.
-export function buildStats({ games, sessions, platforms, genres, today = new Date().toISOString().slice(0, 10) }: Input): StatsResponse {
+export function buildStats({ games, sessions, platforms, genres, gamePlatforms = [], playthroughs = [], today = new Date().toISOString().slice(0, 10) }: Input): StatsResponse {
   const minutesByGame = new Map<string, number>();
   for (const session of sessions) {
     if (session.durationMinutes !== null) minutesByGame.set(session.gameId, (minutesByGame.get(session.gameId) ?? 0) + session.durationMinutes);
@@ -69,6 +72,7 @@ export function buildStats({ games, sessions, platforms, genres, today = new Dat
     .slice(0, 10).map((game) => ({ ...ref(game), rating: game.rating }));
 
   return {
+    library: buildLibraryStats({ games, platformNames, gamePlatforms, playthroughs, localMinutes: minutesByGame }),
     totals: {
       completedCount: completed.length,
       completedHours: round(completed.reduce((sum, game) => sum + hoursOf(game), 0)),
@@ -85,6 +89,44 @@ export function buildStats({ games, sessions, platforms, genres, today = new Dat
     byGenre, byType, byPlatform, byYear, favorites, byReleaseYear, byDeveloper,
     topGenres: topByRating(byGenre, 5),
     topTypes: topByRating(byType, 10),
+  };
+}
+
+// Contagens da biblioteca. Um jogo em três plataformas continua sendo um jogo:
+// `gameCount` conta jogos canônicos e `platformLinkCount` conta associações, que
+// são coisas diferentes. Tempo local e tempo informado por plataforma ficam em
+// campos separados e nunca são somados.
+function buildLibraryStats({ games, platformNames, gamePlatforms, playthroughs, localMinutes }: {
+  games: Game[]; platformNames: Map<string, string>; gamePlatforms: GamePlatform[]; playthroughs: Playthrough[];
+  localMinutes: Map<string, number>;
+}): LibraryStats {
+  const started = playthroughs.filter((item) => item.status !== 'PLANNED');
+  const completedGameIds = new Set(playthroughs.filter((item) => item.status === 'COMPLETED').map((item) => item.gameId));
+  const gameIdsWithPlaythrough = new Set(playthroughs.map((item) => item.gameId));
+
+  const externalByPlatform = new Map<string, number>();
+  let externalMinutes = 0;
+  for (const link of gamePlatforms) {
+    if (link.externalPlaytimeMinutes === null) continue;
+    externalMinutes += link.externalPlaytimeMinutes;
+    externalByPlatform.set(link.platformId, (externalByPlatform.get(link.platformId) ?? 0) + link.externalPlaytimeMinutes);
+  }
+
+  const localTotalMinutes = [...localMinutes.values()].reduce((sum, minutes) => sum + minutes, 0);
+  return {
+    gameCount: games.length,
+    platformLinkCount: gamePlatforms.length,
+    playthroughCount: playthroughs.length,
+    playthroughsStarted: started.length,
+    playthroughsCompleted: playthroughs.filter((item) => item.status === 'COMPLETED').length,
+    replaysStarted: started.filter((item) => item.isReplay).length,
+    gamesWithCompletedPlaythrough: completedGameIds.size,
+    gamesWithoutPlaythrough: games.filter((game) => !gameIdsWithPlaythrough.has(game.id)).length,
+    localPlayedHours: round(localTotalMinutes / 60 + games.reduce((sum, game) => sum + game.retroactivePlayedHours, 0)),
+    externalPlaytimeHours: round(externalMinutes / 60),
+    externalPlaytimeByPlatform: [...externalByPlatform]
+      .map(([key, minutes]) => ({ key, name: platformNames.get(key) ?? 'Plataforma removida', hours: round(minutes / 60) }))
+      .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'pt-BR')),
   };
 }
 

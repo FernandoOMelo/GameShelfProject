@@ -1,5 +1,9 @@
 # Jogos
 
+Um jogo tem um cadastro canônico único. Plataformas e edições associadas, além
+das jornadas e do fator replay, estão em `playthroughs.md` (ADR-023); a
+plataforma do formulário é a plataforma principal do jogo.
+
 ## Objetivo
 
 Representar jogos pertencentes à biblioteca pessoal.

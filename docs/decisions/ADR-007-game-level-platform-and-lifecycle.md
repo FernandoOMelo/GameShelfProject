@@ -2,7 +2,10 @@
 
 ## Status
 
-Aceita.
+Aceita, com a regra de plataforma única revista pelo ADR-023. O jogo continua
+sendo a entidade central e os atributos pessoais continuam nele, mas a
+associação múltipla de plataformas voltou a existir e `games.platform_id` passou
+a ser a plataforma principal.
 
 ## Contexto
 

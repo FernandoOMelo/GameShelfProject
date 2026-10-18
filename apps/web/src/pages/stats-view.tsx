@@ -23,7 +23,7 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
   if (failed) return <section className="stats-page"><ErrorState>Não foi possível carregar as estatísticas.</ErrorState></section>;
   if (!stats) return <section className="stats-page"><LoadingState>Carregando estatísticas…</LoadingState></section>;
 
-  const { totals } = stats;
+  const { totals, library } = stats;
   // Escalas fixas (notas e dificuldades) chegam completas da API; mostrar só o que
   // o usuário realmente usou evita paredes de barras zeradas.
   const ratedEntries = stats.ratingDistribution.filter((entry) => entry.count > 0);
@@ -40,6 +40,24 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       <StatCard label="Média por jogo zerado" value={totals.averageCompletedHours === null ? '—' : formatCompactHours(totals.averageCompletedHours)} />
       <StatCard label="Tempo de jornada" value={journey} small />
     </div>
+    {/* Biblioteca: um jogo em três plataformas continua sendo um jogo. Tempo
+        local e tempo informado pelas plataformas ficam separados, nunca somados. */}
+    <div className="kpi-grid kpi-grid-secondary" aria-label="Biblioteca, plataformas e jornadas">
+      <StatCard label="Jogos cadastrados" value={String(library.gameCount)} />
+      <StatCard label="Associações de plataforma" value={String(library.platformLinkCount)} />
+      <StatCard label="Jornadas iniciadas" value={String(library.playthroughsStarted)} />
+      <StatCard label="Jornadas concluídas" value={String(library.playthroughsCompleted)} />
+      <StatCard label="Replays iniciados" value={String(library.replaysStarted)} />
+      <StatCard label="Jogos com jornada zerada" value={String(library.gamesWithCompletedPlaythrough)} />
+      <StatCard label="Horas registradas aqui" value={formatCompactHours(library.localPlayedHours)} />
+      <StatCard label="Horas informadas por plataformas" value={formatCompactHours(library.externalPlaytimeHours)} small />
+    </div>
+    {library.externalPlaytimeByPlatform.length > 0 && <section className="panel">
+      <div className="section-heading"><h2>Tempo informado por plataforma</h2></div>
+      <p className="library-subtitle">Medida separada do histórico de sessões: as duas não são somadas.</p>
+      <BarList label="Horas informadas por plataforma" entries={library.externalPlaytimeByPlatform.map((entry) => ({ key: entry.key, label: entry.name, value: entry.hours, title: formatCompactHours(entry.hours) }))} />
+    </section>}
+
     <div className="kpi-grid kpi-grid-secondary">
       <StatCard label="Taxa de conclusão" value={`${totals.completionRate.toLocaleString('pt-BR')}%`} />
       <StatCard label="Média por jogo jogado" value={totals.averageHoursPerGame === null ? '—' : formatCompactHours(totals.averageHoursPerGame)} />

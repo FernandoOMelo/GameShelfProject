@@ -86,6 +86,9 @@ O domínio deve ser organizado por módulos:
 - games;
 - franchises;
 - platforms;
+- game-platforms (plataformas e edições associadas a um jogo, ADR-023);
+- playthroughs (jornadas e fator replay, ADR-023);
+- integrations (importação da fonte externa e fila de correspondências, ADR-024);
 - genres;
 - sessions;
 - backlog;
@@ -97,7 +100,10 @@ O domínio deve ser organizado por módulos:
 
 ## Integrações
 
-Integrações externas devem ficar isoladas em infraestrutura. É o caso de:
+Integrações externas devem ficar isoladas em infraestrutura. Dados de
+plataformas de jogos vêm exclusivamente da API do Achievist self-hosted, por
+rede Docker privada e comunicação servidor a servidor (ADR-024); o GameShelf não
+implementa conector direto para Steam, PlayStation ou Xbox. É o caso de:
 
 ```text
 modules/games
@@ -108,7 +114,18 @@ modules/games
         |
         +-- igdb
         +-- howlongtobeat
+
+modules/integrations
+  |
+  +-- achievist   (cliente isolado: URL base, login por cookie, paginação)
+  +-- external-library.ts        (a interface que o resto da API consome)
+  +-- import-service.ts          (importação idempotente e fila de pendências)
+  +-- sync-runner.ts             (uma rodada por vez; estado no processo)
+  +-- routes.ts                  (sincronização manual e confirmação)
 ```
+
+A interface `ExternalLibraryProvider` fala o vocabulário do GameShelf: o resto da
+API não conhece endpoint, cookie ou chave de plataforma da fonte.
 
 A lógica de negócio não deve depender diretamente do SDK de um fornecedor.
 

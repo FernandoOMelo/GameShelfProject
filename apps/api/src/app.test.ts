@@ -20,7 +20,7 @@ const game: GameRecord = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null,
   coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: 'Supergiant Games',
   publisher: null, franchiseId: null, status: 'BACKLOG', priority: 'NORMAL', estimatedMainHours: null,
-  estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null, platformId: null, genreIds: [], rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: true, archived: false, startedAt: null, completedAt: null,
+  estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null, platformId: null, platformIds: [], genreIds: [], rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: true, archived: false, startedAt: null, completedAt: null,
   createdAt: now, updatedAt: now,
 };
 
@@ -73,11 +73,17 @@ function createSessionRepository(): SessionRepository {
   return {
     listForGame: async (gameId) => sessions.filter((session) => session.gameId === gameId),
     listAll: async () => sessions,
+    detachPlaythrough: async (playthroughId) => {
+      const affected = sessions.filter((session) => session.playthroughId === playthroughId);
+      for (const session of affected) session.playthroughId = null;
+      return affected.length;
+    },
     findForGame: async (gameId, sessionId) => sessions.find((session) => session.gameId === gameId && session.id === sessionId),
     create: async (gameId, input) => {
       const createdAt = new Date();
       const session: SessionRecord = {
         id: '00000000-0000-4000-8000-000000000040', gameId,
+        playthroughId: input.playthroughId ?? null, platformId: input.platformId ?? null,
         startedAt: new Date(input.startedAt), endedAt: input.endedAt ? new Date(input.endedAt) : null,
         progress: input.progress ?? null, location: input.location ?? null, notes: input.notes ?? null,
         keyDecisions: input.keyDecisions ?? null, tips: input.tips ?? null,

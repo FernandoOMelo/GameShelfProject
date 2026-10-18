@@ -5,13 +5,15 @@ import type { SessionRepository } from '../sessions/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
 import type { GenreRepository } from '../genres/repository.js';
 import type { ChallengeCompletionRepository } from '../challenge/repository.js';
-import { toGame, toSession } from '../shared/serialize.js';
+import type { GamePlatformRepository } from '../game-platforms/repository.js';
+import type { PlaythroughRepository } from '../playthroughs/repository.js';
+import { toGame, toGamePlatform, toPlaythrough, toSession } from '../shared/serialize.js';
 import { buildActivity } from './activity.js';
 import { buildReplay } from './replay.js';
 import { buildStats } from './service.js';
 import { buildTimeline } from './timeline.js';
 
-export async function registerStatsRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, platforms: PlatformRepository, genres: GenreRepository, completions?: ChallengeCompletionRepository) {
+export async function registerStatsRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, platforms: PlatformRepository, genres: GenreRepository, completions?: ChallengeCompletionRepository, library?: { gamePlatforms: GamePlatformRepository; playthroughs: PlaythroughRepository }) {
   app.get('/stats/timeline', async (request, reply) => {
     const parsed = timelineQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ message: 'Parâmetros da linha do tempo inválidos.', issues: parsed.error.issues });
@@ -50,11 +52,17 @@ export async function registerStatsRoutes(app: FastifyInstance, games: GameRepos
   });
 
   app.get('/stats', async (_request, reply) => {
-    const [gameRecords, sessionRecords, platformItems, genreItems] = await Promise.all([games.list(), sessions.listAll(), platforms.list(), genres.list()]);
+    const [gameRecords, sessionRecords, platformItems, genreItems, platformLinks, playthroughRecords] = await Promise.all([
+      games.list(), sessions.listAll(), platforms.list(), genres.list(),
+      library?.gamePlatforms.listAll() ?? Promise.resolve([]),
+      library?.playthroughs.listAll() ?? Promise.resolve([]),
+    ]);
     const result = buildStats({
       games: gameRecords.map(toGame),
       sessions: sessionRecords.map(toSession),
       platforms: platformItems, genres: genreItems,
+      gamePlatforms: platformLinks.map(toGamePlatform),
+      playthroughs: playthroughRecords.map(toPlaythrough),
     });
     return reply.send(statsResponseSchema.parse(result));
   });

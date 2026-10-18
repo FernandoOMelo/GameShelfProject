@@ -4,13 +4,29 @@ import type { GameRepository } from '../games/repository.js';
 import type { GameImageStorage } from '../games/image-storage.js';
 import type { SessionRecord, SessionRepository } from './repository.js';
 import type { ScreenshotRepository } from './screenshot-repository.js';
+import type { PlaythroughRepository } from '../playthroughs/repository.js';
+import type { PlatformRepository } from '../platforms/repository.js';
+
+type SessionContext = { playthroughs?: PlaythroughRepository; platforms?: PlatformRepository };
 
 export async function registerSessionRoutes(
   app: FastifyInstance,
   gameRepository: GameRepository,
   sessionRepository: SessionRepository,
   screenshotCleanup?: { screenshots: ScreenshotRepository; storage: GameImageStorage },
+  context: SessionContext = {},
 ) {
+  // A jornada precisa ser do mesmo jogo da sessão; o banco não consegue garantir
+  // isso em uma chave estrangeira de coluna única, então a regra vive aqui.
+  async function invalidLinks(gameId: string, input: { playthroughId?: string | null; platformId?: string | null }): Promise<string | undefined> {
+    if (input.playthroughId && context.playthroughs) {
+      if (!await context.playthroughs.find(gameId, input.playthroughId)) return 'Jornada não encontrada para este jogo.';
+    }
+    if (input.platformId && context.platforms) {
+      if (!(await context.platforms.list()).some((platform) => platform.id === input.platformId)) return 'Plataforma não encontrada.';
+    }
+    return undefined;
+  }
   app.get<{ Params: { gameId: string } }>('/games/:gameId/sessions', async (request, reply) => {
     const gameId = parseId(request.params.gameId);
     if (!gameId) return reply.code(400).send({ error: 'ID inválido.' });
@@ -30,6 +46,8 @@ export async function registerSessionRoutes(
     if ((await sessionRepository.listForGame(gameId)).some((item) => item.startedAt.getTime() === startedAt)) {
       return reply.code(409).send({ error: 'Já existe uma sessão deste jogo iniciada neste horário.' });
     }
+    const linkError = await invalidLinks(gameId, parsed.data);
+    if (linkError) return reply.code(400).send({ error: linkError });
     const record = await sessionRepository.create(gameId, parsed.data);
     return reply.code(201).send(sessionSchema.parse(toResponse(record)));
   });
@@ -44,6 +62,8 @@ export async function registerSessionRoutes(
     const patch = sessionUpdateSchema.safeParse(request.body);
     if (!patch.success) return reply.code(400).send({ error: 'Dados da sessão inválidos.', issues: patch.error.issues });
     const merged = sessionInputSchema.safeParse({
+      playthroughId: existing.playthroughId,
+      platformId: existing.platformId,
       startedAt: existing.startedAt.toISOString(),
       endedAt: existing.endedAt?.toISOString() ?? null,
       progress: existing.progress,
@@ -54,6 +74,8 @@ export async function registerSessionRoutes(
       ...patch.data,
     });
     if (!merged.success) return reply.code(400).send({ error: 'A sessão resultante possui dados inválidos.', issues: merged.error.issues });
+    const linkError = await invalidLinks(gameId, merged.data);
+    if (linkError) return reply.code(400).send({ error: linkError });
     const updated = await sessionRepository.update(gameId, sessionId, merged.data);
     if (!updated) return reply.code(404).send({ error: 'Sessão não encontrada.' });
     return reply.send(sessionSchema.parse(toResponse(updated)));

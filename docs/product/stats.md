@@ -1,5 +1,11 @@
 # Estatísticas
 
+Além dos números dos jogos zerados, as estatísticas publicam um bloco de
+biblioteca com jogos cadastrados, associações de plataforma, jornadas iniciadas
+e concluídas, replays iniciados, horas registradas aqui e horas informadas pelas
+plataformas (ADR-023). Um jogo em três plataformas é contado uma única vez, e as
+duas medidas de tempo nunca são somadas.
+
 ## Objetivo
 
 Mostrar a jornada de jogos zerados: quantos, quanto tempo, quais notas, quais

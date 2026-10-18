@@ -70,6 +70,30 @@ Opcionalmente, configure `IGDB_CLIENT_ID` e `IGDB_CLIENT_SECRET` no `.env` para 
 
 A busca de estimativas de tempo usa o HowLongToBeat e não precisa de credenciais: a busca acontece conforme você digita o título e aparece no mesmo painel de resultados da metadata (seção "Tempos (HowLongToBeat)"), com o botão "Buscar novamente" como caminho explícito. Ela preenche as estimativas principal, pessoal e completista para revisão, sem gravar nada automaticamente. Ao abrir um jogo sem alguma dessas estimativas, o HowLongToBeat é consultado sozinho (ver `docs/decisions/ADR-019-howlongtobeat-time-estimates.md`).
 
+## Plataformas externas (Achievist)
+
+Os dados das plataformas (biblioteca e tempo acumulado) vêm de uma instância self-hosted do Achievist, a única integração externa de plataforma (ver `docs/decisions/ADR-024-achievist-as-the-only-external-source.md`). O GameShelf não implementa conector direto para Steam, PlayStation ou Xbox.
+
+1. Descubra a rede Docker em que o Achievist roda: `docker network ls`.
+2. No `.env`, preencha `ACHIEVIST_NETWORK` com o nome dessa rede e as três variáveis da integração. A autenticação do Achievist é só por usuário e senha (não há token de serviço), e as credenciais ficam apenas no container da API — nunca no navegador, nunca no banco, nunca em log:
+
+```env
+ACHIEVIST_NETWORK=achievist_default
+ACHIEVIST_BASE_URL=http://achievist-app-1:8000
+ACHIEVIST_USERNAME=seu-usuario
+ACHIEVIST_PASSWORD=sua-senha
+```
+
+3. Suba a stack com o override que liga a API àquela rede:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.achievist.yml up -d
+```
+
+A comunicação é servidor a servidor, pelo nome interno do serviço e pela porta interna 8000: nada é publicado na internet e o navegador nunca fala com o Achievist. Sem as três variáveis a integração fica desligada e o resto da aplicação funciona normalmente.
+
+No Painel, o cartão "Plataformas externas (Achievist)" dispara a sincronização manual, mostra o resultado da última rodada e lista as correspondências a confirmar. Como a API do Achievist não expõe `igdb_id`, cada entrada externa só vira plataforma associada depois que você confirma a qual jogo ela corresponde; títulos iguais aparecem como sugestão e a ambiguidade não é resolvida sozinha. A sincronização atualiza apenas o tempo informado pela plataforma: ela nunca cria sessão, jornada ou replay, nunca soma o tempo externo às suas horas e nunca sobrescreve status, backlog, avaliação, notas ou datas. Se o Achievist estiver fora do ar, a rodada falha e a biblioteca e o registro manual de sessões continuam funcionando.
+
 ## Primeira execução passo a passo
 
 1. Selecione Node.js 22 ou superior no nvm e instale as dependências: `pnpm install` (no PowerShell, use o comando via `npm exec` descrito acima se pnpm não estiver no PATH).

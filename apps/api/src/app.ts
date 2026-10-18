@@ -35,8 +35,17 @@ import type { ChallengeCompletionRepository, MainChallengeRepository } from './m
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
 import type { SavedFilterRepository } from './modules/saved-filters/repository.js';
 import { registerSavedFilterRoutes } from './modules/saved-filters/routes.js';
+import type { GamePlatformRepository } from './modules/game-platforms/repository.js';
+import { registerGamePlatformRoutes } from './modules/game-platforms/routes.js';
+import type { PlaythroughRepository } from './modules/playthroughs/repository.js';
+import { registerPlaythroughRoutes } from './modules/playthroughs/routes.js';
+import { ACHIEVIST_SOURCE } from './modules/integrations/achievist/client.js';
+import type { ExternalLibraryProvider } from './modules/integrations/external-library.js';
+import type { ExternalMatchQueueRepository } from './modules/integrations/match-queue-repository.js';
+import { registerIntegrationRoutes } from './modules/integrations/routes.js';
+import { ExternalSyncRunner } from './modules/integrations/sync-runner.js';
 
-export function buildApp(options: { gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   app.addHook('onRequest', async (request, reply) => {
@@ -62,7 +71,13 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
 
   if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!, options.imageStorage, options.backlogRepository, options.screenshotRepository, options.gameListRepository && options.mainChallengeRepository && options.challengeCompletionRepository
     ? { lists: options.gameListRepository, challenge: options.mainChallengeRepository, completions: options.challengeCompletionRepository }
-    : undefined));
+    : undefined, options.gamePlatformRepository));
+  if (options.gameRepository && options.platformRepository && options.gamePlatformRepository) {
+    app.register((instance) => registerGamePlatformRoutes(instance, options.gameRepository!, options.platformRepository!, options.gamePlatformRepository!));
+  }
+  if (options.gameRepository && options.platformRepository && options.playthroughRepository) {
+    app.register((instance) => registerPlaythroughRoutes(instance, options.gameRepository!, options.platformRepository!, options.playthroughRepository!, options.sessionRepository));
+  }
   if (options.gameRepository && options.gameListRepository) app.register((instance) => registerGameListRoutes(instance, options.gameRepository!, options.gameListRepository!));
   if (options.savedFilterRepository) app.register((instance) => registerSavedFilterRoutes(instance, options.savedFilterRepository!));
   if (options.imageStorage) app.register((instance) => registerMediaRoutes(instance, options.imageStorage!));
@@ -70,7 +85,7 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
   if (options.platformRepository) app.register((instance) => registerPlatformRoutes(instance, options.platformRepository!));
   if (options.genreRepository) app.register((instance) => registerGenreRoutes(instance, options.genreRepository!));
   if (options.gameRepository && options.sessionRepository) {
-    app.register((instance) => registerSessionRoutes(instance, options.gameRepository!, options.sessionRepository!, options.screenshotRepository && options.imageStorage ? { screenshots: options.screenshotRepository, storage: options.imageStorage } : undefined));
+    app.register((instance) => registerSessionRoutes(instance, options.gameRepository!, options.sessionRepository!, options.screenshotRepository && options.imageStorage ? { screenshots: options.screenshotRepository, storage: options.imageStorage } : undefined, { playthroughs: options.playthroughRepository, platforms: options.platformRepository }));
   }
   if (options.gameRepository && options.backlogRepository) {
     app.register((instance) => registerBacklogRoutes(instance, options.gameRepository!, options.backlogRepository!, options.gameListRepository));
@@ -83,7 +98,10 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
     app.register((instance) => registerDashboardRoutes(instance, options.gameRepository!, options.sessionRepository!, options.backlogRepository!, options.planningSettingsRepository!));
   }
   if (options.gameRepository && options.sessionRepository && options.platformRepository && options.genreRepository) {
-    app.register((instance) => registerStatsRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!, options.challengeCompletionRepository));
+    app.register((instance) => registerStatsRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!, options.challengeCompletionRepository,
+      options.gamePlatformRepository && options.playthroughRepository
+        ? { gamePlatforms: options.gamePlatformRepository, playthroughs: options.playthroughRepository }
+        : undefined));
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));
@@ -93,16 +111,30 @@ export function buildApp(options: { gameRepository?: GameRepository; gameListRep
     app.register((instance) => registerScreenshotRoutes(instance, options.gameRepository!, options.sessionRepository!, options.screenshotRepository!, options.imageStorage!));
   }
   if (options.gameRepository && options.franchiseRepository && options.platformRepository && options.genreRepository && options.sessionRepository && options.screenshotRepository
-    && options.backlogRepository && options.gameListRepository && options.mainChallengeRepository && options.goalRepository && options.planningSettingsRepository && options.backupImporter) {
+    && options.backlogRepository && options.gameListRepository && options.mainChallengeRepository && options.goalRepository && options.planningSettingsRepository && options.backupImporter
+    && options.gamePlatformRepository && options.playthroughRepository) {
     app.register((instance) => registerBackupRoutes(instance, {
       games: options.gameRepository!, franchises: options.franchiseRepository!, platforms: options.platformRepository!, genres: options.genreRepository!,
       sessions: options.sessionRepository!, screenshots: options.screenshotRepository!, backlog: options.backlogRepository!, lists: options.gameListRepository!,
       challenges: options.mainChallengeRepository!, goals: options.goalRepository!, planning: options.planningSettingsRepository!, importer: options.backupImporter!,
+      gamePlatforms: options.gamePlatformRepository!, playthroughs: options.playthroughRepository!,
     }));
   }
   if (options.gameRepository && options.sessionRepository && options.goalRepository) {
     app.register((instance) => registerGoalRoutes(instance, options.gameRepository!, options.sessionRepository!, options.goalRepository!));
   }
+
+  // A integração externa é opcional (ADR-024): sem provedor configurado as
+  // rotas respondem "desligada" e nada mais na API depende dela.
+  const integration = options.externalLibraryProvider && options.gameRepository && options.platformRepository
+    && options.gamePlatformRepository && options.externalMatchQueueRepository
+    ? {
+      provider: options.externalLibraryProvider, games: options.gameRepository, platforms: options.platformRepository,
+      gamePlatforms: options.gamePlatformRepository, queue: options.externalMatchQueueRepository,
+    }
+    : undefined;
+  app.register((instance) => registerIntegrationRoutes(instance, integration?.provider.source ?? ACHIEVIST_SOURCE,
+    integration ? { deps: integration, runner: options.externalSyncRunner ?? new ExternalSyncRunner(integration) } : undefined));
 
   return app;
 }

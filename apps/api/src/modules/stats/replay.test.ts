@@ -5,7 +5,7 @@ import { buildReplay } from './replay.js';
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const base: Game = {
   id: id(1), title: 'Base', description: null, coverUrl: null, backgroundUrl: null,
-  releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, genreIds: [], status: 'PLAYING',
+  releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, platformIds: [], genreIds: [], status: 'PLAYING',
   rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false,
   owned: true, archived: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: null,
   estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null,
@@ -14,7 +14,7 @@ const base: Game = {
 const make = (n: number, values: Partial<Game> = {}): Game => ({ ...base, id: id(n), title: `Jogo ${n}`, ...values });
 const session = (gameId: string, startedAt: string, durationMinutes: number | null): Session => ({
   id: id(900), gameId, startedAt, endedAt: durationMinutes === null ? null : startedAt, durationMinutes,
-  progress: null, location: null, notes: null, keyDecisions: null, tips: null, createdAt: startedAt, updatedAt: startedAt,
+  progress: null, location: null, notes: null, keyDecisions: null, tips: null, playthroughId: null, platformId: null, createdAt: startedAt, updatedAt: startedAt,
 });
 const rpg = { id: id(100), name: 'RPG' };
 const action = { id: id(101), name: 'Ação' };

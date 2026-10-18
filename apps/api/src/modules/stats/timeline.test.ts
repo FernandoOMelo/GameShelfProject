@@ -7,7 +7,7 @@ const id = (suffix: number) => `00000000-0000-4000-8000-${String(suffix).padStar
 function makeGame(overrides: Partial<Game> & Pick<Game, 'id' | 'title'>): Game {
   return {
     description: null, coverUrl: null, backgroundUrl: null, releaseYear: null, developer: null, publisher: null,
-    franchiseId: null, platformId: null, genreIds: [], rating: null, owned: true, archived: false,
+    franchiseId: null, platformId: null, platformIds: [], genreIds: [], rating: null, owned: true, archived: false,
     startedAt: null, completedAt: null, status: 'BACKLOG', priority: 'NORMAL',
     estimatedMainHours: null, estimatedCompletionistHours: null, personalEstimatedHours: null,
     retroactivePlayedHours: 0, difficulty: null, gameType: null, completionCondition: null,

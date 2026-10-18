@@ -7,7 +7,7 @@ const fetchMock = vi.fn();
 function makeGame(id: string, title: string, status: string = 'BACKLOG') {
   return {
     id, title, description: null, coverUrl: null, backgroundUrl: null, releaseYear: null,
-    developer: null, publisher: null, franchiseId: null, platformId: null, genreIds: [], rating: null, owned: true, archived: false, startedAt: null, completedAt: null,
+    developer: null, publisher: null, franchiseId: null, platformId: null, platformIds: [], genreIds: [], rating: null, owned: true, archived: false, startedAt: null, completedAt: null,
     status, priority: 'NORMAL', estimatedMainHours: 10, estimatedCompletionistHours: null,
     personalEstimatedHours: null, notes: null,
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
@@ -126,6 +126,25 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLis
       queue.forEach((item, position) => { item.position = position; });
       return new Response(JSON.stringify(queue), { status: 200 });
     }
+    if (url === '/api/platforms' && method === 'GET') return new Response(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000020', name: 'Nintendo Switch' }]), { status: 200 });
+    if (url.startsWith('/api/games/') && url.endsWith('/platforms')) {
+      if (method === 'GET') return new Response('[]', { status: 200 });
+      return new Response(JSON.stringify({
+        id: '00000000-0000-4000-8000-000000000060', gameId: url.split('/')[3], platformId: '00000000-0000-4000-8000-000000000020',
+        edition: null, format: null, owned: true, isPrimary: true, externalSource: null, externalId: null,
+        externalAccountLabel: null, externalPlaytimeMinutes: null, externalLastPlayedAt: null, externalSyncedAt: null,
+        notes: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      }), { status: method === 'POST' ? 201 : 200 });
+    }
+    if (url.endsWith('/playthroughs/metrics')) return new Response(JSON.stringify({ total: 0, started: 0, completed: 0, abandoned: 0, replaysStarted: 0, activePlaythroughId: null }), { status: 200 });
+    if (url.startsWith('/api/games/') && url.endsWith('/playthroughs')) {
+      if (method === 'GET') return new Response('[]', { status: 200 });
+      return new Response(JSON.stringify({
+        id: '00000000-0000-4000-8000-000000000070', gameId: url.split('/')[3], sequence: 1, label: null, status: 'PLAYING',
+        primaryPlatformId: null, startedAt: '2026-01-01', completedAt: null, notes: null, isReplay: false,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      }), { status: method === 'POST' ? 201 : 200 });
+    }
     if (url.startsWith('/api/stats/replay')) return new Response(JSON.stringify({
       year: new Date().getFullYear(), totalMinutes: 270, sessionCount: 3, activeDays: 3, completedCount: 2,
       mostPlayedGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, minutes: 180 },
@@ -145,6 +164,12 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLis
       year: new Date().getFullYear(), days: [{ date: `${new Date().getFullYear()}-03-01`, minutes: 90 }], activeDays: 1, totalMinutes: 90, maxDayMinutes: 90, currentStreak: 0, longestStreak: 3,
     }), { status: 200 });
     if (url === '/api/stats') return new Response(JSON.stringify({
+      library: {
+        gameCount: 3, platformLinkCount: 4, playthroughCount: 3, playthroughsStarted: 3, playthroughsCompleted: 2,
+        replaysStarted: 1, gamesWithCompletedPlaythrough: 2, gamesWithoutPlaythrough: 1,
+        localPlayedHours: 42, externalPlaytimeHours: 10,
+        externalPlaytimeByPlatform: [{ key: '00000000-0000-4000-8000-000000000020', name: 'PC', hours: 10 }],
+      },
       totals: { completedCount: 2, completedHours: 42, averageCompletedHours: 21, longestGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30 }, shortestGame: null, journeyStart: '2024-01-01', journeyDays: 400, completionRate: 66.7, averageHoursPerGame: 14 },
       ratingDistribution: [{ rating: 11, count: 1 }, { rating: 10, count: 0 }], difficultyDistribution: [{ difficulty: 'AAA', count: 0 }, { difficulty: 'C', count: 2 }],
       byGenre: [{ key: 'g1', name: 'RPG', completedCount: 2, hours: 42, averageRating: 9 }], byType: [], byPlatform: [],
@@ -361,7 +386,7 @@ describe('library page', () => {
     const game = {
       id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: 'Escape from the Underworld.',
       coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: 'Supergiant Games', publisher: null, franchiseId: null,
-      platformId: null, genreIds: [], status: 'PLAYING', owned: false, startedAt: null, completedAt: null, priority: 'HIGH', estimatedMainHours: 22, estimatedCompletionistHours: null,
+      platformId: null, platformIds: [], genreIds: [], status: 'PLAYING', owned: false, startedAt: null, completedAt: null, priority: 'HIGH', estimatedMainHours: 22, estimatedCompletionistHours: null,
       personalEstimatedHours: 30, retroactivePlayedHours: 0, notes: 'Reached Elysium.', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     };
     mockApi([game]);
@@ -479,11 +504,36 @@ describe('library page', () => {
     expect(await screen.findByText('Você ainda não criou listas.')).toBeInTheDocument();
   });
 
+  it('associates a platform and starts a playthrough from the game detail page', async () => {
+    const game = makeGame('00000000-0000-4000-8000-000000000001', 'The Witcher 3', 'PLAYING');
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de The Witcher 3' }));
+    await screen.findByRole('heading', { name: 'Plataformas e jornadas' });
+    expect(screen.getByText('Nenhuma plataforma associada.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar plataforma' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Plataforma' }), { target: { value: '00000000-0000-4000-8000-000000000020' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Associar plataforma' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/platforms`, expect.objectContaining({ method: 'POST' })));
+    const platformRequest = fetchMock.mock.calls.find(([url, init]) => url === `/api/games/${game.id}/platforms` && init?.method === 'POST');
+    expect(JSON.parse(String(platformRequest?.[1]?.body))).toMatchObject({ platformId: '00000000-0000-4000-8000-000000000020', owned: true });
+
+    // Sem jornada registrada o botão oferece a primeira jornada, não um replay.
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar jornada' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Identificação' }), { target: { value: 'Primeira vez' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar jornada' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/playthroughs`, expect.objectContaining({ method: 'POST' })));
+    const playthroughRequest = fetchMock.mock.calls.find(([url, init]) => url === `/api/games/${game.id}/playthroughs` && init?.method === 'POST');
+    expect(JSON.parse(String(playthroughRequest?.[1]?.body))).toMatchObject({ label: 'Primeira vez', status: 'PLAYING' });
+  });
+
   it('registers a session from a game detail page and displays its duration', async () => {
     const game = {
       id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null,
       coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: 'Supergiant Games', publisher: null, franchiseId: null,
-      platformId: null, genreIds: [], status: 'PLAYING', owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: null,
+      platformId: null, platformIds: [], genreIds: [], status: 'PLAYING', owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: null,
       estimatedCompletionistHours: null, personalEstimatedHours: null, notes: null,
       createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -529,7 +579,7 @@ describe('library page', () => {
     const game = {
       id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null,
       coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null, franchiseId: null,
-      platformId: null, genreIds: [], status: 'PLAYING', owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: null,
+      platformId: null, platformIds: [], genreIds: [], status: 'PLAYING', owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: null,
       estimatedCompletionistHours: null, personalEstimatedHours: null, notes: null,
       createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     };

@@ -1,4 +1,8 @@
-# Backup, exportação e importação
+# Backup
+
+O backup inclui as plataformas associadas e as jornadas, e as sessões carregam
+jornada e plataforma (ADR-023). As coleções novas têm padrão vazio, então um
+arquivo gerado antes dessa mudança continua importável., exportação e importação
 
 Decisões e motivos em ADR-014.
 

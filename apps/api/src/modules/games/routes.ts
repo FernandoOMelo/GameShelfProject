@@ -7,10 +7,11 @@ import type { ScreenshotRepository } from '../sessions/screenshot-repository.js'
 import type { GameListRepository } from '../game-lists/repository.js';
 import type { ChallengeCompletionRepository, MainChallengeRepository } from '../challenge/repository.js';
 import { detectChallengeCompletion } from '../challenge/service.js';
+import type { GamePlatformRepository } from '../game-platforms/repository.js';
 
 type ChallengeTracking = { lists: GameListRepository; challenge: MainChallengeRepository; completions: ChallengeCompletionRepository };
 
-export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking) {
+export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking, gamePlatforms?: GamePlatformRepository) {
   async function recordChallengeCompletion(updated: { id: string; status: string; completedAt: string | null }) {
     if (!tracking) return;
     const challenge = await tracking.challenge.get();
@@ -24,6 +25,26 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
     gamesById.set(updated.id, { status: updated.status, completedAt: updated.completedAt });
     const completion = detectChallengeCompletion(challenge, list.gameIds, gamesById);
     if (completion) await tracking.completions.record(completion);
+  }
+
+  // A plataforma principal do jogo e as associações são a mesma informação vista
+  // de dois ângulos: escolher uma plataforma no formulário garante a associação
+  // correspondente. Limpar a escolha não remove a associação, apenas deixa o
+  // jogo sem plataforma principal — nada do histórico é descartado.
+  async function syncPrimaryPlatform(gameId: string, platformId: string | null, owned: boolean) {
+    if (!gamePlatforms) return;
+    const links = await gamePlatforms.listForGame(gameId);
+    if (!platformId) {
+      const primary = links.find((link) => link.isPrimary);
+      if (primary) await gamePlatforms.update(gameId, primary.id, { isPrimary: false });
+      return;
+    }
+    const existing = links.find((link) => link.platformId === platformId && !link.edition);
+    if (existing) {
+      if (!existing.isPrimary) await gamePlatforms.update(gameId, existing.id, { isPrimary: true });
+      return;
+    }
+    await gamePlatforms.create(gameId, { platformId, isPrimary: true, owned });
   }
 
   app.get('/games', async (_request, reply) => {
@@ -51,7 +72,8 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
       await localized.rollback();
       throw error;
     }
-    return reply.code(201).send(gameSchema.parse(toResponse(game)));
+    if (localized.input.platformId !== undefined) await syncPrimaryPlatform(game.id, game.platformId, game.owned);
+    return reply.code(201).send(gameSchema.parse(toResponse({ ...game, platformIds: game.platformId ? [game.platformId] : [] })));
   });
 
   app.patch<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
@@ -82,9 +104,14 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
       await localized.rollback();
       return reply.code(404).send({ error: 'Jogo não encontrado.' });
     }
-    if (backlog && (!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED')) await backlog.removeFromQueue(id);
-    if (game.status === 'COMPLETED' && game.completedAt) await recordChallengeCompletion(game);
-    return reply.send(gameSchema.parse(toResponse(game)));
+    let current = game;
+    if (parsed.data.platformId !== undefined) {
+      await syncPrimaryPlatform(id, game.platformId, game.owned);
+      current = await repository.find(id) ?? game;
+    }
+    if (backlog && (!current.owned || current.archived || current.status === 'COMPLETED' || current.status === 'ABANDONED')) await backlog.removeFromQueue(id);
+    if (current.status === 'COMPLETED' && current.completedAt) await recordChallengeCompletion(current);
+    return reply.send(gameSchema.parse(toResponse(current)));
   });
 
   app.delete<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
@@ -143,6 +170,7 @@ function toResponse(game: Awaited<ReturnType<GameRepository['find']>> extends in
     status: game.status,
     rating: game.rating ?? null,
     platformId: game.platformId ?? null,
+    platformIds: game.platformIds ?? [],
     owned: game.owned ?? false,
     archived: game.archived ?? false,
     startedAt: game.startedAt ?? null,

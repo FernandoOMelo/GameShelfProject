@@ -3,6 +3,8 @@ import type { SessionInput } from '@gameshelf/contracts';
 export type SessionRecord = {
   id: string;
   gameId: string;
+  playthroughId: string | null;
+  platformId: string | null;
   startedAt: Date;
   endedAt: Date | null;
   progress: number | null;
@@ -21,4 +23,6 @@ export interface SessionRepository {
   create(gameId: string, input: SessionInput): Promise<SessionRecord>;
   update(gameId: string, sessionId: string, input: SessionInput): Promise<SessionRecord | undefined>;
   delete(gameId: string, sessionId: string): Promise<boolean>;
+  /** Solta as sessões de uma jornada removida, sem apagar nada do histórico. */
+  detachPlaythrough(playthroughId: string): Promise<number>;
 }

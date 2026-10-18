@@ -1,4 +1,6 @@
-import { gameSchema, sessionSchema } from '@gameshelf/contracts';
+import { gamePlatformSchema, gameSchema, playthroughSchema, sessionSchema } from '@gameshelf/contracts';
+import type { PlaythroughRecord } from '../playthroughs/repository.js';
+import { isReplay } from '../playthroughs/service.js';
 import type { GameRepository } from '../games/repository.js';
 import type { SessionRepository } from '../sessions/repository.js';
 
@@ -23,5 +25,31 @@ export function toSession(session: SessionRecord) {
     startedAt: session.startedAt.toISOString(), endedAt: session.endedAt?.toISOString() ?? null,
     durationMinutes: session.endedAt === null ? null : Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 60_000),
     createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString(),
+  });
+}
+
+export function toGamePlatform(record: {
+  id: string; gameId: string; platformId: string; edition: string | null;
+  format: 'PHYSICAL' | 'DIGITAL' | 'SUBSCRIPTION' | 'CLOUD' | null; owned: boolean; isPrimary: boolean;
+  externalSource: string | null; externalId: string | null; externalAccountLabel: string | null;
+  externalPlaytimeMinutes: number | null; externalLastPlayedAt: Date | null; externalSyncedAt: Date | null;
+  notes: string | null; createdAt: Date; updatedAt: Date;
+}) {
+  return gamePlatformSchema.parse({
+    ...record,
+    externalLastPlayedAt: record.externalLastPlayedAt?.toISOString() ?? null,
+    externalSyncedAt: record.externalSyncedAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  });
+}
+
+export function toPlaythrough(record: PlaythroughRecord) {
+  return playthroughSchema.parse({
+    ...record,
+    // Replay é derivado da ordenação, não de um contador separado.
+    isReplay: isReplay(record),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
   });
 }

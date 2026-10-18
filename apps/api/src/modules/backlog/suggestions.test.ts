@@ -5,7 +5,7 @@ import { buildSuggestions } from './suggestions.js';
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const base: Game = {
   id: id(1), title: 'Base', description: null, coverUrl: null, backgroundUrl: null,
-  releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, genreIds: [], status: 'BACKLOG',
+  releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, platformIds: [], genreIds: [], status: 'BACKLOG',
   rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false,
   owned: true, archived: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: 40,
   estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null,
@@ -59,7 +59,7 @@ describe('next game suggestions', () => {
 
   it('adds a bonus for paused games and for time waiting since the last session', () => {
     const paused = make(1, { status: 'PAUSED', estimatedMainHours: null });
-    const session: Session = { id: id(900), gameId: id(1), startedAt: '2025-12-10T10:00:00.000Z', endedAt: '2025-12-10T11:00:00.000Z', durationMinutes: 60, progress: null, location: null, notes: null, keyDecisions: null, tips: null, createdAt: '2025-12-10T11:00:00.000Z', updatedAt: '2025-12-10T11:00:00.000Z' };
+    const session: Session = { id: id(900), gameId: id(1), startedAt: '2025-12-10T10:00:00.000Z', endedAt: '2025-12-10T11:00:00.000Z', durationMinutes: 60, progress: null, location: null, notes: null, keyDecisions: null, tips: null, playthroughId: null, platformId: null, createdAt: '2025-12-10T11:00:00.000Z', updatedAt: '2025-12-10T11:00:00.000Z' };
     const [result] = buildSuggestions({ games: [paused], sessions: [session], queue: [], today });
     // NORMAL 15 + pausado 8 + 90 dias (3 × 2) = 29
     expect(result!.score).toBe(29);

@@ -11,6 +11,8 @@ import type { GameListRepository } from '../game-lists/repository.js';
 import type { MainChallengeRepository } from '../challenge/repository.js';
 import type { GoalRepository } from '../goals/repository.js';
 import type { PlanningSettingsRepository } from '../planning/repository.js';
+import type { GamePlatformRepository } from '../game-platforms/repository.js';
+import type { PlaythroughRepository } from '../playthroughs/repository.js';
 import { LibraryNotEmptyError, type BackupImporter } from './importer.js';
 import { buildBackup, findBackupIssues } from './service.js';
 
@@ -26,6 +28,8 @@ export type BackupDependencies = {
   challenges: MainChallengeRepository;
   goals: GoalRepository;
   planning: PlanningSettingsRepository;
+  gamePlatforms: GamePlatformRepository;
+  playthroughs: PlaythroughRepository;
   importer: BackupImporter;
 };
 
@@ -33,14 +37,15 @@ const IMPORT_BODY_LIMIT = 64 * 1024 * 1024;
 
 export async function registerBackupRoutes(app: FastifyInstance, deps: BackupDependencies) {
   app.get('/backup/export', async (_request, reply) => {
-    const [franchises, platforms, genres, games, sessions, screenshots, queue, lists, challenge, goals, weeklyMinutes] = await Promise.all([
+    const [franchises, platforms, genres, games, sessions, screenshots, queue, lists, challenge, goals, weeklyMinutes, gamePlatforms, playthroughs] = await Promise.all([
       deps.franchises.list(), deps.platforms.list(), deps.genres.list(), deps.games.list(), deps.sessions.listAll(), deps.screenshots.listAll(),
       deps.backlog.listQueue(), deps.lists.list(), deps.challenges.get(), deps.goals.list(), deps.planning.getWeeklyMinutes(),
+      deps.gamePlatforms.listAll(), deps.playthroughs.listAll(),
     ]);
     const exportedAt = new Date();
     const backup = backupSchema.parse(buildBackup({
       franchises: franchises.map(({ id, name }) => ({ id, name })), platforms: platforms.map(({ id, name }) => ({ id, name })), genres: genres.map(({ id, name }) => ({ id, name })),
-      games, sessions, screenshots, queue, lists, challenge, goals, weeklyMinutes,
+      games, sessions, screenshots, queue, lists, challenge, goals, weeklyMinutes, gamePlatforms, playthroughs,
     }, exportedAt));
     return reply
       .header('content-disposition', `attachment; filename="gameshelf-backup-${exportedAt.toISOString().slice(0, 10)}.json"`)
@@ -64,6 +69,7 @@ export async function registerBackupRoutes(app: FastifyInstance, deps: BackupDep
     return reply.code(201).send({
       games: data.games.length, sessions: data.sessions.length, lists: data.lists.length, goals: data.goals.length,
       screenshots: data.screenshots.length, queue: data.queue.length,
+      gamePlatforms: data.gamePlatforms.length, playthroughs: data.playthroughs.length,
     });
   });
 }

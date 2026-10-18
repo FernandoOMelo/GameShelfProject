@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
@@ -13,6 +13,7 @@ import { NextGameSuggestion } from './next-game-suggestion';
 // Views de uso menos frequente entram em chunks próprios. `ErrorBoundary` +
 // `Suspense` garantem que uma falha de rede (ou offline sem cache) mostre um
 // estado recuperável em vez de derrubar a aplicação.
+const GameJourneyPanel = lazy(async () => ({ default: (await import('./game-journey-panel')).GameJourneyPanel }));
 const StatsView = lazy(async () => ({ default: (await import('./stats-view')).StatsView }));
 const TimelineView = lazy(async () => ({ default: (await import('./timeline-view')).TimelineView }));
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
@@ -144,6 +145,7 @@ export function App() {
   const [formStatus, setFormStatus] = useState<Game['status']>('BACKLOG');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [playthroughs, setPlaythroughs] = useState<Playthrough[]>([]);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [sessionFeedback, setSessionFeedback] = useState('');
   const [savingSession, setSavingSession] = useState(false);
@@ -279,6 +281,18 @@ export function App() {
       setSessionFeedback('Não foi possível carregar o histórico de sessões.');
     });
   }, [selectedGame?.id, offline.syncs]);
+
+  // Jornadas do jogo aberto: alimentam o seletor do formulário de sessão. Uma
+  // falha aqui deixa o seletor vazio e o registro manual continua funcionando.
+  const loadPlaythroughs = useCallback(async () => {
+    if (!selectedGame) { setPlaythroughs([]); return; }
+    try {
+      const response = await fetch(`${apiUrl}/games/${selectedGame.id}/playthroughs`);
+      setPlaythroughs(response.ok ? await response.json() as Playthrough[] : []);
+    } catch { setPlaythroughs([]); }
+  }, [selectedGame?.id]);
+
+  useEffect(() => { void loadPlaythroughs(); }, [loadPlaythroughs]);
   useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -300,7 +314,7 @@ export function App() {
     && game.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())
     && (statusFilter === 'ALL' || game.status === statusFilter)
     && (priorityFilter === 'ALL' || game.priority === priorityFilter)
-    && (platformFilter === 'ALL' || game.platformId === platformFilter)
+    && (platformFilter === 'ALL' || game.platformId === platformFilter || game.platformIds.includes(platformFilter))
     && (genreFilter === 'ALL' || game.genreIds.includes(genreFilter))
     && (franchiseFilter === 'ALL' || game.franchiseId === franchiseFilter)
     && (developerFilter === 'ALL' || game.developer === developerFilter)
@@ -701,6 +715,8 @@ export function App() {
           notes: nullableString(form.get('notes')),
           keyDecisions: nullableString(form.get('keyDecisions')),
           tips: nullableString(form.get('tips')),
+          playthroughId: nullableString(form.get('playthroughId')),
+          platformId: nullableString(form.get('sessionPlatformId')),
         }),
       });
       if (!response.ok) {
@@ -1002,6 +1018,14 @@ export function App() {
               <div><dt>Completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}</dd></div>
               <div><dt>Pessoal</dt><dd>{formatHours(selectedGame.personalEstimatedHours)}</dd></div>
             </dl></section>
+            <Suspense fallback={<section className="details-section"><p className="session-empty">Carregando plataformas e jornadas…</p></section>}>
+              <GameJourneyPanel
+                gameId={selectedGame.id}
+                platforms={platforms}
+                localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0)}
+                onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
+              />
+            </Suspense>
             <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Adicionar horas retroativas<input aria-label="Horas retroativas" type="number" min="0.01" step="0.01" required value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /></label><Button type="submit">Lançar horas</Button></form><h3>Sessões</h3>
               {sessions.find((session) => session.endedAt === null) ? <div className="session-timer"><div><p className="eyebrow">SESSÃO EM ANDAMENTO</p><strong>{formatElapsed(sessions.find((session) => session.endedAt === null)!.startedAt, clockNow)}</strong></div><Button type="button" disabled={savingSession} onClick={() => void finishActiveSession()}>{savingSession ? 'Encerrando…' : 'Encerrar sessão'}</Button></div> : <div className="session-timer"><div><p className="eyebrow">PRÓXIMA SESSÃO</p><strong>Pronto para jogar?</strong></div><Button type="button" disabled={savingSession} onClick={() => void startOrContinueSession()}>{savingSession ? 'Iniciando…' : 'Continuar jogando'}</Button></div>}
               {editingSession !== null && <form key={editingSession.id} className="session-form" onSubmit={submitSession}>
@@ -1009,6 +1033,8 @@ export function App() {
                 <label className="form-field">Término<input name="endedAt" type="datetime-local" defaultValue={editingSession?.endedAt ? toDateTimeLocal(new Date(editingSession.endedAt)) : editingSession ? '' : toDateTimeLocal(new Date())} /><small>Deixe vazio para manter a sessão em andamento.</small></label>
                 <label className="form-field">Progresso (%)<input name="progress" type="number" min="0" max="100" step="1" defaultValue={editingSession?.progress ?? ''} /></label>
                 <label className="form-field">Onde parei<input name="location" maxLength={200} placeholder="A missão, capítulo ou ponto exato" defaultValue={editingSession?.location ?? ''} /></label>
+                <label className="form-field">Jornada<select name="playthroughId" defaultValue={editingSession?.playthroughId ?? ''}><option value="">Sem jornada</option>{playthroughs.map((playthrough) => <option key={playthrough.id} value={playthrough.id}>{playthrough.label ?? (playthrough.isReplay ? `Replay ${playthrough.sequence - 1}` : 'Primeira jornada')}</option>)}</select></label>
+                <label className="form-field">Plataforma da sessão<select name="sessionPlatformId" defaultValue={editingSession?.platformId ?? ''}><option value="">Não informada</option>{platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}</select></label>
                 <label className="form-field form-wide">Resumo da história<textarea name="notes" rows={3} maxLength={10000} defaultValue={editingSession?.notes ?? ''} /></label>
                 <label className="form-field form-wide">Decisões importantes<textarea name="keyDecisions" rows={2} maxLength={10000} defaultValue={editingSession?.keyDecisions ?? ''} /></label>
                 <label className="form-field form-wide">Dicas e lembretes<textarea name="tips" rows={2} maxLength={10000} defaultValue={editingSession?.tips ?? ''} /></label>
@@ -1017,7 +1043,7 @@ export function App() {
               {sessionFeedback && <p role="status" className="session-feedback">{sessionFeedback}</p>}
               {sessions.length === 0 ? <p className="session-empty">Nenhuma sessão registrada.</p> : <ol className="session-list">{sessions.map((session) => <li key={session.id}>
                 <div><strong>{formatDateTime(session.startedAt)}</strong><span>{session.endedAt ? formatDuration(session.durationMinutes) : 'Em andamento'}</span>{!session.endedAt && <small className="session-live-duration">{formatElapsed(session.startedAt, clockNow)}</small>}</div>
-                <p>{[session.location, session.progress === null ? null : `${session.progress}%`].filter(Boolean).join(' · ') || 'Sem progresso informado'}</p>
+                <p>{[session.location, session.progress === null ? null : `${session.progress}%`, platforms.find((platform) => platform.id === session.platformId)?.name, playthroughs.find((playthrough) => playthrough.id === session.playthroughId)?.label].filter(Boolean).join(' · ') || 'Sem progresso informado'}</p>
                 {journalEntries(session, recapFields).map((entry) => <p key={entry.label} className="session-journal-entry"><strong>{entry.label}</strong>{entry.value}</p>)}
                 <div className="session-item-actions"><button type="button" className="session-edit" onClick={() => setEditingSession(session)}>Editar sessão</button><button type="button" className="session-delete" onClick={() => void deleteSession(session)}>Excluir sessão</button></div>
                 <SessionScreenshots gameId={session.gameId} sessionId={session.id} />
@@ -1027,7 +1053,7 @@ export function App() {
           </div>
           <aside className="details-rail" aria-label="Ações do jogo"><p className="eyebrow">AÇÕES</p><div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div></aside>
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
+      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} games={games} platforms={platforms} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onRefresh={refreshPlanningViews} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
       <section className="library-heading">
         <div><p className="eyebrow">SUA COLEÇÃO</p><h1>Biblioteca</h1><p className="library-subtitle">Seus jogos, reunidos em um só lugar.</p></div>
         <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>

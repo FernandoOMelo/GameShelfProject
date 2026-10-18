@@ -113,6 +113,20 @@
             "when": 1791907561366,
             "tag": "0016_session_journal_fields",
             "breakpoints": true
+        },
+        {
+            "idx": 16,
+            "version": "7",
+            "when": 1792413061366,
+            "tag": "0017_game_platforms_and_playthroughs",
+            "breakpoints": true
+        },
+        {
+            "idx": 17,
+            "version": "7",
+            "when": 1792499461366,
+            "tag": "0018_external_match_queue",
+            "breakpoints": true
         }
     ]
 }

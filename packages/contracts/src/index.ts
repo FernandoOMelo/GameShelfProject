@@ -92,6 +92,9 @@ export const gameSchema = z.object({
   publisher: z.string().nullable(),
   franchiseId: z.string().uuid().nullable(),
   platformId: z.string().uuid().nullable(),
+  // Todas as plataformas associadas ao jogo (ADR-023). Derivada de game_platforms;
+  // o padrão vazio mantém backups antigos importáveis.
+  platformIds: z.array(z.string().uuid()).default([]),
   genreIds: z.array(z.string().uuid()),
   status: gameStatusSchema,
   rating: z.number().int().min(1).max(11).nullable(),
@@ -150,6 +153,8 @@ export const gameTimeEstimatesSchema = z.array(gameTimeEstimateSchema).max(10);
 export type GameTimeEstimate = z.infer<typeof gameTimeEstimateSchema>;
 
 const sessionFieldsSchema = z.object({
+  playthroughId: z.string().uuid().nullable().optional(),
+  platformId: z.string().uuid().nullable().optional(),
   startedAt: z.string().datetime(),
   endedAt: z.string().datetime().nullable().optional(),
   progress: z.number().int().min(0).max(100).nullable().optional(),
@@ -171,6 +176,8 @@ export const sessionUpdateSchema = sessionFieldsSchema.partial().refine((session
 export const sessionSchema = z.object({
   id: z.string().uuid(),
   gameId: z.string().uuid(),
+  playthroughId: z.string().uuid().nullable().default(null),
+  platformId: z.string().uuid().nullable().default(null),
   startedAt: z.string().datetime(),
   endedAt: z.string().datetime().nullable(),
   durationMinutes: z.number().int().nonnegative().nullable(),
@@ -194,6 +201,172 @@ export type SessionScreenshot = z.infer<typeof sessionScreenshotSchema>;
 export type SessionInput = z.infer<typeof sessionInputSchema>;
 export type SessionUpdate = z.infer<typeof sessionUpdateSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+
+// ── Associação de plataforma (ADR-023) ──────────────────────────────────────
+// "O jogo existe nesta plataforma", "eu possuo", "eu joguei" e "eu zerei" são
+// informações distintas: a associação cobre existência e posse. Jogar e zerar
+// ficam nas sessões e nas jornadas.
+export const gamePlatformFormatSchema = z.enum(['PHYSICAL', 'DIGITAL', 'SUBSCRIPTION', 'CLOUD']);
+export type GamePlatformFormat = z.infer<typeof gamePlatformFormatSchema>;
+
+const gamePlatformFieldsSchema = z.object({
+  platformId: z.string().uuid(),
+  edition: z.string().trim().max(120).nullable().optional(),
+  format: gamePlatformFormatSchema.nullable().optional(),
+  owned: z.boolean().optional(),
+  isPrimary: z.boolean().optional(),
+  notes: optionalText,
+}).strict();
+
+export const gamePlatformInputSchema = gamePlatformFieldsSchema;
+export const gamePlatformUpdateSchema = gamePlatformFieldsSchema.partial().refine((value) => Object.keys(value).length > 0, {
+  message: 'Informe ao menos um campo para atualizar.',
+});
+export const gamePlatformSchema = z.object({
+  id: z.string().uuid(),
+  gameId: z.string().uuid(),
+  platformId: z.string().uuid(),
+  edition: z.string().nullable(),
+  format: gamePlatformFormatSchema.nullable(),
+  owned: z.boolean(),
+  isPrimary: z.boolean(),
+  // Proveniência externa: sempre separada do tempo registrado localmente.
+  externalSource: z.string().nullable(),
+  externalId: z.string().nullable(),
+  externalAccountLabel: z.string().nullable(),
+  externalPlaytimeMinutes: z.number().int().nonnegative().nullable(),
+  externalLastPlayedAt: z.string().datetime().nullable(),
+  externalSyncedAt: z.string().datetime().nullable(),
+  notes: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+export type GamePlatformInput = z.infer<typeof gamePlatformInputSchema>;
+export type GamePlatformUpdate = z.infer<typeof gamePlatformUpdateSchema>;
+export type GamePlatform = z.infer<typeof gamePlatformSchema>;
+
+// ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────
+export const playthroughStatusSchema = z.enum(['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);
+export type PlaythroughStatus = z.infer<typeof playthroughStatusSchema>;
+
+const playthroughFieldsSchema = z.object({
+  label: z.string().trim().max(120).nullable().optional(),
+  status: playthroughStatusSchema.optional(),
+  primaryPlatformId: z.string().uuid().nullable().optional(),
+  startedAt: calendarDateSchema.nullable().optional(),
+  completedAt: calendarDateSchema.nullable().optional(),
+  notes: optionalText,
+}).strict();
+
+// Mesmas regras do banco, aplicadas na fronteira: uma jornada planejada ainda
+// não começou e uma jornada concluída sempre tem data de conclusão.
+const validPlaythrough = <T extends z.ZodTypeAny>(schema: T) => schema
+  .refine((value: { startedAt?: string | null; completedAt?: string | null }) => !value.startedAt || !value.completedAt || value.completedAt >= value.startedAt, {
+    path: ['completedAt'], message: 'A data de conclusão não pode ser anterior ao início.',
+  })
+  .refine((value: { status?: PlaythroughStatus; completedAt?: string | null }) => value.status !== 'COMPLETED' || Boolean(value.completedAt), {
+    path: ['completedAt'], message: 'Informe a data de conclusão da jornada.',
+  })
+  .refine((value: { status?: PlaythroughStatus; startedAt?: string | null; completedAt?: string | null }) => value.status !== 'PLANNED' || (!value.startedAt && !value.completedAt), {
+    path: ['status'], message: 'Uma jornada planejada não tem datas de início ou conclusão.',
+  });
+
+export const playthroughInputSchema = validPlaythrough(playthroughFieldsSchema);
+export const playthroughUpdateSchema = playthroughFieldsSchema.partial().refine((value) => Object.keys(value).length > 0, {
+  message: 'Informe ao menos um campo para atualizar.',
+});
+export const playthroughSchema = z.object({
+  id: z.string().uuid(),
+  gameId: z.string().uuid(),
+  sequence: z.number().int().positive(),
+  label: z.string().nullable(),
+  status: playthroughStatusSchema,
+  primaryPlatformId: z.string().uuid().nullable(),
+  startedAt: calendarDateSchema.nullable(),
+  completedAt: calendarDateSchema.nullable(),
+  notes: z.string().nullable(),
+  // Derivado da ordenação: a primeira jornada do jogo não é um replay.
+  isReplay: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+export type PlaythroughInput = z.infer<typeof playthroughInputSchema>;
+export type PlaythroughUpdate = z.infer<typeof playthroughUpdateSchema>;
+export type Playthrough = z.infer<typeof playthroughSchema>;
+
+// Métricas de replay de um jogo. "Iniciada" é toda jornada que deixou de ser
+// planejada; "replay iniciado" é toda jornada iniciada com sequence > 1.
+export const playthroughMetricsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  started: z.number().int().nonnegative(),
+  completed: z.number().int().nonnegative(),
+  abandoned: z.number().int().nonnegative(),
+  replaysStarted: z.number().int().nonnegative(),
+  activePlaythroughId: z.string().uuid().nullable(),
+}).strict();
+export type PlaythroughMetrics = z.infer<typeof playthroughMetricsSchema>;
+
+// ── Importação de plataformas externas (ADR-024) ────────────────────────────
+// A fonte externa informa biblioteca e tempo acumulado por plataforma; ela não
+// tem evento de sessão, então nada aqui cria sessão, jornada ou replay, e o
+// tempo externo nunca é somado às horas registradas localmente.
+export const externalSyncSummarySchema = z.object({
+  source: z.string(),
+  /** Entradas lidas da fonte nesta rodada. */
+  fetched: z.number().int().nonnegative(),
+  /** Associações já vinculadas que tiveram o tempo acumulado atualizado. */
+  updated: z.number().int().nonnegative(),
+  /** Entradas sem vínculo confirmado, aguardando o usuário. */
+  pending: z.number().int().nonnegative(),
+  /** Entradas que o usuário já marcou para ignorar. */
+  ignored: z.number().int().nonnegative(),
+  // Explícito no contrato porque é um limite da decisão, não um detalhe: a
+  // sincronização nunca cria sessões nem jornadas.
+  sessionsCreated: z.literal(0),
+  playthroughsCreated: z.literal(0),
+}).strict();
+export type ExternalSyncSummary = z.infer<typeof externalSyncSummarySchema>;
+
+export const externalSyncStateSchema = z.object({
+  source: z.string(),
+  /** `disabled` quando as credenciais não estão configuradas. */
+  status: z.enum(['disabled', 'idle', 'running', 'succeeded', 'failed']),
+  startedAt: z.string().datetime().nullable(),
+  finishedAt: z.string().datetime().nullable(),
+  summary: externalSyncSummarySchema.nullable(),
+  error: z.string().nullable(),
+}).strict();
+export type ExternalSyncState = z.infer<typeof externalSyncStateSchema>;
+
+/** Sugestão por título normalizado. É só sugestão: nunca é aplicada sozinha. */
+export const externalMatchSuggestionSchema = z.object({
+  gameId: z.string().uuid(),
+  title: z.string(),
+}).strict();
+
+export const externalPendingMatchSchema = z.object({
+  id: z.string().uuid(),
+  source: z.string(),
+  externalId: z.string(),
+  title: z.string(),
+  platformName: z.string(),
+  accountLabel: z.string().nullable(),
+  externalPlaytimeMinutes: z.number().int().nonnegative().nullable(),
+  externalLastPlayedAt: z.string().datetime().nullable(),
+  firstSeenAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  suggestions: z.array(externalMatchSuggestionSchema),
+  /** Mais de uma sugestão é ambiguidade: a decisão fica com o usuário. */
+  ambiguous: z.boolean(),
+}).strict();
+export type ExternalPendingMatch = z.infer<typeof externalPendingMatchSchema>;
+
+export const externalMatchConfirmSchema = z.object({
+  gameId: z.string().uuid(),
+  /** Plataforma do catálogo; sem ela, o nome da fonte é resolvido ou criado. */
+  platformId: z.string().uuid().optional(),
+}).strict();
+export type ExternalMatchConfirm = z.infer<typeof externalMatchConfirmSchema>;
 
 export const gameListInputSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 export const gameListCreateSchema = gameListInputSchema.extend({
@@ -341,7 +514,29 @@ const statsGroupSchema = z.object({
 }).strict();
 const statsGameRefSchema = z.object({ id: z.string().uuid(), title: z.string(), coverUrl: mediaUrl.nullable(), hours: hoursSchema }).strict();
 
+const externalPlaytimeGroupSchema = z.object({
+  key: z.string(),
+  name: z.string(),
+  hours: hoursSchema,
+}).strict();
+
+export const libraryStatsSchema = z.object({
+  gameCount: z.number().int().nonnegative(),
+  platformLinkCount: z.number().int().nonnegative(),
+  playthroughCount: z.number().int().nonnegative(),
+  playthroughsStarted: z.number().int().nonnegative(),
+  playthroughsCompleted: z.number().int().nonnegative(),
+  replaysStarted: z.number().int().nonnegative(),
+  gamesWithCompletedPlaythrough: z.number().int().nonnegative(),
+  gamesWithoutPlaythrough: z.number().int().nonnegative(),
+  localPlayedHours: hoursSchema,
+  externalPlaytimeHours: hoursSchema,
+  externalPlaytimeByPlatform: z.array(externalPlaytimeGroupSchema),
+}).strict();
+export type LibraryStats = z.infer<typeof libraryStatsSchema>;
+
 export const statsResponseSchema = z.object({
+  library: libraryStatsSchema,
   totals: z.object({
     completedCount: z.number().int().nonnegative(),
     completedHours: hoursSchema,
@@ -499,7 +694,11 @@ export const backupDataSchema = z.object({
   sessions: z.array(sessionSchema.omit({ durationMinutes: true }).extend({
     keyDecisions: z.string().nullable().default(null),
     tips: z.string().nullable().default(null),
+    playthroughId: z.string().uuid().nullable().default(null),
+    platformId: z.string().uuid().nullable().default(null),
   })),
+  gamePlatforms: z.array(gamePlatformSchema).default([]),
+  playthroughs: z.array(playthroughSchema).default([]),
   screenshots: z.array(sessionScreenshotSchema),
   queue: z.array(z.object({ gameId: z.string().uuid(), position: z.number().int().nonnegative(), addedAt: z.string().datetime() }).strict()),
   lists: z.array(z.object({

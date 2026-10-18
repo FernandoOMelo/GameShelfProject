@@ -5,7 +5,7 @@ import { buildActivity } from './activity.js';
 const id = '00000000-0000-4000-8000-000000000001';
 const session = (startedAt: string, durationMinutes: number | null): Session => ({
   id, gameId: id, startedAt, endedAt: durationMinutes === null ? null : startedAt, durationMinutes,
-  progress: null, location: null, notes: null, keyDecisions: null, tips: null, createdAt: startedAt, updatedAt: startedAt,
+  progress: null, location: null, notes: null, keyDecisions: null, tips: null, playthroughId: null, platformId: null, createdAt: startedAt, updatedAt: startedAt,
 });
 
 describe('activity', () => {

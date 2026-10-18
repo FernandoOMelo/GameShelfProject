@@ -31,6 +31,12 @@ export class DrizzleSessionRepository implements SessionRepository {
     return session;
   }
 
+  async detachPlaythrough(playthroughId: string): Promise<number> {
+    const updated = await this.db.update(sessions).set({ playthroughId: null, updatedAt: new Date() })
+      .where(eq(sessions.playthroughId, playthroughId)).returning({ id: sessions.id });
+    return updated.length;
+  }
+
   async delete(gameId: string, sessionId: string): Promise<boolean> {
     const deleted = await this.db.delete(sessions)
       .where(and(eq(sessions.gameId, gameId), eq(sessions.id, sessionId))).returning({ id: sessions.id });
@@ -40,6 +46,8 @@ export class DrizzleSessionRepository implements SessionRepository {
 
 function toDatabaseInput(input: SessionInput) {
   return {
+    playthroughId: input.playthroughId ?? null,
+    platformId: input.platformId ?? null,
     startedAt: new Date(input.startedAt),
     endedAt: input.endedAt ? new Date(input.endedAt) : null,
     progress: input.progress ?? null,

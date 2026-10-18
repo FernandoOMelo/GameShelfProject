@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { type AnyPgColumn, pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const franchises = pgTable('franchises', {
@@ -80,6 +80,10 @@ export const gameGenres = pgTable('game_genres', {
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
+  // Jornada e plataforma da sessão são opcionais: sessões antigas e sessões sem
+  // informação confiável permanecem válidas sem vínculo.
+  playthroughId: uuid('playthrough_id').references((): AnyPgColumn => playthroughs.id, { onDelete: 'set null' }),
+  platformId: uuid('platform_id').references(() => platforms.id, { onDelete: 'set null' }),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
   endedAt: timestamp('ended_at', { withTimezone: true }),
   progress: integer('progress'),
@@ -92,6 +96,7 @@ export const sessions = pgTable('sessions', {
 }, (table) => [
   check('sessions_ended_at_not_before_started_at', sql`${table.endedAt} IS NULL OR ${table.endedAt} >= ${table.startedAt}`),
   check('sessions_progress_valid', sql`${table.progress} IS NULL OR ${table.progress} BETWEEN 0 AND 100`),
+  index('sessions_playthrough_idx').on(table.playthroughId),
 ]);
 
 export const queueEntries = pgTable('queue_entries', {
@@ -174,3 +179,101 @@ export const sessionScreenshots = pgTable('session_screenshots', {
   url: text('url').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index('session_screenshots_session_id_idx').on(table.sessionId)]);
+
+
+// ── Plataformas associadas e jornadas (ADR-023) ─────────────────────────────
+// `games` continua sendo o cadastro canônico. `game_platforms` reintroduz a
+// associação múltipla que o ADR-007 havia consolidado; `games.platform_id`
+// permanece como plataforma principal, um resumo de exibição, nunca uma
+// restrição sobre onde as sessões aconteceram.
+
+export const gamePlatformFormat = pgEnum('game_platform_format', ['PHYSICAL', 'DIGITAL', 'SUBSCRIPTION', 'CLOUD']);
+
+export const gamePlatforms = pgTable('game_platforms', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
+  platformId: uuid('platform_id').notNull().references(() => platforms.id, { onDelete: 'restrict' }),
+  edition: text('edition'),
+  format: gamePlatformFormat('format'),
+  owned: boolean('owned').notNull().default(false),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  // Proveniência externa, preenchida apenas pela importação. `external_playtime_minutes`
+  // nulo significa "a fonte não informa", nunca zero, e nunca se soma às sessões locais.
+  externalSource: text('external_source'),
+  externalId: text('external_id'),
+  externalAccountLabel: text('external_account_label'),
+  externalPlaytimeMinutes: integer('external_playtime_minutes'),
+  externalLastPlayedAt: timestamp('external_last_played_at', { withTimezone: true }),
+  externalSyncedAt: timestamp('external_synced_at', { withTimezone: true }),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  // Edições diferentes da mesma plataforma são associações legítimas; `coalesce`
+  // porque em Postgres duas linhas com edition nula não colidiriam.
+  uniqueIndex('game_platforms_game_platform_edition_unique').on(table.gameId, table.platformId, sql`coalesce(${table.edition}, '')`),
+  uniqueIndex('game_platforms_external_unique').on(table.externalSource, table.externalId).where(sql`${table.externalSource} IS NOT NULL AND ${table.externalId} IS NOT NULL`),
+  uniqueIndex('game_platforms_single_primary').on(table.gameId).where(sql`${table.isPrimary}`),
+  index('game_platforms_game_idx').on(table.gameId),
+  check('game_platforms_edition_not_blank', sql`${table.edition} IS NULL OR length(trim(${table.edition})) > 0`),
+  check('game_platforms_external_playtime_nonnegative', sql`${table.externalPlaytimeMinutes} IS NULL OR ${table.externalPlaytimeMinutes} >= 0`),
+  check('game_platforms_external_pair', sql`(${table.externalSource} IS NULL) = (${table.externalId} IS NULL)`),
+]);
+
+export const playthroughStatus = pgEnum('playthrough_status', ['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);
+
+// Uma jornada é uma experiência contínua de jogo: zero, uma ou várias por jogo.
+// `sequence` ordena as jornadas do jogo e define o que é replay (sequence > 1).
+// Não há plataforma obrigatória; a plataforma é registrada por sessão.
+export const playthroughs = pgTable('playthroughs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
+  sequence: integer('sequence').notNull(),
+  label: text('label'),
+  status: playthroughStatus('status').notNull().default('PLANNED'),
+  primaryPlatformId: uuid('primary_platform_id').references(() => platforms.id, { onDelete: 'set null' }),
+  startedAt: date('started_at'),
+  completedAt: date('completed_at'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('playthroughs_game_sequence_unique').on(table.gameId, table.sequence),
+  index('playthroughs_game_idx').on(table.gameId),
+  check('playthroughs_sequence_positive', sql`${table.sequence} > 0`),
+  check('playthroughs_label_not_blank', sql`${table.label} IS NULL OR length(trim(${table.label})) > 0`),
+  check('playthroughs_completion_not_before_start', sql`${table.startedAt} IS NULL OR ${table.completedAt} IS NULL OR ${table.completedAt} >= ${table.startedAt}`),
+  // Uma jornada concluída sempre registra a data da conclusão.
+  check('playthroughs_completed_requires_date', sql`${table.status} <> 'COMPLETED' OR ${table.completedAt} IS NOT NULL`),
+  // Planejada é o único estado que ainda não começou: datas ficam vazias e ela
+  // não conta como jornada iniciada.
+  check('playthroughs_planned_has_no_dates', sql`${table.status} <> 'PLANNED' OR (${table.startedAt} IS NULL AND ${table.completedAt} IS NULL)`),
+]);
+
+export const externalMatchStatus = pgEnum('external_match_status', ['PENDING', 'IGNORED']);
+
+// Fila de correspondências a confirmar (ADR-024). A fonte externa não expõe
+// `igdb_id`, então um jogo externo só vira associação de plataforma depois que o
+// usuário confirma. Cada linha é o retrato da entrada externa, não um vínculo:
+// o vínculo confirmado vive em `game_platforms.external_source/external_id`.
+// Confirmar remove a linha; ignorar a mantém para que a próxima sincronização
+// não volte a propor a mesma entrada.
+export const externalGameMatches = pgTable('external_game_matches', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  source: text('source').notNull(),
+  externalId: text('external_id').notNull(),
+  title: text('title').notNull(),
+  platformName: text('platform_name').notNull(),
+  accountLabel: text('account_label'),
+  playtimeMinutes: integer('playtime_minutes'),
+  lastPlayedAt: timestamp('last_played_at', { withTimezone: true }),
+  status: externalMatchStatus('status').notNull().default('PENDING'),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('external_game_matches_source_external_unique').on(table.source, table.externalId),
+  index('external_game_matches_status_idx').on(table.status),
+  check('external_game_matches_title_not_blank', sql`length(trim(${table.title})) > 0`),
+  // Nulo significa "a fonte não informa", nunca zero.
+  check('external_game_matches_playtime_nonnegative', sql`${table.playtimeMinutes} IS NULL OR ${table.playtimeMinutes} >= 0`),
+]);

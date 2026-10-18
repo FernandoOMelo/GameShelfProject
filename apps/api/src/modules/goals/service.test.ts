@@ -6,7 +6,7 @@ import type { GoalRecord } from './repository.js';
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const base: Game = {
   id: id(1), title: 'Base', description: null, coverUrl: null, backgroundUrl: null,
-  releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, genreIds: [], status: 'COMPLETED',
+  releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, platformIds: [], genreIds: [], status: 'COMPLETED',
   rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false,
   owned: true, archived: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: null,
   estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null,
@@ -15,7 +15,7 @@ const base: Game = {
 const make = (n: number, values: Partial<Game> = {}): Game => ({ ...base, id: id(n), title: `Jogo ${n}`, ...values });
 const session = (gameId: string, startedAt: string, minutes: number): Session => ({
   id: id(900), gameId, startedAt, endedAt: new Date(Date.parse(startedAt) + minutes * 60_000).toISOString(), durationMinutes: minutes,
-  progress: null, location: null, notes: null, keyDecisions: null, tips: null, createdAt: startedAt, updatedAt: startedAt,
+  progress: null, location: null, notes: null, keyDecisions: null, tips: null, playthroughId: null, platformId: null, createdAt: startedAt, updatedAt: startedAt,
 });
 const goal = (values: Partial<GoalRecord> = {}): GoalRecord => ({ id: id(500), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 10, ...values });
 

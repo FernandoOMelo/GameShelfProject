@@ -1,0 +1,21 @@
+# Override opcional da integração com o Achievist (ADR-024).
+#
+# Conecta o container da API à rede Docker onde o Achievist já roda, para que a
+# comunicação seja servidor a servidor por nome interno de serviço, sem publicar
+# nada na internet. Sem este arquivo a stack sobe normalmente e a integração
+# fica desligada.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.achievist.yml up -d
+#
+# `ACHIEVIST_NETWORK` é o nome da rede do Achievist (`docker network ls`), e
+# `ACHIEVIST_BASE_URL` usa o nome do serviço dele com a porta interna 8000.
+services:
+  api:
+    networks:
+      - default
+      - achievist
+
+networks:
+  achievist:
+    external: true
+    name: ${ACHIEVIST_NETWORK:-achievist_default}

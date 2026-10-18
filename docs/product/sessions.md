@@ -1,5 +1,9 @@
 # Sessões
 
+Uma sessão pode ser ligada a uma jornada e a uma plataforma, ambos opcionais
+(ADR-023). Sessões sem vínculo continuam válidas, e sessões da mesma jornada
+podem estar em plataformas diferentes. Ver `playthroughs.md`.
+
 ## Objetivo
 
 Registrar cada período em que o usuário jogou.

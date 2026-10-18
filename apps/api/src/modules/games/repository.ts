@@ -11,6 +11,8 @@ export type GameRecord = {
   publisher: string | null;
   franchiseId: string | null;
   platformId: string | null;
+  /** Todas as plataformas associadas (ADR-023); `platformId` é a principal. */
+  platformIds: string[];
   genreIds: string[];
   status: 'DESIRED' | 'BACKLOG' | 'QUEUED' | 'PLAYING' | 'PAUSED' | 'COMPLETED' | 'ABANDONED';
   archived: boolean;
