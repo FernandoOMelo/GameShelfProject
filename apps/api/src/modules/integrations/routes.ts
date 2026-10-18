@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  externalMatchConfirmSchema, externalPendingMatchSchema, externalSyncStateSchema,
+  externalMatchConfirmSchema, externalMatchCreatedSchema, externalMatchCreateGameSchema,
+  externalPendingMatchSchema, externalSyncStateSchema,
 } from '@gameshelf/contracts';
 import { parseId } from '../shared/parse-id.js';
-import { toGamePlatform } from '../shared/serialize.js';
-import { confirmExternalMatch, toPendingMatch, type ImportDependencies } from './import-service.js';
+import { toGame, toGamePlatform } from '../shared/serialize.js';
+import { confirmExternalMatch, createGameFromMatch, toPendingMatch, type ImportDependencies } from './import-service.js';
 import type { ExternalSyncRunner } from './sync-runner.js';
 
 export type IntegrationContext = {
@@ -62,6 +63,25 @@ export async function registerIntegrationRoutes(app: FastifyInstance, source: st
     const outcome = await confirmExternalMatch(context.deps, pending, parsed.data);
     if (!outcome.ok) return reply.code(outcome.status).send({ error: outcome.error });
     return reply.code(201).send(toGamePlatform(outcome.record));
+  });
+
+  // Cadastrar o jogo que ainda não existe na biblioteca e vincular na mesma ação.
+  app.post<{ Params: { id: string } }>(`${base}/pending/:id/create-game`, async (request, reply) => {
+    if (!context) return reply.code(503).send(disabled());
+    const id = parseId(request.params.id);
+    if (!id) return reply.code(400).send({ error: 'ID inválido.' });
+    const parsed = externalMatchCreateGameSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Dados do jogo inválidos.', issues: parsed.error.issues });
+    const pending = await context.deps.queue.find(id);
+    if (!pending || pending.source !== source) return reply.code(404).send({ error: 'Pendência não encontrada.' });
+
+    const outcome = await createGameFromMatch(context.deps, pending, parsed.data);
+    if (!outcome.ok) return reply.code(outcome.status).send({ error: outcome.error });
+    const created = await context.deps.games.find(outcome.gameId);
+    if (!created) return reply.code(404).send({ error: 'Jogo não encontrado após o cadastro.' });
+    return reply.code(201).send(externalMatchCreatedSchema.parse({
+      game: toGame(created), platform: toGamePlatform(outcome.record),
+    }));
   });
 
   // Ignorar não apaga a linha: é o que impede a próxima sincronização de

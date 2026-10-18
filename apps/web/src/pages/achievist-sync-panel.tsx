@@ -70,6 +70,26 @@ export function AchievistSyncPanel({ games, platforms, onLinked }: {
     } finally { setBusy(false); }
   }
 
+  async function createGame(match: ExternalPendingMatch, game: { title: string; status: Game['status']; owned: boolean }, platformId: string) {
+    if (!game.title) { setMessage('Informe o título do novo jogo.'); return; }
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await fetch(`${base()}/pending/${match.id}/create-game`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ game, ...(platformId ? { platformId } : {}) }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        setMessage(body?.error ?? 'Não foi possível cadastrar o jogo.');
+        return;
+      }
+      setMessage(`"${game.title}" cadastrado e vinculado. Nenhuma sessão ou jornada foi criada.`);
+      await load();
+      onLinked?.();
+    } finally { setBusy(false); }
+  }
+
   async function ignore(match: ExternalPendingMatch) {
     setBusy(true);
     setMessage('');
@@ -102,20 +122,26 @@ export function AchievistSyncPanel({ games, platforms, onLinked }: {
           ? <p className="dashboard-empty">Nada aguardando confirmação.</p>
           : <ul className="achievist-pending">
             {pending.map((match) => <PendingRow key={match.id} match={match} games={games} platforms={platforms} busy={busy}
-              onConfirm={(gameId, platformId) => void confirm(match, gameId, platformId)} onIgnore={() => void ignore(match)} />)}
+              onConfirm={(gameId, platformId) => void confirm(match, gameId, platformId)} onIgnore={() => void ignore(match)}
+              onCreateGame={(game, platformId) => void createGame(match, game, platformId)} />)}
           </ul>}
       </>}
   </section>;
 }
 
-function PendingRow({ match, games, platforms, busy, onConfirm, onIgnore }: {
+function PendingRow({ match, games, platforms, busy, onConfirm, onIgnore, onCreateGame }: {
   match: ExternalPendingMatch;
   games: Game[];
   platforms: Platform[];
   busy: boolean;
   onConfirm: (gameId: string, platformId: string) => void;
   onIgnore: () => void;
+  onCreateGame: (game: { title: string; status: Game['status']; owned: boolean }, platformId: string) => void;
 }) {
+  const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState(match.title);
+  const [newStatus, setNewStatus] = useState<Game['status']>('BACKLOG');
+  const [newOwned, setNewOwned] = useState(true);
   // A sugestão só preenche a escolha quando é única: com mais de um candidato a
   // seleção começa vazia, para que a decisão seja do usuário.
   const [gameId, setGameId] = useState(match.suggestions.length === 1 ? match.suggestions[0].gameId : '');
@@ -147,8 +173,30 @@ function PendingRow({ match, games, platforms, busy, onConfirm, onIgnore }: {
     </label>
     <div className="challenge-actions">
       <button type="button" className="gameshelf-button" disabled={busy} onClick={() => onConfirm(gameId, platformId)}>Confirmar vínculo</button>
+      <button type="button" className="session-edit" disabled={busy} onClick={() => setCreating((open) => !open)}>{creating ? 'Cancelar cadastro' : 'Cadastrar jogo'}</button>
       <button type="button" className="session-edit" disabled={busy} onClick={onIgnore}>Ignorar</button>
     </div>
+    {/* O jogo ainda não existe na biblioteca: nasce com o que for preenchido
+        aqui. A fonte externa sugere só o título, e não define status nem posse. */}
+    {creating && <div className="achievist-create">
+      <label className="form-field">Título do novo jogo
+        <input aria-label={`Título do novo jogo para ${match.title}`} value={newTitle} maxLength={200} onChange={(event) => setNewTitle(event.target.value)} />
+      </label>
+      <label className="form-field">Estado
+        <select aria-label={`Estado do novo jogo para ${match.title}`} value={newStatus} onChange={(event) => setNewStatus(event.target.value as Game['status'])}>
+          <option value="BACKLOG">Na biblioteca</option>
+          <option value="DESIRED">Desejado</option>
+          <option value="PLAYING">Jogando</option>
+          <option value="PAUSED">Pausado</option>
+        </select>
+      </label>
+      <label className="form-field checkbox-field">
+        <input type="checkbox" aria-label={`Possuo o novo jogo para ${match.title}`} checked={newOwned} onChange={(event) => setNewOwned(event.target.checked)} />
+        Possuo este jogo
+      </label>
+      <button type="button" className="gameshelf-button" disabled={busy || !newTitle.trim()}
+        onClick={() => onCreateGame({ title: newTitle.trim(), status: newStatus, owned: newOwned }, platformId)}>Cadastrar e vincular</button>
+    </div>}
   </li>;
 }
 

@@ -1,4 +1,4 @@
-import type { ExternalPendingMatch, ExternalSyncSummary } from '@gameshelf/contracts';
+import type { ExternalPendingMatch, ExternalSyncSummary, GameInput } from '@gameshelf/contracts';
 import type { GamePlatformRecord, GamePlatformRepository } from '../game-platforms/repository.js';
 import type { GameRepository } from '../games/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
@@ -138,6 +138,30 @@ export async function resolvePlatform(platforms: PlatformRepository, name: strin
   const normalized = name.trim();
   const existing = (await platforms.list()).find((platform) => platform.name.toLowerCase() === normalized.toLowerCase());
   return existing ? existing.id : (await platforms.create(normalized)).id;
+}
+
+export type CreateGameOutcome =
+  | { ok: true; gameId: string; record: GamePlatformRecord }
+  | { ok: false; status: 404 | 409; error: string };
+
+/**
+ * Cadastra o jogo canônico a partir de uma entrada da fila e já o vincula.
+ *
+ * O jogo nasce com o que o usuário preencheu — o título sugerido pela fonte é
+ * só um ponto de partida editável. A fonte externa não decide status, posse,
+ * avaliação nem datas: ela não tem essa informação, e inventá-la contaminaria
+ * a ficha pessoal do jogo.
+ */
+export async function createGameFromMatch(
+  deps: Pick<ImportDependencies, 'games' | 'platforms' | 'gamePlatforms' | 'queue'>,
+  pending: ExternalMatchRecord,
+  input: { game: GameInput; platformId?: string },
+  now = new Date(),
+): Promise<CreateGameOutcome> {
+  const game = await deps.games.create(input.game);
+  const outcome = await confirmExternalMatch(deps, pending, { gameId: game.id, platformId: input.platformId }, now);
+  if (!outcome.ok) return outcome;
+  return { ok: true, gameId: game.id, record: outcome.record };
 }
 
 export type ConfirmOutcome =

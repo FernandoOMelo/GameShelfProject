@@ -30,12 +30,17 @@ function gameRecord(gameId: string, title: string): GameRecord {
   };
 }
 
-function gameRepository(titles: Array<[string, string]> = [[HADES, 'Hades']]): GameRepository {
+function gameRepository(titles: Array<[string, string]> = [[HADES, 'Hades']]): GameRepository & { rows: GameRecord[] } {
   const games = titles.map(([gameId, title]) => gameRecord(gameId, title));
   return {
+    rows: games,
     list: async () => games,
     find: async (gameId) => games.find((item) => item.id === gameId),
-    create: async () => games[0],
+    create: async (input) => {
+      const created = { ...gameRecord(id(700 + games.length), input.title), ...input, genreIds: [], platformIds: [] };
+      games.push(created);
+      return created;
+    },
     update: async (gameId, input) => {
       const game = games.find((item) => item.id === gameId);
       return game ? Object.assign(game, input) : undefined;
@@ -431,6 +436,53 @@ describe('sincronização com a fonte externa', () => {
     expect(triggered.statusCode).toBe(503);
     expect(pending.statusCode).toBe(503);
     expect(library.statusCode).toBe(200);
+  });
+
+  it('cadastra o jogo que falta direto da fila e já vincula a entrada', async () => {
+    const context = track(setup({ entries: [entry({ title: 'Celeste', platformName: 'Steam' })] }));
+    await sync(context);
+    const [pending] = await context.app.inject({ method: 'GET', url: '/integrations/achievist/pending' }).then((r) => r.json() as Array<{ id: string }>);
+
+    const response = await context.app.inject({
+      method: 'POST', url: `/integrations/achievist/pending/${pending.id}/create-game`,
+      payload: { game: { title: 'Celeste', status: 'BACKLOG', owned: true } },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json() as { game: { id: string; title: string; status: string }; platform: { gameId: string; externalId: string } };
+    expect(body.game).toMatchObject({ title: 'Celeste', status: 'BACKLOG' });
+    expect(body.platform).toMatchObject({ gameId: body.game.id, externalSource: 'achievist', externalId: '501' });
+    // A pendência sai da fila e nada de histórico é inventado para o jogo novo.
+    expect(context.queue.rows).toHaveLength(0);
+    expect(context.sessions.rows).toHaveLength(0);
+    expect(context.playthroughs.rows).toHaveLength(0);
+  });
+
+  it('o título do formulário prevalece sobre o que a fonte sugeriu', async () => {
+    const context = track(setup({ entries: [entry({ title: 'CELESTE (Steam)' })] }));
+    await sync(context);
+    const [pending] = await context.app.inject({ method: 'GET', url: '/integrations/achievist/pending' }).then((r) => r.json() as Array<{ id: string }>);
+
+    const response = await context.app.inject({
+      method: 'POST', url: `/integrations/achievist/pending/${pending.id}/create-game`,
+      payload: { game: { title: 'Celeste', status: 'DESIRED', owned: false } },
+    });
+
+    expect((response.json() as { game: { title: string; owned: boolean } }).game).toMatchObject({ title: 'Celeste', owned: false });
+  });
+
+  it('recusa cadastrar um jogo sem título válido', async () => {
+    const context = track(setup({ entries: [entry({})] }));
+    await sync(context);
+    const [pending] = await context.app.inject({ method: 'GET', url: '/integrations/achievist/pending' }).then((r) => r.json() as Array<{ id: string }>);
+
+    const response = await context.app.inject({
+      method: 'POST', url: `/integrations/achievist/pending/${pending.id}/create-game`,
+      payload: { game: { title: '   ' } },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(context.queue.rows).toHaveLength(1);
   });
 
   it('não confirma uma pendência inexistente nem com um id inválido', async () => {

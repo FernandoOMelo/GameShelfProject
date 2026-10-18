@@ -383,6 +383,20 @@ export const externalMatchConfirmSchema = z.object({
 }).strict();
 export type ExternalMatchConfirm = z.infer<typeof externalMatchConfirmSchema>;
 
+// Cadastrar o jogo canônico direto da fila, quando ele ainda não existe na
+// biblioteca. O jogo nasce com o que o usuário preencheu no formulário; a
+// entrada externa só é vinculada depois que ele existe.
+export const externalMatchCreateGameSchema = z.object({
+  game: gameInputSchema,
+  platformId: z.string().uuid().optional(),
+}).strict();
+export const externalMatchCreatedSchema = z.object({
+  game: gameSchema,
+  platform: gamePlatformSchema,
+}).strict();
+export type ExternalMatchCreateGame = z.infer<typeof externalMatchCreateGameSchema>;
+export type ExternalMatchCreated = z.infer<typeof externalMatchCreatedSchema>;
+
 export const gameListInputSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 export const gameListCreateSchema = gameListInputSchema.extend({
   gameIds: z.array(z.string().uuid()).max(1000).optional(),
