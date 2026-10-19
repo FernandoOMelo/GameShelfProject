@@ -5,6 +5,7 @@ import {
 } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
+import type { SessionRepository } from '../sessions/repository.js';
 import { parseId } from '../shared/parse-id.js';
 import { toGamePlatform } from '../shared/serialize.js';
 import type { GamePlatformRepository } from './repository.js';
@@ -19,7 +20,18 @@ export async function registerGamePlatformRoutes(
   platforms: PlatformRepository,
   repository: GamePlatformRepository,
   achievements?: { store: ExternalAchievementRepository; provider?: ExternalLibraryProvider },
+  sessions?: SessionRepository,
 ) {
+  /** Minutos de sessão encerrada registrados para aquele jogo naquela plataforma. */
+  async function localMinutesOn(gameId: string, platformId: string): Promise<number> {
+    if (!sessions) return 0;
+    const records = await sessions.listForGame(gameId);
+    return records.reduce((total, session) => {
+      if (session.platformId !== platformId || session.endedAt === null) return total;
+      return total + Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 60_000);
+    }, 0);
+  }
+
   // Conquistas são buscadas sob demanda, por jogo (ADR-028). Se a fonte estiver
   // fora do ar — ou desligada —, a resposta vem do espelho local com
   // `refreshedAt` nulo, em vez de falhar: ver conquista nunca pode derrubar a
@@ -109,7 +121,7 @@ export async function registerGamePlatformRoutes(
     const link = await repository.find(gameId, id);
     if (!link) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
 
-    const plan = planPlaytimeImport(link, Number(game.retroactivePlayedHours ?? 0));
+    const plan = planPlaytimeImport(link, Number(game.retroactivePlayedHours ?? 0), await localMinutesOn(gameId, link.platformId));
     if (!plan.ok) return reply.code(409).send({ error: plan.error });
 
     const updatedGame = await games.update(gameId, { retroactivePlayedHours: plan.retroactivePlayedHours });

@@ -27,9 +27,20 @@ desligado, fica apenas como informação da associação, como antes.
 
 ```
 consolidado = tempo local (sessões + horas retroativas)
-            + Σ (tempo externo − tempo já lançado como retroativo)
+            + Σ max(0, tempo externo
+                     − tempo já lançado como retroativo
+                     − minutos de sessão naquela plataforma)
               das associações marcadas
 ```
+
+O número da fonte é o **total daquela plataforma**, não um acréscimo. Por isso
+dele saem as duas coisas que já estão contadas no tempo local: o que virou hora
+retroativa e as sessões registradas naquela plataforma.
+
+Sem o segundo desconto, o caso mais comum quebrava: importar Portal com 10 h da
+Steam, jogar 1 h aqui e sincronizar faz a Steam reportar 11 h, e o total daria
+12 h — a hora jogada contada duas vezes, uma na sessão e outra dentro do total
+atualizado da fonte.
 
 O desconto do que já foi lançado é o que faz esta decisão compor com o ADR-026:
 tempo importado como hora retroativa já está no tempo local, e contá-lo de novo
@@ -43,10 +54,10 @@ PlayStation são atividades distintas. O que não pode é somar o tempo externo 
 o tempo local **da mesma plataforma**, porque aí as duas medidas descrevem a
 mesma coisa.
 
-Como só o usuário sabe em quais jogos ele registrou sessões de verdade, a
-escolha é dele, por associação. Nenhuma regra automática acerta isso: inferir
-"conte o externo quando não houver sessões locais" erraria em todo jogo com
-registro parcial, que é o caso comum.
+A escolha de *usar* a fonte continua sendo do usuário, por associação. O que
+não depende dele é a aritmética: uma vez marcada, a sobreposição com as sessões
+daquela plataforma é descontada automaticamente, e o registro parcial — o caso
+comum — passa a dar o número certo em vez de inflado.
 
 ### Desligado por padrão
 
@@ -58,6 +69,14 @@ registradas, que é exatamente o erro que o ADR-024 evita.
 A consequência honesta é que marcar 72 associações uma a uma é trabalhoso. Não
 há ação em massa, e isso é deliberado nesta decisão: uma ação em massa aplicaria
 a escolha justamente onde ela é perigosa.
+
+### Limite conhecido
+
+Sessões **sem plataforma informada** não entram no desconto: não há como saber a
+qual plataforma pertencem. Num jogo com sessões assim e a associação marcada, o
+total fica inflado pela parte não descontável. A tela de detalhes avisa quando o
+jogo tem sessões nessa situação e pede que a plataforma seja informada; o
+sistema não adivinha.
 
 ## Métricas publicadas
 

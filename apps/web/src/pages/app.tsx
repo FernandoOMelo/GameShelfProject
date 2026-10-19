@@ -1063,6 +1063,7 @@ export function App() {
                 platforms={platforms}
                 localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)}
                 retroactiveHours={selectedGame.retroactivePlayedHours ?? 0}
+                sessionsWithoutPlatform={sessions.filter((session) => session.endedAt !== null && session.platformId === null).length}
                 onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
                 onGameChanged={() => { void reloadSelectedGame(); }}
               />

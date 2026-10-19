@@ -14,8 +14,17 @@ const DIFFICULTIES = ['AAA', 'AA', 'A', 'B', 'C'] as const;
 // de cada jogo ao ano da sua conclusão.
 export function buildStats({ games, sessions, platforms, genres, gamePlatforms = [], playthroughs = [], today = new Date().toISOString().slice(0, 10) }: Input): StatsResponse {
   const minutesByGame = new Map<string, number>();
+  // Minutos de sessão atribuídos a uma plataforma específica. É o que permite
+  // descontar do tempo informado pela fonte aquilo que o usuário já registrou
+  // aqui, em vez de somar a mesma hora duas vezes (ADR-027).
+  const minutesByGamePlatform = new Map<string, number>();
   for (const session of sessions) {
-    if (session.durationMinutes !== null) minutesByGame.set(session.gameId, (minutesByGame.get(session.gameId) ?? 0) + session.durationMinutes);
+    if (session.durationMinutes === null) continue;
+    minutesByGame.set(session.gameId, (minutesByGame.get(session.gameId) ?? 0) + session.durationMinutes);
+    if (session.platformId) {
+      const key = `${session.gameId}|${session.platformId}`;
+      minutesByGamePlatform.set(key, (minutesByGamePlatform.get(key) ?? 0) + session.durationMinutes);
+    }
   }
   const hoursOf = (game: Game) => round((minutesByGame.get(game.id) ?? 0) / 60 + game.retroactivePlayedHours);
   const ref = (game: Game) => ({ id: game.id, title: game.title, coverUrl: game.coverUrl, hours: hoursOf(game) });
@@ -79,7 +88,7 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
     .slice(0, 10).map((game) => ({ ...ref(game), rating: game.rating }));
 
   return {
-    library: buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, localMinutes: minutesByGame }),
+    library: buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, localMinutes: minutesByGame, minutesByGamePlatform }),
     totals: {
       completedCount: completed.length,
       completedHours: round(completed.reduce((sum, game) => sum + hoursOf(game), 0)),
@@ -103,6 +112,24 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
 // `gameCount` conta jogos canônicos e `platformLinkCount` conta associações, que
 // são coisas diferentes. Tempo local e tempo informado por plataforma ficam em
 // campos separados e nunca são somados.
+/**
+ * Quanto o tempo informado por uma plataforma acrescenta ao total consolidado.
+ *
+ * O número da fonte é o total daquela plataforma, não um acréscimo: dele saem o
+ * que já virou hora retroativa (ADR-026) e os minutos de sessão que o usuário
+ * registrou naquela plataforma. Sem esses descontos, jogar uma hora e
+ * sincronizar depois contaria a mesma hora duas vezes — uma na sessão, outra
+ * dentro do total atualizado da fonte.
+ *
+ * Sessões sem plataforma informada não entram no desconto: não há como saber a
+ * qual plataforma pertencem, e descontar no palpite erraria para menos.
+ */
+function externalContribution(link: GamePlatform, minutesByGamePlatform: Map<string, number>): number {
+  if (link.externalPlaytimeMinutes === null) return 0;
+  const localOnPlatform = minutesByGamePlatform.get(`${link.gameId}|${link.platformId}`) ?? 0;
+  return Math.max(0, link.externalPlaytimeMinutes - link.externalPlaytimeImportedMinutes - localOnPlatform);
+}
+
 /** Resolve uma plataforma no grupo a que pertence; ela mesma, quando é um grupo. */
 function groupResolver(platforms: PlatformCatalog[]): (id: string) => Catalog | undefined {
   const byId = new Map(platforms.map((item) => [item.id, item]));
@@ -115,9 +142,9 @@ function groupResolver(platforms: PlatformCatalog[]): (id: string) => Catalog | 
   };
 }
 
-function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, localMinutes }: {
+function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, localMinutes, minutesByGamePlatform }: {
   games: Game[]; platformGroup: (id: string) => Catalog | undefined; gamePlatforms: GamePlatform[]; playthroughs: Playthrough[];
-  localMinutes: Map<string, number>;
+  localMinutes: Map<string, number>; minutesByGamePlatform: Map<string, number>;
 }): LibraryStats {
   const started = playthroughs.filter((item) => item.status !== 'PLANNED');
   const completedGameIds = new Set(playthroughs.filter((item) => item.status === 'COMPLETED').map((item) => item.gameId));
@@ -130,7 +157,7 @@ function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, 
   let countedMinutes = 0;
   for (const link of gamePlatforms) {
     if (link.externalPlaytimeMinutes === null) continue;
-    if (link.countsTowardTotal) countedMinutes += Math.max(0, link.externalPlaytimeMinutes - link.externalPlaytimeImportedMinutes);
+    if (link.countsTowardTotal) countedMinutes += externalContribution(link, minutesByGamePlatform);
     externalMinutes += link.externalPlaytimeMinutes;
     const resolved = platformGroup(link.platformId);
     const key = resolved?.id ?? link.platformId;

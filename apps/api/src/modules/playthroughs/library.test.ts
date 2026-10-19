@@ -280,6 +280,35 @@ describe('lançar tempo externo como horas retroativas', () => {
       expect((await app.inject({ method: 'GET', url: `/games/${GAME}` })).json().retroactivePlayedHours).toBe(2);
     });
 
+    it('desconta do lançamento as sessões já registradas naquela plataforma', async () => {
+      const app = setup();
+      const link = await withExternalTime(app, 180);
+      // Uma hora registrada aqui, na mesma plataforma da associação.
+      await app.inject({
+        method: 'POST', url: `/games/${GAME}/sessions`,
+        payload: { startedAt: '2026-01-02T10:00:00.000Z', endedAt: '2026-01-02T11:00:00.000Z', platformId: PC },
+      });
+
+      const response = await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+
+      // 180 informados menos os 60 da sessão: só 120 viram hora retroativa.
+      expect(response.json()).toMatchObject({ importedMinutes: 120, retroactivePlayedHours: 2 });
+    });
+
+    it('não oferece lançar quando as sessões já cobrem o tempo informado', async () => {
+      const app = setup();
+      const link = await withExternalTime(app, 60);
+      await app.inject({
+        method: 'POST', url: `/games/${GAME}/sessions`,
+        payload: { startedAt: '2026-01-02T10:00:00.000Z', endedAt: '2026-01-02T11:00:00.000Z', platformId: PC },
+      });
+
+      const response = await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error).toContain('sessões registradas');
+    });
+
     it('recusa quando a fonte não informa tempo para a plataforma', async () => {
       const app = setup();
       const link = (await app.inject({ method: 'POST', url: `/games/${GAME}/platforms`, payload: { platformId: PC } })).json();

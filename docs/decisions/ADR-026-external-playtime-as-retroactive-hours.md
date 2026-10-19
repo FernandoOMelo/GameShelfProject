@@ -63,10 +63,16 @@ informado pela plataforma continua visível na associação, agora marcado como 
 lançado. As duas medidas continuam separadas nas estatísticas, como o ADR-024
 exige — o lançamento move o número de uma para a outra, não o duplica.
 
-Cabe ao usuário não lançar o tempo de um jogo cujas sessões ele já registrou:
-nesse caso as duas medidas se sobrepõem, e o sistema não tem como saber em que
-proporção. A interface só oferece o botão quando há tempo não lançado, e mostra
-quanto já foi, para que a decisão seja informada.
+A sobreposição com sessões registradas é descontada pelo sistema, não deixada
+a cargo do usuário (ver ADR-027): o lançamento oferece o tempo da fonte menos o
+que já foi lançado **e menos os minutos de sessão registrados naquela
+plataforma**. No caso real — lançar 10 h da Steam, jogar 1 h aqui, sincronizar
+(a Steam passa a 11 h) e tentar lançar de novo —, a hora oferecida seria
+exatamente a que já está na sessão, e por isso não é oferecida.
+
+Sessões sem plataforma informada ficam de fora do desconto: não há como saber a
+qual plataforma pertencem, e descontar no palpite erraria para menos. A tela
+avisa quando o jogo tem sessões nessa situação.
 
 ## Migração
 

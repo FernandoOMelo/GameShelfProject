@@ -138,12 +138,15 @@ A ação é idempotente — só a parte ainda não lançada entra, e repetir nã
 nada. Se a plataforma reportar mais tempo depois, lança-se só a diferença. A
 sincronização nunca lança sozinha.
 
-Se o jogo já tem sessões suas, não lance: as duas medidas se sobrepõem e o
-sistema não tem como saber em que proporção.
+As sessões que você já registrou naquela plataforma são descontadas
+automaticamente, então lançar depois de jogar não duplica. A exceção são sessões
+sem plataforma informada: elas não dão para descontar, e a tela avisa quando o
+jogo tem alguma.
 
 ### Contar no total consolidado
 
 Em vez de lançar, a associação pode ser marcada como fonte do total (ADR-027):
 o tempo dela entra no total consolidado da biblioteca sem virar hora retroativa
-do jogo. O que já foi lançado é descontado, então marcar e lançar levam ao mesmo
-número — não são duas somas.
+do jogo. O número da fonte é tratado como o total daquela plataforma: dele saem
+o que já foi lançado e as sessões registradas nela. Assim, jogar uma hora aqui e
+sincronizar depois não conta essa hora duas vezes.

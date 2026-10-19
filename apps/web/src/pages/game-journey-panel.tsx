@@ -53,6 +53,8 @@ type Props = {
   gameId: string;
   /** Horas retroativas já lançadas no jogo, para mostrar o efeito do lançamento. */
   retroactiveHours?: number;
+  /** Sessões encerradas sem plataforma informada: não dá para descontá-las. */
+  sessionsWithoutPlatform?: number;
   /** Avisa o pai quando o jogo muda por causa de um lançamento de tempo externo. */
   onGameChanged?: () => void;
   platforms: Platform[];
@@ -67,7 +69,7 @@ type Props = {
  * tempo informado pela plataforma aparecem separados, e nunca somados: são
  * medidas diferentes da mesma biblioteca.
  */
-export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveHours = 0, onPlaythroughsChanged, onGameChanged }: Props) {
+export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveHours = 0, sessionsWithoutPlatform = 0, onPlaythroughsChanged, onGameChanged }: Props) {
   const [links, setLinks] = useState<GamePlatform[] | null>(null);
   const [playthroughs, setPlaythroughs] = useState<Playthrough[] | null>(null);
   const [metrics, setMetrics] = useState<PlaythroughMetrics | null>(null);
@@ -289,6 +291,14 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
       </div>
     </form> : <Button type="button" onClick={() => { setAddingPlaythrough(true); setMessage(''); }}>{nextLabel}</Button>}
 
+    {/* O desconto automático depende da plataforma da sessão; sem ela o sistema
+        não sabe de qual plataforma descontar e o total pode ficar inflado. */}
+    {sessionsWithoutPlatform > 0 && <p role="status" className="session-feedback">
+      {sessionsWithoutPlatform === 1
+        ? 'Uma sessão deste jogo não tem plataforma informada e não entra no desconto do total consolidado.'
+        : `${sessionsWithoutPlatform} sessões deste jogo não têm plataforma informada e não entram no desconto do total consolidado.`}
+      {' '}Informe a plataforma nelas para o tempo da fonte não ser contado duas vezes.
+    </p>}
     <p className="session-empty">
       Tempo registrado localmente: {formatCompactHours(localMinutes / 60)}
       {retroactiveHours ? `, incluindo ${formatCompactHours(retroactiveHours)} lançadas sem sessão` : ''}.

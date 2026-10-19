@@ -77,7 +77,8 @@ export function buildApp(options: { externalAchievementRepository?: ExternalAchi
     app.register((instance) => registerGamePlatformRoutes(instance, options.gameRepository!, options.platformRepository!, options.gamePlatformRepository!,
       options.externalAchievementRepository
         ? { store: options.externalAchievementRepository, provider: options.externalLibraryProvider }
-        : undefined));
+        : undefined,
+      options.sessionRepository));
   }
   if (options.gameRepository && options.platformRepository && options.playthroughRepository) {
     app.register((instance) => registerPlaythroughRoutes(instance, options.gameRepository!, options.platformRepository!, options.playthroughRepository!, options.sessionRepository));

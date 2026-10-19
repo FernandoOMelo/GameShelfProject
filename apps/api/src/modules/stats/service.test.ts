@@ -174,6 +174,79 @@ describe('estatísticas por grupo de plataforma', () => {
     expect(result.library).toMatchObject({ consolidatedPlayedHours: 5, externalCountedHours: 0 });
   });
 
+  // O cenário do Portal: importa com 10 h da Steam, joga 1 h aqui, sincroniza e
+  // a Steam passa a informar 11 h. O total tem de continuar 11 h, não 12 h.
+  it('não conta duas vezes a hora jogada aqui depois de sincronizar', () => {
+    const game = { ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 0 };
+    const sessionOnSteam = {
+      id: '00000000-0000-4000-8000-000000000b01', gameId: game.id, playthroughId: null, platformId: STEAM,
+      startedAt: '2026-01-02T10:00:00.000Z', endedAt: '2026-01-02T11:00:00.000Z', durationMinutes: 60,
+      progress: null, location: null, notes: null, keyDecisions: null, tips: null,
+      createdAt: '2026-01-02T10:00:00.000Z', updatedAt: '2026-01-02T11:00:00.000Z',
+    };
+    const result = buildStats({
+      games: [game], sessions: [sessionOnSteam], platforms, genres: [], today: '2026-02-01',
+      // A Steam já reporta as 11 h: as 10 anteriores mais a hora jogada aqui.
+      gamePlatforms: [{ ...link(game.id, STEAM, 660), countsTowardTotal: true }],
+    });
+
+    expect(result.library).toMatchObject({
+      localPlayedHours: 1,
+      externalCountedHours: 10,
+      consolidatedPlayedHours: 11,
+    });
+  });
+
+  it('não desconta sessões de outra plataforma do mesmo jogo', () => {
+    const game = { ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 0 };
+    const sessionOnPs5 = {
+      id: '00000000-0000-4000-8000-000000000b02', gameId: game.id, playthroughId: null, platformId: PS5,
+      startedAt: '2026-01-02T10:00:00.000Z', endedAt: '2026-01-02T11:00:00.000Z', durationMinutes: 60,
+      progress: null, location: null, notes: null, keyDecisions: null, tips: null,
+      createdAt: '2026-01-02T10:00:00.000Z', updatedAt: '2026-01-02T11:00:00.000Z',
+    };
+    const result = buildStats({
+      games: [game], sessions: [sessionOnPs5], platforms, genres: [], today: '2026-02-01',
+      gamePlatforms: [{ ...link(game.id, STEAM, 600), countsTowardTotal: true }],
+    });
+
+    expect(result.library).toMatchObject({ externalCountedHours: 10, consolidatedPlayedHours: 11 });
+  });
+
+  it('não desconta sessão sem plataforma informada', () => {
+    const game = { ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 0 };
+    const sessionWithoutPlatform = {
+      id: '00000000-0000-4000-8000-000000000b03', gameId: game.id, playthroughId: null, platformId: null,
+      startedAt: '2026-01-02T10:00:00.000Z', endedAt: '2026-01-02T11:00:00.000Z', durationMinutes: 60,
+      progress: null, location: null, notes: null, keyDecisions: null, tips: null,
+      createdAt: '2026-01-02T10:00:00.000Z', updatedAt: '2026-01-02T11:00:00.000Z',
+    };
+    const result = buildStats({
+      games: [game], sessions: [sessionWithoutPlatform], platforms, genres: [], today: '2026-02-01',
+      gamePlatforms: [{ ...link(game.id, STEAM, 660), countsTowardTotal: true }],
+    });
+
+    // Sem saber a plataforma da sessão, o desconto não acontece: o total fica
+    // inflado, e é por isso que a tela avisa.
+    expect(result.library).toMatchObject({ externalCountedHours: 11, consolidatedPlayedHours: 12 });
+  });
+
+  it('nunca deixa a contribuição externa ficar negativa', () => {
+    const game = { ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 0 };
+    const longSession = {
+      id: '00000000-0000-4000-8000-000000000b04', gameId: game.id, playthroughId: null, platformId: STEAM,
+      startedAt: '2026-01-02T00:00:00.000Z', endedAt: '2026-01-03T00:00:00.000Z', durationMinutes: 1440,
+      progress: null, location: null, notes: null, keyDecisions: null, tips: null,
+      createdAt: '2026-01-02T00:00:00.000Z', updatedAt: '2026-01-03T00:00:00.000Z',
+    };
+    const result = buildStats({
+      games: [game], sessions: [longSession], platforms, genres: [], today: '2026-02-01',
+      gamePlatforms: [{ ...link(game.id, STEAM, 60), countsTowardTotal: true }],
+    });
+
+    expect(result.library).toMatchObject({ externalCountedHours: 0, consolidatedPlayedHours: 24 });
+  });
+
   it('ignora o tempo não informado em vez de tratá-lo como zero', () => {
     const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01' }];
     const result = buildStats({
