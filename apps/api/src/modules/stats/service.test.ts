@@ -93,7 +93,7 @@ describe('estatísticas por grupo de plataforma', () => {
   const link = (gameId: string, platformId: string, minutes: number | null) => ({
     id: `${gameId}-${platformId}`, gameId, platformId, edition: null, format: null, owned: true, isPrimary: false,
     externalSource: 'achievist', externalId: '1', externalAccountLabel: null, externalPlaytimeMinutes: minutes,
-    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null,
+    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null,
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   });
 
@@ -123,6 +123,55 @@ describe('estatísticas por grupo de plataforma', () => {
       { key: PC, name: 'PC', hours: 3 },
       { key: PS5, name: 'PlayStation 5', hours: 0.5 },
     ]);
+  });
+
+  it('só soma no consolidado as plataformas marcadas como fonte do total', () => {
+    const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 1 }];
+    const result = buildStats({
+      games, sessions: [], platforms, genres: [], today: '2026-01-01',
+      gamePlatforms: [
+        { ...link(games[0]!.id, STEAM, 120), countsTowardTotal: true },
+        { ...link(games[0]!.id, PS5, 60), countsTowardTotal: false },
+      ],
+    });
+    expect(result.library).toMatchObject({
+      localPlayedHours: 1,
+      externalPlaytimeHours: 3,
+      externalCountedHours: 2,
+      consolidatedPlayedHours: 3,
+    });
+  });
+
+  it('não conta no consolidado o tempo externo que já virou hora retroativa', () => {
+    const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 2 }];
+    const result = buildStats({
+      games, sessions: [], platforms, genres: [], today: '2026-01-01',
+      gamePlatforms: [
+        // 120 min informados, 120 já lançados como retroativos: nada a somar.
+        { ...link(games[0]!.id, STEAM, 120), externalPlaytimeImportedMinutes: 120, countsTowardTotal: true },
+      ],
+    });
+    expect(result.library).toMatchObject({ externalCountedHours: 0, consolidatedPlayedHours: 2 });
+  });
+
+  it('conta só a diferença quando parte do tempo externo já foi lançada', () => {
+    const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 1 }];
+    const result = buildStats({
+      games, sessions: [], platforms, genres: [], today: '2026-01-01',
+      gamePlatforms: [
+        { ...link(games[0]!.id, STEAM, 180), externalPlaytimeImportedMinutes: 60, countsTowardTotal: true },
+      ],
+    });
+    expect(result.library).toMatchObject({ externalCountedHours: 2, consolidatedPlayedHours: 3 });
+  });
+
+  it('sem nenhuma plataforma marcada, o consolidado é igual ao tempo local', () => {
+    const games = [{ ...base, id: '00000000-0000-4000-8000-000000000a01', retroactivePlayedHours: 5 }];
+    const result = buildStats({
+      games, sessions: [], platforms, genres: [], today: '2026-01-01',
+      gamePlatforms: [link(games[0]!.id, STEAM, 600)],
+    });
+    expect(result.library).toMatchObject({ consolidatedPlayedHours: 5, externalCountedHours: 0 });
   });
 
   it('ignora o tempo não informado em vez de tratá-lo como zero', () => {

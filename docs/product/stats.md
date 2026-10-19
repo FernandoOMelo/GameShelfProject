@@ -6,6 +6,12 @@ e concluídas, replays iniciados, horas registradas aqui e horas informadas pela
 plataformas (ADR-023). Um jogo em três plataformas é contado uma única vez, e as
 duas medidas de tempo nunca são somadas.
 
+O total consolidado (ADR-027) soma o tempo registrado aqui com o tempo das
+plataformas que você marcou como fonte do total, descontando o que já virou
+hora retroativa. Marcar é por associação, porque só você sabe em quais jogos
+registrou sessões de verdade; nenhuma regra automática acerta isso. As quatro
+medidas — local, informado, contado e consolidado — ficam visíveis lado a lado.
+
 As quebras por plataforma agregam pelo grupo (ADR-025): jogos e horas de Steam
 e GOG aparecem em PC. Somar entre lojas do mesmo aparelho é legítimo; somar
 tempo externo com tempo local continua não sendo.

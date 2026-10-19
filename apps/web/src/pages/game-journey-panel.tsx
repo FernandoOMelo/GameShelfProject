@@ -165,10 +165,15 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
           Tempo informado pela plataforma: {formatCompactHours(link.externalPlaytimeMinutes / 60)}
           {link.externalSource ? ` · via ${link.externalSource}` : ''}
           {link.externalPlaytimeImportedMinutes > 0 && ` · ${formatCompactHours(link.externalPlaytimeImportedMinutes / 60)} já lançadas como retroativas`}
+          {link.countsTowardTotal && ' · conta no total consolidado'}
         </p>}
         <div className="session-item-actions">
           <button type="button" className="session-edit" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { owned: !link.owned })}>{link.owned ? 'Marcar como não possuído' : 'Marcar como possuído'}</button>
           {!link.isPrimary && <button type="button" className="session-edit" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { isPrimary: true })}>Tornar principal</button>}
+          {link.externalPlaytimeMinutes !== null && <button
+            type="button" className="session-edit" disabled={busy} aria-pressed={link.countsTowardTotal}
+            onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { countsTowardTotal: !link.countsTowardTotal })}
+          >{link.countsTowardTotal ? 'Não contar no total' : 'Contar no total'}</button>}
           {link.externalPlaytimeMinutes !== null && link.externalPlaytimeMinutes > link.externalPlaytimeImportedMinutes && <button
             type="button" className="session-edit" disabled={busy}
             onClick={() => void importPlaytime(link)}

@@ -51,7 +51,13 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       <StatCard label="Jogos com jornada zerada" value={String(library.gamesWithCompletedPlaythrough)} />
       <StatCard label="Horas registradas aqui" value={formatCompactHours(library.localPlayedHours)} />
       <StatCard label="Horas informadas por plataformas" value={formatCompactHours(library.externalPlaytimeHours)} small />
+      <StatCard label="Total consolidado" value={formatCompactHours(library.consolidatedPlayedHours)} accent />
     </div>
+    <p className="library-subtitle">
+      O total consolidado soma as horas registradas aqui com {formatCompactHours(library.externalCountedHours)} de
+      plataformas marcadas como fonte do total, descontando o que já foi lançado como horas retroativas. As
+      demais horas informadas por plataformas ficam de fora para não contar a mesma atividade duas vezes.
+    </p>
     {library.externalPlaytimeByPlatform.length > 0 && <section className="panel">
       <div className="section-heading"><h2>Tempo informado por plataforma</h2></div>
       <p className="library-subtitle">Medida separada do histórico de sessões: as duas não são somadas.</p>

@@ -106,6 +106,7 @@ function toDatabaseInput(input: GamePlatformUpdate) {
     ...(input.format !== undefined && { format: input.format }),
     ...(input.owned !== undefined && { owned: input.owned }),
     ...(input.isPrimary !== undefined && { isPrimary: input.isPrimary }),
+    ...(input.countsTowardTotal !== undefined && { countsTowardTotal: input.countsTowardTotal }),
     ...(input.notes !== undefined && { notes: input.notes?.trim() || null }),
   };
 }

@@ -181,7 +181,7 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLis
       library: {
         gameCount: 3, platformLinkCount: 4, playthroughCount: 3, playthroughsStarted: 3, playthroughsCompleted: 2,
         replaysStarted: 1, gamesWithCompletedPlaythrough: 2, gamesWithoutPlaythrough: 1,
-        localPlayedHours: 42, externalPlaytimeHours: 10,
+        localPlayedHours: 42, externalPlaytimeHours: 10, externalCountedHours: 6, consolidatedPlayedHours: 48,
         externalPlaytimeByPlatform: [{ key: '00000000-0000-4000-8000-000000000020', name: 'PC', hours: 10 }],
       },
       totals: { completedCount: 2, completedHours: 42, averageCompletedHours: 21, longestGame: { id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30 }, shortestGame: null, journeyStart: '2024-01-01', journeyDays: 400, completionRate: 66.7, averageHoursPerGame: 14 },

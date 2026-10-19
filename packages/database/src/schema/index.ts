@@ -217,6 +217,10 @@ export const gamePlatforms = pgTable('game_platforms', {
   // (ADR-026). Guardar o que já foi lançado é o que torna a ação idempotente e
   // o que permite lançar só a diferença quando a fonte reporta mais tempo.
   externalPlaytimeImportedMinutes: integer('external_playtime_imported_minutes').notNull().default(0),
+  // Se o tempo informado por esta plataforma entra no total consolidado da
+  // biblioteca (ADR-027). Desligado por padrão: ligar sem conferir inflaria o
+  // total de um jogo que já tem sessões registradas aqui.
+  countsTowardTotal: boolean('counts_toward_total').notNull().default(false),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

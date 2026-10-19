@@ -21,7 +21,7 @@ const gameRecord: GameRecord = {
 const platformLinkRecord: GamePlatformRecord = {
   id: id(60), gameId: id(10), platformId: id(2), edition: null, format: 'DIGITAL', owned: true, isPrimary: true,
   externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-  externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null, createdAt: now, updatedAt: now,
+  externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
 };
 
 const playthroughRecord: PlaythroughRecord = {
@@ -48,7 +48,7 @@ function validData(): BackupData {
     gamePlatforms: [{
       id: id(60), gameId: id(10), platformId: id(2), edition: null, format: 'DIGITAL', owned: true, isPrimary: true,
       externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-      externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null,
+      externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null,
       createdAt: now.toISOString(), updatedAt: now.toISOString(),
     }],
     playthroughs: [{

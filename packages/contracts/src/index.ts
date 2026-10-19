@@ -230,6 +230,7 @@ const gamePlatformFieldsSchema = z.object({
   format: gamePlatformFormatSchema.nullable().optional(),
   owned: z.boolean().optional(),
   isPrimary: z.boolean().optional(),
+  countsTowardTotal: z.boolean().optional(),
   notes: optionalText,
 }).strict();
 
@@ -254,6 +255,8 @@ export const gamePlatformSchema = z.object({
   externalSyncedAt: z.string().datetime().nullable(),
   /** Quanto do tempo externo já virou horas retroativas do jogo (ADR-026). */
   externalPlaytimeImportedMinutes: z.number().int().nonnegative().default(0),
+  /** Se o tempo desta plataforma entra no total consolidado (ADR-027). */
+  countsTowardTotal: z.boolean().default(false),
   notes: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -571,6 +574,10 @@ export const libraryStatsSchema = z.object({
   gamesWithoutPlaythrough: z.number().int().nonnegative(),
   localPlayedHours: hoursSchema,
   externalPlaytimeHours: hoursSchema,
+  /** Horas externas marcadas como fonte do total e ainda não lançadas (ADR-027). */
+  externalCountedHours: hoursSchema,
+  /** Tempo local mais o externo contado: sem sobreposição, sem dupla contagem. */
+  consolidatedPlayedHours: hoursSchema,
   externalPlaytimeByPlatform: z.array(externalPlaytimeGroupSchema),
 }).strict();
 export type LibraryStats = z.infer<typeof libraryStatsSchema>;

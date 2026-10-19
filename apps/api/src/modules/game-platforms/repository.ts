@@ -15,6 +15,7 @@ export type GamePlatformRecord = {
   externalLastPlayedAt: Date | null;
   externalSyncedAt: Date | null;
   externalPlaytimeImportedMinutes: number;
+  countsTowardTotal: boolean;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;

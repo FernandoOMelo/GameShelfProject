@@ -61,7 +61,7 @@ function gamePlatformRepository(): GamePlatformRepository {
         id: id(seq += 1), gameId, platformId: input.platformId, edition: input.edition?.trim() ?? null,
         format: input.format ?? null, owned: input.owned ?? false, isPrimary: input.isPrimary ?? false,
         externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: input.notes?.trim() ?? null,
+        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: input.notes?.trim() ?? null,
         createdAt: now, updatedAt: now,
       };
       rows.push(row);
@@ -93,7 +93,7 @@ function gamePlatformRepository(): GamePlatformRepository {
       const row: GamePlatformRecord = {
         id: id(seq += 1), gameId, platformId, edition: null, format: null, owned: true, isPrimary: false,
         externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null, createdAt: now, updatedAt: now,
+        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
       };
       rows.push(row);
       return row;

@@ -74,7 +74,7 @@ function gamePlatformRepository(): GamePlatformRepository {
   const blank = (gameId: string, platformId: string): GamePlatformRecord => ({
     id: id(seq += 1), gameId, platformId, edition: null, format: null, owned: false, isPrimary: false,
     externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null, createdAt: now, updatedAt: now,
+    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
   });
   const external = (external_: ExternalProvenance) => ({
     externalSource: external_.source, externalId: external_.externalId, externalAccountLabel: external_.accountLabel,

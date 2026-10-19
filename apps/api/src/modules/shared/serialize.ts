@@ -31,6 +31,7 @@ export function toSession(session: SessionRecord) {
 export function toGamePlatform(record: {
   id: string; gameId: string; platformId: string; edition: string | null;
   format: 'PHYSICAL' | 'DIGITAL' | 'SUBSCRIPTION' | 'CLOUD' | null; owned: boolean; isPrimary: boolean;
+  externalPlaytimeImportedMinutes: number; countsTowardTotal: boolean;
   externalSource: string | null; externalId: string | null; externalAccountLabel: string | null;
   externalPlaytimeMinutes: number | null; externalLastPlayedAt: Date | null; externalSyncedAt: Date | null;
   notes: string | null; createdAt: Date; updatedAt: Date;

@@ -140,3 +140,10 @@ sincronização nunca lança sozinha.
 
 Se o jogo já tem sessões suas, não lance: as duas medidas se sobrepõem e o
 sistema não tem como saber em que proporção.
+
+### Contar no total consolidado
+
+Em vez de lançar, a associação pode ser marcada como fonte do total (ADR-027):
+o tempo dela entra no total consolidado da biblioteca sem virar hora retroativa
+do jogo. O que já foi lançado é descontado, então marcar e lançar levam ao mesmo
+número — não são duas somas.

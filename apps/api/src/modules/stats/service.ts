@@ -125,8 +125,12 @@ function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, 
 
   const externalByPlatform = new Map<string, number>();
   let externalMinutes = 0;
+  // Só o que ainda não virou hora retroativa entra no consolidado: o que foi
+  // lançado já está no tempo local, e contar de novo dobraria (ADR-026/027).
+  let countedMinutes = 0;
   for (const link of gamePlatforms) {
     if (link.externalPlaytimeMinutes === null) continue;
+    if (link.countsTowardTotal) countedMinutes += Math.max(0, link.externalPlaytimeMinutes - link.externalPlaytimeImportedMinutes);
     externalMinutes += link.externalPlaytimeMinutes;
     const resolved = platformGroup(link.platformId);
     const key = resolved?.id ?? link.platformId;
@@ -134,6 +138,7 @@ function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, 
   }
 
   const localTotalMinutes = [...localMinutes.values()].reduce((sum, minutes) => sum + minutes, 0);
+  const localHours = round(localTotalMinutes / 60 + games.reduce((sum, game) => sum + game.retroactivePlayedHours, 0));
   return {
     gameCount: games.length,
     platformLinkCount: gamePlatforms.length,
@@ -143,8 +148,10 @@ function buildLibraryStats({ games, platformGroup, gamePlatforms, playthroughs, 
     replaysStarted: started.filter((item) => item.isReplay).length,
     gamesWithCompletedPlaythrough: completedGameIds.size,
     gamesWithoutPlaythrough: games.filter((game) => !gameIdsWithPlaythrough.has(game.id)).length,
-    localPlayedHours: round(localTotalMinutes / 60 + games.reduce((sum, game) => sum + game.retroactivePlayedHours, 0)),
+    localPlayedHours: localHours,
     externalPlaytimeHours: round(externalMinutes / 60),
+    externalCountedHours: round(countedMinutes / 60),
+    consolidatedPlayedHours: round(localHours + countedMinutes / 60),
     externalPlaytimeByPlatform: [...externalByPlatform]
       .map(([key, minutes]) => ({ key, name: platformGroup(key)?.name ?? 'Plataforma removida', hours: round(minutes / 60) }))
       .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'pt-BR')),
