@@ -237,6 +237,32 @@ export const gamePlatforms = pgTable('game_platforms', {
   check('game_platforms_imported_nonnegative', sql`${table.externalPlaytimeImportedMinutes} >= 0`),
 ]);
 
+// Conquistas trazidas da fonte externa (ADR-028). Penduradas na associação de
+// plataforma, não no jogo: a mesma conquista só existe naquela plataforma, e
+// desassociar leva as conquistas junto, sem deixar órfão.
+export const externalAchievements = pgTable('external_achievements', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gamePlatformId: uuid('game_platform_id').notNull().references(() => gamePlatforms.id, { onDelete: 'cascade' }),
+  externalId: text('external_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  iconUrl: text('icon_url'),
+  points: integer('points'),
+  rarityPercent: numeric('rarity_percent', { precision: 6, scale: 3 }),
+  unlocked: boolean('unlocked').notNull().default(false),
+  unlockedAt: timestamp('unlocked_at', { withTimezone: true }),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('external_achievements_unique').on(table.gamePlatformId, table.externalId),
+  index('external_achievements_game_platform_idx').on(table.gamePlatformId),
+  check('external_achievements_name_not_blank', sql`length(trim(${table.name})) > 0`),
+  check('external_achievements_points_nonnegative', sql`${table.points} IS NULL OR ${table.points} >= 0`),
+  check('external_achievements_rarity_range', sql`${table.rarityPercent} IS NULL OR (${table.rarityPercent} >= 0 AND ${table.rarityPercent} <= 100)`),
+  // Data de desbloqueio sem desbloqueio seria contradição; o contrário é normal
+  // (a fonte nem sempre informa quando).
+  check('external_achievements_unlocked_at_requires_unlock', sql`${table.unlockedAt} IS NULL OR ${table.unlocked}`),
+]);
+
 export const playthroughStatus = pgEnum('playthrough_status', ['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);
 
 // Uma jornada é uma experiência contínua de jogo: zero, uma ou várias por jogo.

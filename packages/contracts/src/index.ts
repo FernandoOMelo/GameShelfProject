@@ -274,6 +274,31 @@ export const externalPlaytimeImportSchema = z.object({
 }).strict();
 export type ExternalPlaytimeImport = z.infer<typeof externalPlaytimeImportSchema>;
 
+// Conquistas espelhadas da fonte externa (ADR-028). São dados da fonte: o
+// GameShelf não cria, edita nem desbloqueia conquista.
+export const externalAchievementSchema = z.object({
+  id: z.string().uuid(),
+  externalId: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  iconUrl: z.string().nullable(),
+  points: z.number().int().nonnegative().nullable(),
+  rarityPercent: z.number().min(0).max(100).nullable(),
+  unlocked: z.boolean(),
+  unlockedAt: z.string().datetime().nullable(),
+  syncedAt: z.string().datetime(),
+}).strict();
+export const externalAchievementsResponseSchema = z.object({
+  achievements: z.array(externalAchievementSchema),
+  unlockedCount: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  points: z.number().int().nonnegative(),
+  /** Nulo quando a fonte está indisponível e a resposta veio do espelho local. */
+  refreshedAt: z.string().datetime().nullable(),
+}).strict();
+export type ExternalAchievement = z.infer<typeof externalAchievementSchema>;
+export type ExternalAchievementsResponse = z.infer<typeof externalAchievementsResponseSchema>;
+
 // ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────
 export const playthroughStatusSchema = z.enum(['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);
 export type PlaythroughStatus = z.infer<typeof playthroughStatusSchema>;

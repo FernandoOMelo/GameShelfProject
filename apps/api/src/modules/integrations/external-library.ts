@@ -16,6 +16,22 @@ export type ExternalLibraryEntry = {
   lastPlayedAt: Date | null;
 };
 
+/**
+ * Conquista de um jogo na fonte. Diferente do tempo acumulado, `unlockedAt` é
+ * um evento datado de verdade — mas ainda não é sessão: é um instante, não um
+ * intervalo, e não diz por quanto tempo se jogou.
+ */
+export type ExternalAchievementEntry = {
+  externalId: string;
+  name: string;
+  description: string | null;
+  iconUrl: string | null;
+  points: number | null;
+  rarityPercent: number | null;
+  unlocked: boolean;
+  unlockedAt: Date | null;
+};
+
 export interface ExternalLibraryProvider {
   /** Slug gravado em `game_platforms.external_source`. */
   readonly source: string;
@@ -24,4 +40,10 @@ export interface ExternalLibraryProvider {
    * não registra sessão nenhuma: só tempo acumulado e última atividade.
    */
   fetchLibrary(): Promise<ExternalLibraryEntry[]>;
+  /**
+   * Conquistas de um jogo da fonte. Sob demanda, uma requisição por jogo: a
+   * sincronização da biblioteca não as busca, senão seriam dezenas de
+   * requisições por rodada para dados que quase nunca são olhados.
+   */
+  fetchAchievements(externalGameId: string): Promise<ExternalAchievementEntry[]>;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import type { GamePlatform, GamePlatformFormat, Platform, Playthrough, PlaythroughMetrics, PlaythroughStatus } from '@gameshelf/contracts';
+import type { ExternalAchievementsResponse, GamePlatform, GamePlatformFormat, Platform, Playthrough, PlaythroughMetrics, PlaythroughStatus } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 import { apiUrl, formatCompactHours } from './shared';
 
@@ -24,6 +24,28 @@ const todayLocal = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
+
+/** Conquistas de uma associação: resumo e lista, com as desbloqueadas antes. */
+function AchievementList({ data }: { data: ExternalAchievementsResponse }) {
+  if (data.total === 0) {
+    return <p className="session-empty">A fonte não informa conquistas para este jogo.</p>;
+  }
+  return <div className="achievement-panel">
+    <p className="session-journal-entry">
+      {data.unlockedCount} de {data.total} desbloqueadas
+      {data.points > 0 && ` · ${data.points} pontos`}
+      {data.refreshedAt === null && ' · fonte indisponível, mostrando o último dado guardado'}
+    </p>
+    <ul className="session-list">{data.achievements.map((achievement) => <li key={achievement.id}>
+      <div>
+        <strong>{achievement.unlocked ? '★' : '☆'} {achievement.name}</strong>
+        <span>{achievement.rarityPercent === null ? '' : `${achievement.rarityPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</span>
+      </div>
+      {achievement.description && <p>{achievement.description}</p>}
+      {achievement.unlockedAt && <p>Desbloqueada em {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(achievement.unlockedAt))}</p>}
+    </li>)}</ul>
+  </div>;
+}
 
 const formatDateOnly = (value: string) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`));
 
@@ -52,6 +74,9 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [addingPlatform, setAddingPlatform] = useState(false);
+  // Conquistas são carregadas por associação, só quando o usuário abre: cada
+  // abertura é uma requisição à fonte (ADR-028).
+  const [achievements, setAchievements] = useState<Record<string, ExternalAchievementsResponse | 'loading' | 'failed'>>({});
   const [addingPlaythrough, setAddingPlaythrough] = useState(false);
 
   const platformName = (id: string | null) => platforms.find((platform) => platform.id === id)?.name ?? 'Plataforma removida';
@@ -103,6 +128,22 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
   // explícita, nunca pela sincronização, e só a parte ainda não lançada entra.
   async function importPlaytime(link: GamePlatform) {
     if (await send(`${apiUrl}/games/${gameId}/platforms/${link.id}/import-playtime`, 'POST')) onGameChanged?.();
+  }
+
+  async function toggleAchievements(link: GamePlatform) {
+    if (achievements[link.id]) {
+      setAchievements((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== link.id)));
+      return;
+    }
+    setAchievements((current) => ({ ...current, [link.id]: 'loading' }));
+    try {
+      const response = await fetch(`${apiUrl}/games/${gameId}/platforms/${link.id}/achievements`);
+      if (!response.ok) throw new Error('falhou');
+      const data = await response.json() as ExternalAchievementsResponse;
+      setAchievements((current) => ({ ...current, [link.id]: data }));
+    } catch {
+      setAchievements((current) => ({ ...current, [link.id]: 'failed' }));
+    }
   }
 
   async function addPlatform(event: FormEvent<HTMLFormElement>) {
@@ -178,8 +219,14 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
             type="button" className="session-edit" disabled={busy}
             onClick={() => void importPlaytime(link)}
           >Lançar como horas retroativas</button>}
+          {link.externalSource && <button type="button" className="session-edit" aria-expanded={Boolean(achievements[link.id])} onClick={() => void toggleAchievements(link)}>
+            {achievements[link.id] ? 'Ocultar conquistas' : 'Conquistas'}
+          </button>}
           <button type="button" className="session-delete" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'DELETE')}>Desassociar</button>
         </div>
+        {achievements[link.id] === 'loading' && <p className="session-empty">Carregando conquistas…</p>}
+        {achievements[link.id] === 'failed' && <p role="alert" className="session-feedback">Não foi possível carregar as conquistas.</p>}
+        {typeof achievements[link.id] === 'object' && <AchievementList data={achievements[link.id] as ExternalAchievementsResponse} />}
       </li>)}</ul>}
 
     {addingPlatform ? <form className="session-form" onSubmit={(event) => void addPlatform(event)}>

@@ -109,3 +109,47 @@ describe('AchievistClient', () => {
     await expect(client.fetchLibrary()).rejects.toThrow('HTTP 502');
   });
 });
+
+describe('conquistas da fonte', () => {
+  const achievementsClient = (rows: unknown[]) => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(loginResponse())
+      .mockResolvedValueOnce(Response.json(rows));
+    return new AchievistClient('http://achievist-app:8000', 'user', 'secret', fetcher);
+  };
+
+  it('normaliza a resposta e trata unlocked nulo como bloqueada', async () => {
+    const client = achievementsClient([
+      { platform_ach_id: 'A1', name: ' Primeira vitória ', description: ' Venceu ', icon_url: 'http://i/1.png', points: 30, rarity_pct: '12.5', unlocked: true, unlocked_at: '2026-02-01T10:00:00+00:00' },
+      { platform_ach_id: 2, name: 'Bloqueada', description: null, icon_url: null, points: null, rarity_pct: null, unlocked: null, unlocked_at: null },
+    ]);
+
+    expect(await client.fetchAchievements('401')).toEqual([
+      {
+        externalId: 'A1', name: 'Primeira vitória', description: 'Venceu', iconUrl: 'http://i/1.png',
+        points: 30, rarityPercent: 12.5, unlocked: true, unlockedAt: new Date('2026-02-01T10:00:00Z'),
+      },
+      {
+        externalId: '2', name: 'Bloqueada', description: null, iconUrl: null,
+        points: null, rarityPercent: null, unlocked: false, unlockedAt: null,
+      },
+    ]);
+  });
+
+  it('descarta conquista sem nome e data de desbloqueio sem desbloqueio', async () => {
+    const client = achievementsClient([
+      { platform_ach_id: 'A1', name: '   ', unlocked: true },
+      { platform_ach_id: 'A2', name: 'Válida', unlocked: false, unlocked_at: '2026-02-01T10:00:00+00:00' },
+    ]);
+
+    const achievements = await client.fetchAchievements('401');
+
+    expect(achievements).toHaveLength(1);
+    expect(achievements[0]).toMatchObject({ externalId: 'A2', unlocked: false, unlockedAt: null });
+  });
+
+  it('ignora raridade fora da faixa em vez de propagar valor inválido', async () => {
+    const client = achievementsClient([{ platform_ach_id: 'A1', name: 'X', rarity_pct: 150 }]);
+    expect((await client.fetchAchievements('401'))[0]!.rarityPercent).toBeNull();
+  });
+});

@@ -203,7 +203,7 @@ const entry = (overrides: Partial<ExternalLibraryEntry> = {}): ExternalLibraryEn
 });
 
 function provider(entries: ExternalLibraryEntry[]): ExternalLibraryProvider {
-  return { source: 'achievist', fetchLibrary: async () => entries };
+  return { source: 'achievist', fetchLibrary: async () => entries, fetchAchievements: async () => [] };
 }
 
 function setup(options: {
@@ -389,6 +389,7 @@ describe('sincronização com a fonte externa', () => {
     const unavailable: ExternalLibraryProvider = {
       source: 'achievist',
       fetchLibrary: () => Promise.reject(new Error('O Achievist respondeu HTTP 502 em /api/games.')),
+      fetchAchievements: async () => [],
     };
     const context = track(setup({ provider: unavailable }));
 
@@ -414,6 +415,7 @@ describe('sincronização com a fonte externa', () => {
     const slow: ExternalLibraryProvider = {
       source: 'achievist',
       fetchLibrary: () => new Promise((resolve) => { release = () => resolve([]); }),
+      fetchAchievements: async () => [],
     };
     const context = track(setup({ provider: slow }));
 
@@ -512,7 +514,7 @@ describe('ExternalSyncRunner', () => {
   });
 
   it('não propaga a falha da fonte para quem disparou', async () => {
-    const context = setup({ provider: { source: 'achievist', fetchLibrary: () => Promise.reject(new Error('fetch failed')) } });
+    const context = setup({ provider: { source: 'achievist', fetchLibrary: () => Promise.reject(new Error('fetch failed')), fetchAchievements: async () => [] } });
     context.runner.start();
     await expect(context.runner.settled()).resolves.toBeUndefined();
     expect(context.runner.snapshot()).toMatchObject({ status: 'failed', error: 'fetch failed' });

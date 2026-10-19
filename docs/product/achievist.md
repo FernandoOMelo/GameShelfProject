@@ -59,6 +59,17 @@ Não existe tabela de sessão de jogo.
 - Autenticação é só por cookie de sessão, com usuário e senha. Não há token de
   serviço nem chave de API.
 
+## Conquistas
+
+As conquistas da fonte aparecem na tela de detalhes do jogo, por associação de
+plataforma, numa seção recolhível (ADR-028). Elas são buscadas no momento em que
+você abre a seção, não durante a sincronização: com dezenas de associações, isso
+transformaria cada rodada em dezenas de requisições.
+
+Se o Achievist estiver fora do ar, a seção mostra o último dado guardado e avisa.
+Conquistas não viram sessão, não marcam jogo como zerado e não entram em nenhuma
+métrica de tempo — `unlocked_at` é um instante, não um intervalo.
+
 ## Nomes de plataforma
 
 O Achievist informa a loja ("Steam", "Google Play"), não o aparelho. Para que

@@ -1,18 +1,54 @@
 import type { FastifyInstance } from 'fastify';
-import { externalPlaytimeImportSchema, gamePlatformInputSchema, gamePlatformSchema, gamePlatformUpdateSchema } from '@gameshelf/contracts';
+import {
+  externalAchievementsResponseSchema, externalPlaytimeImportSchema,
+  gamePlatformInputSchema, gamePlatformSchema, gamePlatformUpdateSchema,
+} from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
 import { parseId } from '../shared/parse-id.js';
 import { toGamePlatform } from '../shared/serialize.js';
 import type { GamePlatformRepository } from './repository.js';
 import { planPlaytimeImport } from './playtime-import.js';
+import type { ExternalAchievementRepository } from './achievement-repository.js';
+import type { ExternalLibraryProvider } from '../integrations/external-library.js';
+import { toExternalAchievements } from './achievements.js';
 
 export async function registerGamePlatformRoutes(
   app: FastifyInstance,
   games: GameRepository,
   platforms: PlatformRepository,
   repository: GamePlatformRepository,
+  achievements?: { store: ExternalAchievementRepository; provider?: ExternalLibraryProvider },
 ) {
+  // Conquistas são buscadas sob demanda, por jogo (ADR-028). Se a fonte estiver
+  // fora do ar — ou desligada —, a resposta vem do espelho local com
+  // `refreshedAt` nulo, em vez de falhar: ver conquista nunca pode derrubar a
+  // tela de detalhes.
+  app.get<{ Params: { gameId: string; id: string } }>('/games/:gameId/platforms/:id/achievements', async (request, reply) => {
+    if (!achievements) return reply.code(404).send({ error: 'Conquistas não estão disponíveis nesta instalação.' });
+    const gameId = parseId(request.params.gameId);
+    const id = parseId(request.params.id);
+    if (!gameId || !id) return reply.code(400).send({ error: 'ID inválido.' });
+    const link = await repository.find(gameId, id);
+    if (!link) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
+
+    let refreshedAt: Date | null = null;
+    let records = await achievements.store.listForGamePlatform(id);
+    const provider = achievements.provider;
+    if (provider && link.externalSource === provider.source && link.externalId) {
+      try {
+        const fetched = await provider.fetchAchievements(link.externalId);
+        refreshedAt = new Date();
+        records = await achievements.store.replaceForGamePlatform(id, fetched, refreshedAt);
+      } catch (error) {
+        // A fonte caiu: segue com o que já havia sido espelhado.
+        request.log.warn({ err: error instanceof Error ? error.message : 'erro' }, 'Falha ao buscar conquistas');
+      }
+    }
+    return reply.send(externalAchievementsResponseSchema.parse(toExternalAchievements(records, refreshedAt)));
+  });
+
+
   app.get<{ Params: { gameId: string } }>('/games/:gameId/platforms', async (request, reply) => {
     const gameId = parseId(request.params.gameId);
     if (!gameId) return reply.code(400).send({ error: 'ID inválido.' });

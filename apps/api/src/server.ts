@@ -8,6 +8,7 @@ import { DrizzlePlatformRepository } from './modules/platforms/drizzle-platform-
 import { DrizzleGenreRepository } from './modules/genres/drizzle-genre-repository.js';
 import { DrizzleSessionRepository } from './modules/sessions/drizzle-session-repository.js';
 import { DrizzleGamePlatformRepository } from './modules/game-platforms/drizzle-game-platform-repository.js';
+import { DrizzleExternalAchievementRepository } from './modules/game-platforms/drizzle-achievement-repository.js';
 import { DrizzlePlaythroughRepository } from './modules/playthroughs/drizzle-playthrough-repository.js';
 import { DrizzleBacklogRepository } from './modules/backlog/drizzle-backlog-repository.js';
 import { DrizzleGameListRepository } from './modules/game-lists/drizzle-game-list-repository.js';
@@ -40,6 +41,7 @@ const app = buildApp({
   genreRepository: new DrizzleGenreRepository(database.db),
   sessionRepository: new DrizzleSessionRepository(database.db),
   gamePlatformRepository: new DrizzleGamePlatformRepository(database.db),
+  externalAchievementRepository: new DrizzleExternalAchievementRepository(database.db),
   playthroughRepository: new DrizzlePlaythroughRepository(database.db),
   backlogRepository: new DrizzleBacklogRepository(database.db),
   gameListRepository: new DrizzleGameListRepository(database.db),

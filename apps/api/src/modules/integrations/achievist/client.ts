@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ExternalLibraryEntry, ExternalLibraryProvider } from '../external-library.js';
+import type { ExternalAchievementEntry, ExternalLibraryEntry, ExternalLibraryProvider } from '../external-library.js';
 
 export const ACHIEVIST_SOURCE = 'achievist';
 
@@ -20,6 +20,19 @@ const gamesPageSchema = z.object({
     last_played_at: z.string().nullable().optional(),
   })),
 });
+
+// `unlocked` vem nulo quando a conta não tem a linha da conquista (a fonte usa
+// LEFT JOIN): ausência significa bloqueada, não desconhecida.
+const achievementsSchema = z.array(z.object({
+  platform_ach_id: z.union([z.string(), z.number()]).transform(String),
+  name: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  icon_url: z.string().nullable().optional(),
+  points: z.number().nullable().optional(),
+  rarity_pct: z.union([z.number(), z.string()]).nullable().optional(),
+  unlocked: z.boolean().nullable().optional(),
+  unlocked_at: z.string().nullable().optional(),
+}));
 
 const accountsSchema = z.array(z.object({
   platform: z.string().min(1),
@@ -91,6 +104,28 @@ export class AchievistClient implements ExternalLibraryProvider {
     }
 
     return [...entries.values()];
+  }
+
+  async fetchAchievements(externalGameId: string): Promise<ExternalAchievementEntry[]> {
+    const rows = achievementsSchema.parse(await this.get(`/api/games/${encodeURIComponent(externalGameId)}/achievements`));
+    return rows
+      // Conquista sem nome não tem o que exibir, e o banco rejeita nome vazio.
+      .filter((row) => (row.name ?? '').trim().length > 0)
+      .map((row) => {
+        const unlocked = row.unlocked === true;
+        return {
+          externalId: row.platform_ach_id,
+          name: row.name!.trim(),
+          description: row.description?.trim() || null,
+          iconUrl: row.icon_url ?? null,
+          points: typeof row.points === 'number' && row.points >= 0 ? row.points : null,
+          rarityPercent: parseRarity(row.rarity_pct),
+          unlocked,
+          // A fonte às vezes tem a conquista sem a data; desbloqueada sem data é
+          // normal, data sem desbloqueio seria contradição e é descartada.
+          unlockedAt: unlocked ? parseInstant(row.unlocked_at) : null,
+        };
+      });
   }
 
   /**
@@ -168,6 +203,12 @@ function readSessionCookie(response: Response): string | undefined {
 }
 
 /** Data inválida da fonte vira ausência de informação, não uma data falsa. */
+function parseRarity(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : null;
+}
+
 function parseInstant(value: string | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
