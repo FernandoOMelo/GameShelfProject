@@ -1,1 +1,27 @@
-{"name":"@gameshelf/ui","version":"0.0.0","private":true,"type":"module","exports":"./src/index.ts","scripts":{"build":"tsc -p tsconfig.json","lint":"eslint src","typecheck":"tsc -p tsconfig.json","test":"vitest run"},"peerDependencies":{"react":"^19.1.0"},"devDependencies":{"@types/react":"^19.1.8","typescript":"^5.8.3","vitest":"^3.2.4"}}
+{
+  "name": "@gameshelf/ui",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "import": "./dist/index.esm.js",
+    "require": "./dist/index.cjs.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepare": "pnpm build"
+  },
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FernandoOMelo/GameShelfProject.git"
+  },
+  "homepage": "https://github.com/FernandoOMelo/GameShelfProject#readme",
+  "bugs": { "url": "https://github.com/FernandoOMelo/GameShelfProject/issues" }
+}
