@@ -38,6 +38,13 @@ export class DrizzleGamePlatformRepository implements GamePlatformRepository {
     });
   }
 
+  async markPlaytimeImported(id: string, importedMinutes: number): Promise<GamePlatformRecord | undefined> {
+    const [row] = await this.db.update(gamePlatforms)
+      .set({ externalPlaytimeImportedMinutes: importedMinutes, updatedAt: new Date() })
+      .where(eq(gamePlatforms.id, id)).returning();
+    return row;
+  }
+
   async delete(gameId: string, id: string): Promise<boolean> {
     const deleted = await this.db.delete(gamePlatforms)
       .where(and(eq(gamePlatforms.gameId, gameId), eq(gamePlatforms.id, id))).returning({ id: gamePlatforms.id });

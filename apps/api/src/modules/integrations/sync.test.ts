@@ -74,7 +74,7 @@ function gamePlatformRepository(): GamePlatformRepository {
   const blank = (gameId: string, platformId: string): GamePlatformRecord => ({
     id: id(seq += 1), gameId, platformId, edition: null, format: null, owned: false, isPrimary: false,
     externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-    externalLastPlayedAt: null, externalSyncedAt: null, notes: null, createdAt: now, updatedAt: now,
+    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null, createdAt: now, updatedAt: now,
   });
   const external = (external_: ExternalProvenance) => ({
     externalSource: external_.source, externalId: external_.externalId, externalAccountLabel: external_.accountLabel,
@@ -115,6 +115,10 @@ function gamePlatformRepository(): GamePlatformRepository {
     updateExternalSnapshot: async (rowId, provenance) => {
       const row = rows.find((item) => item.id === rowId);
       return row ? Object.assign(row, external(provenance), { updatedAt: new Date() }) : undefined;
+    },
+    markPlaytimeImported: async (rowId, importedMinutes) => {
+      const row = rows.find((item) => item.id === rowId);
+      return row ? Object.assign(row, { externalPlaytimeImportedMinutes: importedMinutes }) : undefined;
     },
   };
 }

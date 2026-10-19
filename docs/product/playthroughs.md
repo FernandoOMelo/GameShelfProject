@@ -126,3 +126,17 @@ As duas medidas aparecem separadas e nunca são somadas:
 
 A razão está no ADR-024: tempo acumulado não é uma lista de sessões, e somar as
 duas medidas contaria a mesma atividade duas vezes.
+
+### Lançar o tempo da plataforma como horas retroativas
+
+Quando o jogo não tem sessões registradas, o tempo que a plataforma informa pode
+ser lançado como horas retroativas, por associação, com um botão nos detalhes do
+jogo (ADR-026). Isso não cria sessões: horas retroativas significam "joguei e
+não registrei", que é exatamente o que a fonte sabe.
+
+A ação é idempotente — só a parte ainda não lançada entra, e repetir não faz
+nada. Se a plataforma reportar mais tempo depois, lança-se só a diferença. A
+sincronização nunca lança sozinha.
+
+Se o jogo já tem sessões suas, não lance: as duas medidas se sobrepõem e o
+sistema não tem como saber em que proporção.

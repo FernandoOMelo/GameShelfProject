@@ -918,6 +918,19 @@ export function App() {
     setFormStatus(status);
   }
 
+  // Relê o jogo aberto depois de uma mudança feita por outro painel, para que
+  // as horas retroativas na tela reflitam o que a API gravou.
+  async function reloadSelectedGame() {
+    if (!selectedGame) return;
+    try {
+      const response = await fetch(`${apiUrl}/games/${selectedGame.id}`);
+      if (!response.ok) return;
+      const updated = await response.json() as Game;
+      setSelectedGame((current) => current?.id === updated.id ? updated : current);
+      await loadGames();
+    } catch { /* a tela continua com o valor anterior até a próxima leitura */ }
+  }
+
   async function updateGame(game: Game, values: Partial<Game>) {
     const response = await fetch(`${apiUrl}/games/${game.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) });
     if (!response.ok) { setError('Não foi possível atualizar o jogo.'); return; }
@@ -1048,8 +1061,10 @@ export function App() {
               <GameJourneyPanel
                 gameId={selectedGame.id}
                 platforms={platforms}
-                localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0)}
+                localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)}
+                retroactiveHours={selectedGame.retroactivePlayedHours ?? 0}
                 onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
+                onGameChanged={() => { void reloadSelectedGame(); }}
               />
             </Suspense>
             <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Horas retroativas<input aria-label="Horas retroativas" type="number" min="0" step="0.01" value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /><small>Lançar soma ao total; corrigir substitui pelo valor informado.</small></label><div className="form-wide session-actions"><Button type="submit">Lançar horas</Button><button type="button" className="session-edit" onClick={() => void changeRetroactiveHours('set')}>Corrigir total</button><button type="button" className="session-delete" disabled={(selectedGame.retroactivePlayedHours ?? 0) === 0} onClick={() => void changeRetroactiveHours('clear')}>Zerar</button></div></form><h3>Sessões</h3>

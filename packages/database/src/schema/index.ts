@@ -213,6 +213,10 @@ export const gamePlatforms = pgTable('game_platforms', {
   externalPlaytimeMinutes: integer('external_playtime_minutes'),
   externalLastPlayedAt: timestamp('external_last_played_at', { withTimezone: true }),
   externalSyncedAt: timestamp('external_synced_at', { withTimezone: true }),
+  // Quanto do tempo externo já foi lançado como horas retroativas do jogo
+  // (ADR-026). Guardar o que já foi lançado é o que torna a ação idempotente e
+  // o que permite lançar só a diferença quando a fonte reporta mais tempo.
+  externalPlaytimeImportedMinutes: integer('external_playtime_imported_minutes').notNull().default(0),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -226,6 +230,7 @@ export const gamePlatforms = pgTable('game_platforms', {
   check('game_platforms_edition_not_blank', sql`${table.edition} IS NULL OR length(trim(${table.edition})) > 0`),
   check('game_platforms_external_playtime_nonnegative', sql`${table.externalPlaytimeMinutes} IS NULL OR ${table.externalPlaytimeMinutes} >= 0`),
   check('game_platforms_external_pair', sql`(${table.externalSource} IS NULL) = (${table.externalId} IS NULL)`),
+  check('game_platforms_imported_nonnegative', sql`${table.externalPlaytimeImportedMinutes} >= 0`),
 ]);
 
 export const playthroughStatus = pgEnum('playthrough_status', ['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);

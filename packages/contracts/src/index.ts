@@ -252,6 +252,8 @@ export const gamePlatformSchema = z.object({
   externalPlaytimeMinutes: z.number().int().nonnegative().nullable(),
   externalLastPlayedAt: z.string().datetime().nullable(),
   externalSyncedAt: z.string().datetime().nullable(),
+  /** Quanto do tempo externo já virou horas retroativas do jogo (ADR-026). */
+  externalPlaytimeImportedMinutes: z.number().int().nonnegative().default(0),
   notes: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -259,6 +261,15 @@ export const gamePlatformSchema = z.object({
 export type GamePlatformInput = z.infer<typeof gamePlatformInputSchema>;
 export type GamePlatformUpdate = z.infer<typeof gamePlatformUpdateSchema>;
 export type GamePlatform = z.infer<typeof gamePlatformSchema>;
+
+// Resultado de lançar o tempo informado pela plataforma como horas retroativas.
+export const externalPlaytimeImportSchema = z.object({
+  platform: gamePlatformSchema,
+  /** Minutos efetivamente lançados agora: só a parte ainda não lançada. */
+  importedMinutes: z.number().int().positive(),
+  retroactivePlayedHours: z.number().nonnegative(),
+}).strict();
+export type ExternalPlaytimeImport = z.infer<typeof externalPlaytimeImportSchema>;
 
 // ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────
 export const playthroughStatusSchema = z.enum(['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);

@@ -27,7 +27,7 @@ function gameRepository(): GameRepository {
     list: async () => [game],
     find: async (gameId) => gameId === GAME ? game : undefined,
     create: async (input: GameInput) => ({ ...game, ...input, id: id(2) }),
-    update: async (_gameId, input) => ({ ...game, ...input }),
+    update: async (_gameId, input) => Object.assign(game, input),
     delete: async () => true,
   };
 }
@@ -38,20 +38,30 @@ const platformRepository: PlatformRepository = {
   setParent: async (platformId, parentId) => ({ id: platformId, name: 'PC', parentId }),
 };
 
+// Tempo que a fonte externa informa para uma associação, por id. Um teste o
+// preenche para simular o que a sincronização teria gravado.
+const externalMinutes = new Map<string, number>();
+
 function gamePlatformRepository(): GamePlatformRepository {
   const rows: GamePlatformRecord[] = [];
   let seq = 100;
+  const withExternal = (row: GamePlatformRecord): GamePlatformRecord => externalMinutes.has(row.id)
+    ? Object.assign(row, { externalPlaytimeMinutes: externalMinutes.get(row.id)!, externalSource: 'achievist', externalId: row.id })
+    : row;
   return {
-    listAll: async () => rows,
-    listForGame: async (gameId) => rows.filter((row) => row.gameId === gameId),
-    find: async (gameId, rowId) => rows.find((row) => row.gameId === gameId && row.id === rowId),
+    listAll: async () => rows.map(withExternal),
+    listForGame: async (gameId) => rows.filter((row) => row.gameId === gameId).map(withExternal),
+    find: async (gameId, rowId) => {
+      const row = rows.find((item) => item.gameId === gameId && item.id === rowId);
+      return row ? withExternal(row) : undefined;
+    },
     create: async (gameId, input: GamePlatformInput) => {
       if (input.isPrimary) for (const row of rows.filter((item) => item.gameId === gameId)) row.isPrimary = false;
       const row: GamePlatformRecord = {
         id: id(seq += 1), gameId, platformId: input.platformId, edition: input.edition?.trim() ?? null,
         format: input.format ?? null, owned: input.owned ?? false, isPrimary: input.isPrimary ?? false,
         externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-        externalLastPlayedAt: null, externalSyncedAt: null, notes: input.notes?.trim() ?? null,
+        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: input.notes?.trim() ?? null,
         createdAt: now, updatedAt: now,
       };
       rows.push(row);
@@ -83,12 +93,16 @@ function gamePlatformRepository(): GamePlatformRepository {
       const row: GamePlatformRecord = {
         id: id(seq += 1), gameId, platformId, edition: null, format: null, owned: true, isPrimary: false,
         externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-        externalLastPlayedAt: null, externalSyncedAt: null, notes: null, createdAt: now, updatedAt: now,
+        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, notes: null, createdAt: now, updatedAt: now,
       };
       rows.push(row);
       return row;
     },
     updateExternalSnapshot: async (rowId) => rows.find((row) => row.id === rowId),
+    markPlaytimeImported: async (rowId, importedMinutes) => {
+      const row = rows.find((item) => item.id === rowId);
+      return row ? Object.assign(row, { externalPlaytimeImportedMinutes: importedMinutes }) : undefined;
+    },
   };
 }
 
@@ -180,7 +194,10 @@ function setup() {
   return app;
 }
 
-afterEach(async () => { await Promise.all(apps.splice(0).map((app) => app.close())); });
+afterEach(async () => {
+  externalMinutes.clear();
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
 
 describe('plataformas associadas ao jogo', () => {
   it('associa o mesmo jogo a várias plataformas sem duplicar o cadastro canônico', async () => {
@@ -232,7 +249,57 @@ describe('plataformas associadas ao jogo', () => {
   });
 });
 
-describe('jornadas e replays', () => {
+describe('lançar tempo externo como horas retroativas', () => {
+    // A associação precisa ter tempo informado pela fonte; o teste grava isso
+    // direto no repositório, como a sincronização faria.
+    async function withExternalTime(app: ReturnType<typeof buildApp>, minutes: number) {
+      const link = (await app.inject({ method: 'POST', url: `/games/${GAME}/platforms`, payload: { platformId: PC } })).json();
+      externalMinutes.set(link.id, minutes);
+      return link;
+    }
+
+    it('lança o tempo informado e marca quanto já foi lançado', async () => {
+      const app = setup();
+      const link = await withExternalTime(app, 120);
+      const response = await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ importedMinutes: 120, retroactivePlayedHours: 2 });
+      expect(response.json().platform).toMatchObject({ externalPlaytimeImportedMinutes: 120 });
+    });
+
+    it('não lança duas vezes o mesmo tempo', async () => {
+      const app = setup();
+      const link = await withExternalTime(app, 120);
+      await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+      const again = await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+
+      expect(again.statusCode).toBe(409);
+      expect(again.json().error).toContain('já foi lançado');
+      // As horas do jogo não mudaram na segunda tentativa.
+      expect((await app.inject({ method: 'GET', url: `/games/${GAME}` })).json().retroactivePlayedHours).toBe(2);
+    });
+
+    it('recusa quando a fonte não informa tempo para a plataforma', async () => {
+      const app = setup();
+      const link = (await app.inject({ method: 'POST', url: `/games/${GAME}/platforms`, payload: { platformId: PC } })).json();
+      const response = await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error).toContain('não informa');
+    });
+
+    it('não cria sessão nem jornada ao lançar o tempo', async () => {
+      const app = setup();
+      const link = await withExternalTime(app, 60);
+      await app.inject({ method: 'POST', url: `/games/${GAME}/platforms/${link.id}/import-playtime` });
+
+      expect((await app.inject({ method: 'GET', url: `/games/${GAME}/sessions` })).json()).toHaveLength(0);
+      expect((await app.inject({ method: 'GET', url: `/games/${GAME}/playthroughs` })).json()).toHaveLength(0);
+    });
+  });
+
+  describe('jornadas e replays', () => {
   it('mantém várias jornadas no mesmo jogo, numeradas em ordem, sem duplicar o jogo', async () => {
     const app = setup();
     const first = (await app.inject({ method: 'POST', url: `/games/${GAME}/playthroughs`, payload: { status: 'PLAYING', startedAt: '2016-01-01' } })).json();

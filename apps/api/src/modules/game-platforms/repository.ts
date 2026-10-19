@@ -14,6 +14,7 @@ export type GamePlatformRecord = {
   externalPlaytimeMinutes: number | null;
   externalLastPlayedAt: Date | null;
   externalSyncedAt: Date | null;
+  externalPlaytimeImportedMinutes: number;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -53,4 +54,6 @@ export interface GamePlatformRepository {
    * declarado pelo usuário é tocado.
    */
   updateExternalSnapshot(id: string, external: ExternalProvenance): Promise<GamePlatformRecord | undefined>;
+  /** Marca quantos minutos do tempo externo já foram lançados como retroativos. */
+  markPlaytimeImported(id: string, importedMinutes: number): Promise<GamePlatformRecord | undefined>;
 }

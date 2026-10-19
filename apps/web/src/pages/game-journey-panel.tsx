@@ -29,6 +29,10 @@ const formatDateOnly = (value: string) => new Intl.DateTimeFormat('pt-BR', { dat
 
 type Props = {
   gameId: string;
+  /** Horas retroativas já lançadas no jogo, para mostrar o efeito do lançamento. */
+  retroactiveHours?: number;
+  /** Avisa o pai quando o jogo muda por causa de um lançamento de tempo externo. */
+  onGameChanged?: () => void;
   platforms: Platform[];
   /** Minutos registrados localmente em sessões, para contrastar com o tempo externo. */
   localMinutes: number;
@@ -41,7 +45,7 @@ type Props = {
  * tempo informado pela plataforma aparecem separados, e nunca somados: são
  * medidas diferentes da mesma biblioteca.
  */
-export function GameJourneyPanel({ gameId, platforms, localMinutes, onPlaythroughsChanged }: Props) {
+export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveHours = 0, onPlaythroughsChanged, onGameChanged }: Props) {
   const [links, setLinks] = useState<GamePlatform[] | null>(null);
   const [playthroughs, setPlaythroughs] = useState<Playthrough[] | null>(null);
   const [metrics, setMetrics] = useState<PlaythroughMetrics | null>(null);
@@ -93,6 +97,12 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, onPlaythroug
     } finally {
       setBusy(false);
     }
+  }
+
+  // O tempo informado pela plataforma vira horas retroativas do jogo por ação
+  // explícita, nunca pela sincronização, e só a parte ainda não lançada entra.
+  async function importPlaytime(link: GamePlatform) {
+    if (await send(`${apiUrl}/games/${gameId}/platforms/${link.id}/import-playtime`, 'POST')) onGameChanged?.();
   }
 
   async function addPlatform(event: FormEvent<HTMLFormElement>) {
@@ -154,10 +164,15 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, onPlaythroug
         {link.externalPlaytimeMinutes !== null && <p className="session-journal-entry">
           Tempo informado pela plataforma: {formatCompactHours(link.externalPlaytimeMinutes / 60)}
           {link.externalSource ? ` · via ${link.externalSource}` : ''}
+          {link.externalPlaytimeImportedMinutes > 0 && ` · ${formatCompactHours(link.externalPlaytimeImportedMinutes / 60)} já lançadas como retroativas`}
         </p>}
         <div className="session-item-actions">
           <button type="button" className="session-edit" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { owned: !link.owned })}>{link.owned ? 'Marcar como não possuído' : 'Marcar como possuído'}</button>
           {!link.isPrimary && <button type="button" className="session-edit" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { isPrimary: true })}>Tornar principal</button>}
+          {link.externalPlaytimeMinutes !== null && link.externalPlaytimeMinutes > link.externalPlaytimeImportedMinutes && <button
+            type="button" className="session-edit" disabled={busy}
+            onClick={() => void importPlaytime(link)}
+          >Lançar como horas retroativas</button>}
           <button type="button" className="session-delete" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'DELETE')}>Desassociar</button>
         </div>
       </li>)}</ul>}
@@ -222,7 +237,12 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, onPlaythroug
       </div>
     </form> : <Button type="button" onClick={() => { setAddingPlaythrough(true); setMessage(''); }}>{nextLabel}</Button>}
 
-    <p className="session-empty">Tempo registrado localmente: {formatCompactHours(localMinutes / 60)}. O tempo informado pelas plataformas aparece em cada associação e não é somado a este total.</p>
+    <p className="session-empty">
+      Tempo registrado localmente: {formatCompactHours(localMinutes / 60)}
+      {retroactiveHours ? `, incluindo ${formatCompactHours(retroactiveHours)} lançadas sem sessão` : ''}.
+      O tempo informado pelas plataformas aparece em cada associação e não é somado a este total — lançá-lo como
+      horas retroativas é uma decisão sua, por plataforma.
+    </p>
     {message && <p role="alert" className="session-feedback">{message}</p>}
   </section>;
 }
