@@ -20,6 +20,17 @@ const SettingsView = lazy(async () => ({ default: (await import('./settings-view
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
 const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente' };
+function platformBadge(name: string): { label: string; icon: string; className: string } {
+  const normalized = name.toLocaleLowerCase('pt-BR');
+  if (normalized.includes('playstation') || normalized.includes('ps4') || normalized.includes('ps5') || normalized === 'ps vita') {
+    const generation = normalized.includes('5') ? 'PS5' : normalized.includes('4') ? 'PS4' : normalized.includes('vita') ? 'Vita' : 'PS';
+    return { label: generation, icon: '♧', className: 'platform-playstation' };
+  }
+  if (normalized.includes('steam')) return { label: 'Steam', icon: '◉', className: 'platform-steam' };
+  if (normalized.includes('xbox')) return { label: name.replace(/^microsoft\s+/i, ''), icon: '⊗', className: 'platform-xbox' };
+  if (normalized.includes('nintendo') || normalized.includes('switch')) return { label: name.replace(/^nintendo\s+/i, ''), icon: '◇', className: 'platform-nintendo' };
+  return { label: name, icon: '▣', className: 'platform-generic' };
+}
 function compareDateDesc(left: string | null, right: string | null) {
   if (left === right) return 0;
   if (!left) return 1;
@@ -1141,6 +1152,7 @@ export function App() {
         <section className={`game-grid density-${density}`} aria-label="Jogos da biblioteca">{visibleGames.map((game) => <div className="game-card-wrap" key={game.id}><button className="game-card" type="button" onClick={() => showDetails(game)} aria-label={`Ver detalhes de ${game.title}`}>
           <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span></span>
           <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
+          {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform.name); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name}><span aria-hidden="true">{badge.icon}</span>{badge.label}</span>; })}</span>}
         </button><button type="button" className="game-card-quick" aria-label={`Editar ${game.title}`} onClick={() => openEditor(game)}><span aria-hidden="true">✎</span></button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
       )}
       </>}

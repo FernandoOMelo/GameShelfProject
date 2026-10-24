@@ -47,6 +47,38 @@ layout documentados por ferramentas de UI atuais. Fontes listadas no fim.
 | **Backlogr** | Tracker mobile | Tab bar inferior, temas, coleção como grade |
 | **shadcn/ui + Bento** | Padrões de layout (não produto) | Sidebar colapsável, KPI cards, bento grid, charts |
 
+### Referência: Trophies Hunter (screenshots fornecidos pelo usuário)
+
+As imagens mostram um perfil com resumo no topo e áreas separadas para jogos,
+conquistas, coleções, sessões, contas e estatísticas. A biblioteca usa cards
+largos com arte de fundo, capa, progresso e plataforma; estatísticas e
+conquistas usam painéis laterais, gráficos e atividade em calendário.
+
+**O que vale adaptar ao GameShelf:**
+
+- Cards de jogo mais visuais, com capa/arte, status e progresso legível; manter
+  ações rápidas acessíveis por teclado e toque.
+- Resumo de biblioteca e tempo investido como indicadores navegáveis, apoiados
+  pelos dados que já existem no painel e nas estatísticas.
+- Atividade recente e heatmap como formas de explorar sessões e conquistas;
+  reaproveitar as telas atuais em vez de duplicar navegação ou métricas.
+- Contas externas com plataforma, estado de sincronização e jogos recentes,
+  alinhado à integração existente com Achievist.
+
+**Não importar sem suporte de produto/dados:** pontuação/ranking global,
+raridade comparada entre usuários, perfil público, streaks competitivos ou
+estimativas de conclusão de DLC. GameShelf é pessoal e self-hosted; essas
+métricas exigiriam fontes e semântica próprias. O estilo escuro e os cards de
+fundo servem de inspiração, não como skin a copiar.
+
+Sobre a conexão PSN por nick: serviços desse tipo podem resolver um Online ID
+público para um identificador interno e consultar dados de troféus expostos para
+perfis públicos, usando endpoints não oficiais. Isso não equivale a autenticar
+a conta. Perfil privado/oculto e dados como tempo de jogo podem não estar
+disponíveis; não devemos prometer horas ou atividade só com o nick. O GameShelf
+continua recebendo dados externos via Achievist, conforme a
+[ADR-024](../decisions/ADR-024-achievist-as-the-only-external-source.md).
+
 ## Padrões de layout, por área
 
 ### 1. Casca da aplicação (app shell) e navegação
@@ -280,3 +312,5 @@ CSS) e adoção efetiva do shadcn/ui/Radix (ex.: Dialog com focus trap nativo).
 - shadcn/ui — Sidebar e blocks de dashboard:
   <https://ui.shadcn.com/docs/components/sidebar> · <https://ui.shadcn.com/examples/dashboard>
 - Bento grid — padrão de layout para dashboards: <https://superdesign.dev/styles/bento-grid>
+- Trophies Hunter — perfil multiplataforma e acompanhamento de conquistas:
+  <https://trophieshunter.com/>

@@ -73,12 +73,21 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
         <StatCard label="Em andamento" value={String(dashboard.playingCount)} onClick={onFilterLibrary && (() => onFilterLibrary({ status: 'PLAYING' }))} />
       </div>
 
-      <section className="playing-now"><h2>Jogando agora</h2>
+      <div className="dashboard-profile-strip" aria-label="Resumo da biblioteca">
+        <div className="profile-strip-identity"><span className="profile-strip-mark" aria-hidden="true">G</span><div><strong>Sua biblioteca</strong><span>Seu espaço de jogo, em um só lugar</span></div></div>
+        <div className="profile-strip-stat"><strong>{dashboard.gameCount}</strong><span>jogos</span></div>
+        <div className="profile-strip-stat"><strong>{formatCompactHours(dashboard.totalPlayedHours)}</strong><span>investidas</span></div>
+        <div className="profile-strip-stat"><strong>{dashboard.completedCount}</strong><span>zerados</span></div>
+        <div className="profile-strip-stat"><strong>{dashboard.playingCount}</strong><span>em andamento</span></div>
+      </div>
+
+      <section className="playing-now"><div className="section-heading playing-now-heading"><div><p className="eyebrow">SUA BIBLIOTECA</p><h2>Jogando agora</h2></div><span className="playing-count">{playingGames.length} {playingGames.length === 1 ? 'jogo ativo' : 'jogos ativos'}</span></div>
         {playingGames.length ? <div className="playing-grid">{playingGames.map((entry) => {
           const percent = entry.progress ?? (entry.estimatedHours ? Math.min(100, Math.round((entry.playedHours / entry.estimatedHours) * 100)) : null);
           return <article className="current-game-panel" key={entry.game.id}>
             {entry.game.coverUrl ? <img className="current-game-cover" src={entry.game.coverUrl} alt={`Capa de ${entry.game.title}`} /> : <span className="current-game-cover current-game-placeholder" aria-hidden="true">▧</span>}
             <div className="current-game-body">
+              <span className={`status-pill status-${entry.game.status.toLowerCase()}`}>{entry.game.status === 'PLAYING' ? 'Jogando' : entry.game.status === 'PAUSED' ? 'Pausado' : entry.game.status === 'COMPLETED' ? 'Zerado' : entry.game.status === 'ABANDONED' ? 'Abandonado' : entry.game.status === 'DESIRED' ? 'Desejado' : 'Na biblioteca'}</span>
               <button className="dashboard-game-title" type="button" onClick={() => onSelectGame(entry.game)}><h3>{entry.game.title}</h3></button>
               <p>{entry.playedHours} h jogadas{entry.progress === null ? '' : ` · ${entry.progress}%`}</p>
               {percent !== null && <div className="progress-track" role="img" aria-label={`Progresso ${percent}%`}><span style={{ width: `${percent}%` }} /></div>}
