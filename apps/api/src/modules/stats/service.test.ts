@@ -93,7 +93,9 @@ describe('estatísticas por grupo de plataforma', () => {
   const link = (gameId: string, platformId: string, minutes: number | null) => ({
     id: `${gameId}-${platformId}`, gameId, platformId, edition: null, format: null, owned: true, isPrimary: false,
     externalSource: 'achievist', externalId: '1', externalAccountLabel: null, externalPlaytimeMinutes: minutes,
-    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null,
+    externalLastPlayedAt: null, externalSyncedAt: null,
+    externalActivityStartedAt: null, externalActivityEndedAt: null, externalActivityDays: 0,
+    externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null,
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   });
 

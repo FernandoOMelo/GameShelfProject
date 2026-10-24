@@ -136,10 +136,12 @@ export function buildApp(options: { externalAchievementRepository?: ExternalAchi
     ? {
       provider: options.externalLibraryProvider, games: options.gameRepository, platforms: options.platformRepository,
       gamePlatforms: options.gamePlatformRepository, queue: options.externalMatchQueueRepository,
+      sessions: options.sessionRepository, achievements: options.externalAchievementRepository,
     }
     : undefined;
+  const checkConnection = integration?.provider.ping?.bind(integration.provider);
   app.register((instance) => registerIntegrationRoutes(instance, integration?.provider.source ?? ACHIEVIST_SOURCE,
-    integration ? { deps: integration, runner: options.externalSyncRunner ?? new ExternalSyncRunner(integration) } : undefined));
+    integration ? { deps: integration, runner: options.externalSyncRunner ?? new ExternalSyncRunner(integration), checkConnection } : undefined));
 
   return app;
 }

@@ -46,4 +46,9 @@ export interface ExternalLibraryProvider {
    * requisições por rodada para dados que quase nunca são olhados.
    */
   fetchAchievements(externalGameId: string): Promise<ExternalAchievementEntry[]>;
+  /**
+   * Verifica se a fonte responde e as credenciais autenticam, sem tocar na
+   * biblioteca. Opcional: nem toda fonte sabe testar a própria conexão.
+   */
+  ping?(): Promise<{ accounts: number }>;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ExternalPendingMatch, ExternalSyncState, Game, Platform } from '@gameshelf/contracts';
+import type { ExternalIntegrationStatus, ExternalPendingMatch, ExternalSyncState, Game, Platform } from '@gameshelf/contracts';
 import { apiUrl, formatDateTime, formatDuration } from './shared';
 
 const base = () => `${apiUrl}/integrations/achievist`;
@@ -19,6 +19,17 @@ export function AchievistSyncPanel({ games, platforms, onLinked }: {
   const [pending, setPending] = useState<ExternalPendingMatch[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<ExternalIntegrationStatus | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`${base()}/status`);
+      if (response.ok) setStatus(await response.json() as ExternalIntegrationStatus);
+    } catch { /* o diagnóstico é opcional: o resto do painel segue funcionando */ }
+  }, []);
+
+  useEffect(() => { void loadStatus(); }, [loadStatus]);
 
   const load = useCallback(async () => {
     try {
@@ -36,6 +47,12 @@ export function AchievistSyncPanel({ games, platforms, onLinked }: {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  async function testConnection() {
+    setTesting(true);
+    setMessage('');
+    try { await loadStatus(); } finally { setTesting(false); }
+  }
 
   async function startSync() {
     setBusy(true);
@@ -110,6 +127,16 @@ export function AchievistSyncPanel({ games, platforms, onLinked }: {
           O Achievist informa a biblioteca e o tempo acumulado por plataforma. Ele não registra sessões,
           então a sincronização nunca cria sessão, jornada ou replay, e o tempo externo não é somado às suas horas.
         </p>
+        <div className="achievist-config">
+          <small>
+            {status?.configured
+              ? 'Integração configurada no servidor (ACHIEVIST_BASE_URL, usuário e senha). As credenciais nunca saem do servidor nem aparecem em log.'
+              : 'A integração é configurada no servidor, pelas variáveis ACHIEVIST_BASE_URL, ACHIEVIST_USERNAME e ACHIEVIST_PASSWORD.'}
+          </small>
+          <button type="button" className="session-edit" disabled={testing} onClick={() => void testConnection()}>Testar conexão</button>
+          {status?.reachable === true && <p role="status" className="session-feedback">Conexão confirmada{status.accounts === null ? '.' : ` · ${status.accounts} ${status.accounts === 1 ? 'conta conectada' : 'contas conectadas'} no Achievist.`}</p>}
+          {status?.reachable === false && <p role="alert" className="session-feedback">{status.error}</p>}
+        </div>
         <div className="challenge-actions">
           <button type="button" className="gameshelf-button" disabled={busy} onClick={() => void startSync()}>Sincronizar agora</button>
           <button type="button" className="session-edit" disabled={busy} onClick={() => void load()}>Atualizar estado</button>

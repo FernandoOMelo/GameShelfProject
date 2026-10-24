@@ -21,7 +21,9 @@ const gameRecord: GameRecord = {
 const platformLinkRecord: GamePlatformRecord = {
   id: id(60), gameId: id(10), platformId: id(2), edition: null, format: 'DIGITAL', owned: true, isPrimary: true,
   externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-  externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
+  externalLastPlayedAt: null, externalSyncedAt: null,
+  externalActivityStartedAt: null, externalActivityEndedAt: null, externalActivityDays: 0,
+  externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
 };
 
 const playthroughRecord: PlaythroughRecord = {
@@ -48,7 +50,9 @@ function validData(): BackupData {
     gamePlatforms: [{
       id: id(60), gameId: id(10), platformId: id(2), edition: null, format: 'DIGITAL', owned: true, isPrimary: true,
       externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-      externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null,
+      externalLastPlayedAt: null, externalSyncedAt: null,
+      externalActivityStartedAt: null, externalActivityEndedAt: null, externalActivityDays: 0,
+      externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null,
       createdAt: now.toISOString(), updatedAt: now.toISOString(),
     }],
     playthroughs: [{
@@ -99,7 +103,7 @@ describe('backup API', () => {
       franchiseRepository: { list: async () => [{ id: id(1), name: 'Supergiant' }], create: async () => ({ id: id(1), name: 'Supergiant' }) },
       platformRepository: {
         list: async () => [{ id: id(2), name: 'PC', parentId: null }], create: async () => ({ id: id(2), name: 'PC', parentId: null }),
-        setParent: async () => undefined,
+        rename: async () => undefined, setParent: async () => undefined, countGameLinks: async () => 0, remove: async () => false,
       },
       genreRepository: { list: async () => [{ id: id(3), name: 'Roguelike' }], create: async () => ({ id: id(3), name: 'Roguelike' }) },
       sessionRepository: {
@@ -124,7 +128,9 @@ describe('backup API', () => {
         create: async () => platformLinkRecord, update: async () => platformLinkRecord, delete: async () => false,
         listByExternalSource: async () => [], attachExternal: async () => platformLinkRecord,
         updateExternalSnapshot: async () => platformLinkRecord,
-        markPlaytimeImported: async () => undefined,
+        updateExternalActivity: async () => platformLinkRecord,
+        applyExternalPlaytimeImport: async () => undefined,
+        listExternalPlaytimeImports: async () => [],
       },
       playthroughRepository: {
         listAll: async () => [playthroughRecord], listForGame: async () => [playthroughRecord], find: async () => playthroughRecord,

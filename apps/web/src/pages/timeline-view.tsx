@@ -20,6 +20,7 @@ const eventLabels: Record<TimelineEvent['type'], string> = {
   GAME_COMPLETED: 'Zerou',
   GAME_ADDED: 'Adicionou à biblioteca',
   SESSION: 'Jogou',
+  EXTERNAL_PLAYTIME_IMPORTED: 'Tempo importado',
   CHALLENGE_COMPLETED: 'Completou a missão',
 };
 

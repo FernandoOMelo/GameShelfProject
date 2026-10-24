@@ -21,6 +21,20 @@ export type PlaytimeImportPlan =
   | { ok: true; importedMinutes: number; totalImportedMinutes: number; retroactivePlayedHours: number }
   | { ok: false; error: string };
 
+/**
+ * Minutos de sessões encerradas registrados naquela plataforma. Sessões sem
+ * plataforma ficam de fora: não há como atribuí-las sem adivinhar.
+ */
+export function localMinutesOnPlatform(
+  sessions: ReadonlyArray<{ platformId: string | null; startedAt: Date; endedAt: Date | null }>,
+  platformId: string,
+): number {
+  return sessions.reduce((total, session) => {
+    if (session.platformId !== platformId || session.endedAt === null) return total;
+    return total + Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 60_000);
+  }, 0);
+}
+
 export function planPlaytimeImport(
   link: { externalPlaytimeMinutes: number | null; externalPlaytimeImportedMinutes: number },
   currentRetroactiveHours: number,

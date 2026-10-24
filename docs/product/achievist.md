@@ -74,7 +74,7 @@ métrica de tempo — `unlocked_at` é um instante, não um intervalo.
 
 O Achievist informa a loja ("Steam", "Google Play"), não o aparelho. Para que
 isso não vire uma associação paralela à que você já tem, coloque a loja dentro
-do grupo correspondente no painel "Grupos de plataforma" (ADR-025). A
+do grupo correspondente em Configurações → Plataformas (ADR-025). A
 sincronização continua gravando a loja, e as estatísticas agregam pelo grupo.
 
 ## Como a integração consome isso
@@ -125,7 +125,12 @@ público. O navegador nunca fala com o Achievist.
 
 ## Como usar
 
-No Painel, o cartão "Plataformas externas (Achievist)" dispara a sincronização,
+Em Configurações, o painel "Plataformas externas (Achievist)" dispara a sincronização,
 mostra o resultado da última rodada e lista as correspondências a confirmar. Para
 cada entrada você escolhe o jogo canônico e a plataforma, ou manda ignorar. Nada
 é vinculado sem essa confirmação, e sincronizar não cria sessão nem jornada.
+
+O botão "Testar conexão" faz o servidor autenticar no Achievist e contar as contas
+conectadas, sem expor usuário, senha ou URL no navegador. O diagnóstico vem de
+`GET /integrations/achievist/status`, que responde `configured: false` quando as
+variáveis de ambiente não estão definidas.

@@ -14,6 +14,9 @@ export type GamePlatformRecord = {
   externalPlaytimeMinutes: number | null;
   externalLastPlayedAt: Date | null;
   externalSyncedAt: Date | null;
+  externalActivityStartedAt: Date | null;
+  externalActivityEndedAt: Date | null;
+  externalActivityDays: number;
   externalPlaytimeImportedMinutes: number;
   countsTowardTotal: boolean;
   notes: string | null;
@@ -32,6 +35,38 @@ export type ExternalProvenance = {
   playtimeMinutes: number | null;
   lastPlayedAt: Date | null;
   syncedAt: Date;
+};
+
+/**
+ * Janela de atividade derivada dos desbloqueios de conquista (ADR-030).
+ * `days` conta dias civis distintos com pelo menos um desbloqueio; não é o
+ * número de sessões e não vira sessão.
+ */
+export type ExternalActivityWindow = {
+  startedAt: Date | null;
+  endedAt: Date | null;
+  days: number;
+};
+
+export type ExternalPlaytimeImportRecord = {
+  id: string;
+  gameId: string;
+  gamePlatformId: string | null;
+  platformName: string;
+  source: string;
+  importedMinutes: number;
+  totalImportedMinutes: number;
+  externalLastPlayedAt: Date | null;
+  activityStartedAt: Date | null;
+  activityEndedAt: Date | null;
+  activityDays: number;
+  importedAt: Date;
+};
+
+export type ExternalPlaytimeImportOutcome = {
+  link: GamePlatformRecord;
+  import: ExternalPlaytimeImportRecord;
+  retroactivePlayedHours: number;
 };
 
 export interface GamePlatformRepository {
@@ -55,6 +90,18 @@ export interface GamePlatformRepository {
    * declarado pelo usuário é tocado.
    */
   updateExternalSnapshot(id: string, external: ExternalProvenance): Promise<GamePlatformRecord | undefined>;
-  /** Marca quantos minutos do tempo externo já foram lançados como retroativos. */
-  markPlaytimeImported(id: string, importedMinutes: number): Promise<GamePlatformRecord | undefined>;
+  /** Grava a janela de atividade conhecida na fonte, sem tocar no tempo. */
+  updateExternalActivity(id: string, activity: ExternalActivityWindow): Promise<GamePlatformRecord | undefined>;
+  /**
+   * Lança tempo externo como horas retroativas de forma atômica: marca o que já
+   * foi lançado, soma as horas no jogo e registra o lançamento no histórico.
+   */
+  applyExternalPlaytimeImport(gameId: string, id: string, input: {
+    importedMinutes: number;
+    totalImportedMinutes: number;
+    retroactivePlayedHours: number;
+    importedAt: Date;
+  }): Promise<ExternalPlaytimeImportOutcome | undefined>;
+  /** Histórico de lançamentos, do mais recente para o mais antigo. */
+  listExternalPlaytimeImports(): Promise<ExternalPlaytimeImportRecord[]>;
 }

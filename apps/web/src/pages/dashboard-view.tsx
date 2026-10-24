@@ -1,9 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { DashboardResponse, Game, GameListSummary, MainChallenge, Platform, QueueItem, Session } from '@gameshelf/contracts';
+import type { DashboardResponse, Game, GameListSummary, MainChallenge, QueueItem, Session } from '@gameshelf/contracts';
 import { Button, Panel, StatCard } from '@gameshelf/ui';
-import { AchievistSyncPanel } from './achievist-sync-panel';
-import { PlatformGroupsPanel } from './platform-groups-panel';
-import { BackupCard } from './backup-card';
 import { GoalsCard } from './goals-card';
 import { apiUrl, formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
 
@@ -30,7 +27,7 @@ function formatPeriodDelta(current: number, previous: number): string | undefine
   return `${percent > 0 ? '▲' : '▼'} ${Math.abs(percent)}% vs. período anterior`;
 }
 
-export function DashboardView({ dashboard, previousPeriodStats, queue, now, period, customPeriod, games, platforms, onPeriodChange, onCustomPeriodChange, onRefresh, onPlatformsChanged, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
+export function DashboardView({ dashboard, previousPeriodStats, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
   dashboard: DashboardResponse | null;
   /** Indicadores do período imediatamente anterior, quando existe comparação. */
   previousPeriodStats?: DashboardResponse['periodStats'] | null;
@@ -38,12 +35,8 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
   now: number;
   period: DashboardPeriod;
   customPeriod: { from: string; to: string };
-  games: Game[];
-  platforms: Platform[];
   onPeriodChange: (period: DashboardPeriod) => void;
   onCustomPeriodChange: (value: { from: string; to: string }) => void;
-  onRefresh: () => Promise<void>;
-  onPlatformsChanged: () => Promise<void>;
   onSelectGame: (game: Game) => void;
   onStartSession: (game: Game) => Promise<void>;
   onFinishSession: (game: Game, session: Session) => Promise<void>;
@@ -52,21 +45,6 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
   onOpenQueue: () => void;
   onFilterLibrary?: (filter: LibraryFilter) => void;
 }) {
-  const [weeklyMinutes, setWeeklyMinutes] = useState(String(dashboard?.weeklyHours ? Math.round(dashboard.weeklyHours * 60) : 0));
-  const [feedback, setFeedback] = useState('');
-  useEffect(() => { if (dashboard) setWeeklyMinutes(String(Math.round(dashboard.weeklyHours * 60))); }, [dashboard?.weeklyHours]);
-
-  async function saveWeeklyGoal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const response = await fetch(`${apiUrl}/planning/settings`, {
-      method: 'PUT', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ weeklyMinutes: Number(weeklyMinutes) }),
-    });
-    if (!response.ok) { setFeedback('Não foi possível salvar a meta semanal.'); return; }
-    await onRefresh();
-    setFeedback('Meta semanal salva.');
-  }
-
   const periodStats = dashboard?.periodStats ?? { playedHours: 0, sessions: 0, gamesPlayed: 0, gamesCompleted: 0 };
   const delta = (current: number, previous: number | undefined) => (previous === undefined ? undefined : formatPeriodDelta(current, previous));
   const playingGames = dashboard?.playingGames ?? (dashboard?.currentGame ? [{ ...dashboard.currentGame, activeSession: dashboard.currentGame.activeSession ?? null }] : []);
@@ -138,14 +116,7 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
 
       <section className="dashboard-bottom">
         <Panel title="Próximos da fila" actions={<button type="button" className="session-edit" onClick={onOpenQueue}>Ver fila completa</button>}>{queue.length ? <ol className="dashboard-queue">{queue.slice(0, 3).map((item) => <li key={item.game.id}><button type="button" onClick={() => onSelectGame(item.game)}>{item.position + 1}. {item.game.title}</button></li>)}</ol> : <p className="dashboard-empty">Sua fila está vazia.</p>}<p>{dashboard.queueRemainingHours} h estimadas na fila{dashboard.estimatedQueueWeeks === null ? '' : ` · cerca de ${dashboard.estimatedQueueWeeks} semanas`}</p></Panel>
-        <form className="weekly-goal-form panel" onSubmit={(event) => void saveWeeklyGoal(event)}><h2>Meta semanal</h2><label className="form-field">Minutos disponíveis por semana<input aria-label="Minutos disponíveis por semana" type="number" min="0" max="10080" step="15" value={weeklyMinutes} onChange={(event) => setWeeklyMinutes(event.target.value)} /></label><Button type="submit">Salvar meta</Button>{feedback && <p role="status">{feedback}</p>}</form>
       </section>
-
-      <PlatformGroupsPanel platforms={platforms} onChanged={() => void onPlatformsChanged()} />
-
-      <AchievistSyncPanel games={games} platforms={platforms} onLinked={() => void onRefresh()} />
-
-      <BackupCard onImported={() => window.location.reload()} />
     </>}
   </section>;
 }

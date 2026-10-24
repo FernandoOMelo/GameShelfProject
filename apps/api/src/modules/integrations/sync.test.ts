@@ -2,11 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GamePlatformInput, GamePlatformUpdate, Platform } from '@gameshelf/contracts';
 import { buildApp } from '../../app.js';
 import type { GameRecord, GameRepository } from '../games/repository.js';
-import type { ExternalProvenance, GamePlatformRecord, GamePlatformRepository } from '../game-platforms/repository.js';
+import type { ExternalAchievementRecord, ExternalAchievementRepository } from '../game-platforms/achievement-repository.js';
+import type {
+  ExternalActivityWindow, ExternalPlaytimeImportOutcome, ExternalPlaytimeImportRecord,
+  ExternalProvenance, GamePlatformRecord, GamePlatformRepository,
+} from '../game-platforms/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
 import type { PlaythroughRecord, PlaythroughRepository } from '../playthroughs/repository.js';
 import type { SessionRecord, SessionRepository } from '../sessions/repository.js';
-import type { ExternalLibraryEntry, ExternalLibraryProvider } from './external-library.js';
+import type { ExternalAchievementEntry, ExternalLibraryEntry, ExternalLibraryProvider } from './external-library.js';
 import type {
   ExternalMatchQueueRepository, ExternalMatchRecord, ExternalMatchSnapshot,
 } from './match-queue-repository.js';
@@ -65,16 +69,26 @@ function platformRepository(initial: Platform[] = [{ id: STEAM, name: 'Steam', p
       created.push(name);
       return platform;
     },
+    rename: async () => undefined,
+    countGameLinks: async () => 0,
+    remove: async () => false,
   };
 }
 
-function gamePlatformRepository(): GamePlatformRepository {
+function gamePlatformRepository(
+  games: GameRepository,
+  platforms: PlatformRepository,
+): GamePlatformRepository & { rows: GamePlatformRecord[]; imports: ExternalPlaytimeImportRecord[] } {
   const rows: GamePlatformRecord[] = [];
+  const imports: ExternalPlaytimeImportRecord[] = [];
   let seq = 100;
+  let importSeq = 800;
   const blank = (gameId: string, platformId: string): GamePlatformRecord => ({
     id: id(seq += 1), gameId, platformId, edition: null, format: null, owned: false, isPrimary: false,
     externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-    externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
+    externalLastPlayedAt: null, externalSyncedAt: null,
+    externalActivityStartedAt: null, externalActivityEndedAt: null, externalActivityDays: 0,
+    externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
   });
   const external = (external_: ExternalProvenance) => ({
     externalSource: external_.source, externalId: external_.externalId, externalAccountLabel: external_.accountLabel,
@@ -82,6 +96,8 @@ function gamePlatformRepository(): GamePlatformRepository {
     externalSyncedAt: external_.syncedAt,
   });
   return {
+    rows,
+    imports,
     listAll: async () => rows,
     listForGame: async (gameId) => rows.filter((row) => row.gameId === gameId),
     find: async (gameId, rowId) => rows.find((row) => row.gameId === gameId && row.id === rowId),
@@ -116,9 +132,66 @@ function gamePlatformRepository(): GamePlatformRepository {
       const row = rows.find((item) => item.id === rowId);
       return row ? Object.assign(row, external(provenance), { updatedAt: new Date() }) : undefined;
     },
-    markPlaytimeImported: async (rowId, importedMinutes) => {
+    updateExternalActivity: async (rowId: string, activity: ExternalActivityWindow) => {
       const row = rows.find((item) => item.id === rowId);
-      return row ? Object.assign(row, { externalPlaytimeImportedMinutes: importedMinutes }) : undefined;
+      return row ? Object.assign(row, {
+        externalActivityStartedAt: activity.startedAt,
+        externalActivityEndedAt: activity.endedAt,
+        externalActivityDays: activity.days,
+        updatedAt: new Date(),
+      }) : undefined;
+    },
+    applyExternalPlaytimeImport: async (
+      gameId: string,
+      rowId: string,
+      input: { importedMinutes: number; totalImportedMinutes: number; retroactivePlayedHours: number; importedAt: Date },
+    ): Promise<ExternalPlaytimeImportOutcome | undefined> => {
+      const row = rows.find((item) => item.gameId === gameId && item.id === rowId);
+      if (!row) return undefined;
+      const game = await games.update(gameId, { retroactivePlayedHours: input.retroactivePlayedHours });
+      if (!game) return undefined;
+      Object.assign(row, { externalPlaytimeImportedMinutes: input.totalImportedMinutes, updatedAt: input.importedAt });
+      const platform = (await platforms.list()).find((item) => item.id === row.platformId);
+      const record: ExternalPlaytimeImportRecord = {
+        id: id(importSeq += 1), gameId, gamePlatformId: row.id,
+        platformName: platform?.name ?? 'Plataforma', source: row.externalSource ?? 'external',
+        importedMinutes: input.importedMinutes, totalImportedMinutes: input.totalImportedMinutes,
+        externalLastPlayedAt: row.externalLastPlayedAt,
+        activityStartedAt: row.externalActivityStartedAt,
+        activityEndedAt: row.externalActivityEndedAt,
+        activityDays: row.externalActivityDays,
+        importedAt: input.importedAt,
+      };
+      imports.unshift(record);
+      return { link: row, import: record, retroactivePlayedHours: Number(game.retroactivePlayedHours ?? 0) };
+    },
+    listExternalPlaytimeImports: async () => imports,
+  };
+}
+
+function achievementRepository(): ExternalAchievementRepository & {
+  rows: ExternalAchievementRecord[];
+  calls: string[];
+} {
+  const rows: ExternalAchievementRecord[] = [];
+  const calls: string[] = [];
+  let seq = 600;
+  return {
+    rows,
+    calls,
+    listForGamePlatform: async (gamePlatformId) => rows.filter((row) => row.gamePlatformId === gamePlatformId),
+    replaceForGamePlatform: async (gamePlatformId, entries, syncedAt) => {
+      calls.push(gamePlatformId);
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        if (rows[index]!.gamePlatformId === gamePlatformId) rows.splice(index, 1);
+      }
+      const created = entries.map((entry) => ({
+        id: id(seq += 1), gamePlatformId, externalId: entry.externalId, name: entry.name,
+        description: entry.description, iconUrl: entry.iconUrl, points: entry.points,
+        rarityPercent: entry.rarityPercent, unlocked: entry.unlocked, unlockedAt: entry.unlockedAt, syncedAt,
+      }));
+      rows.push(...created);
+      return created;
     },
   };
 }
@@ -202,9 +275,18 @@ const entry = (overrides: Partial<ExternalLibraryEntry> = {}): ExternalLibraryEn
   playtimeMinutes: 1_200, lastPlayedAt: new Date('2026-05-20T22:00:00.000Z'), ...overrides,
 });
 
-function provider(entries: ExternalLibraryEntry[]): ExternalLibraryProvider {
-  return { source: 'achievist', fetchLibrary: async () => entries, fetchAchievements: async () => [] };
+function provider(
+  entries: ExternalLibraryEntry[],
+  achievements: (externalGameId: string) => ExternalAchievementEntry[] = () => [],
+): ExternalLibraryProvider {
+  return { source: 'achievist', fetchLibrary: async () => entries, fetchAchievements: async (externalGameId) => achievements(externalGameId) };
 }
+
+const achievement = (overrides: Partial<ExternalAchievementEntry> = {}): ExternalAchievementEntry => ({
+  externalId: 'ACH_1', name: 'Primeira vitória', description: null, iconUrl: null,
+  points: 10, rarityPercent: 42.5, unlocked: true, unlockedAt: new Date('2026-05-01T18:00:00.000Z'),
+  ...overrides,
+});
 
 function setup(options: {
   entries?: ExternalLibraryEntry[];
@@ -213,23 +295,29 @@ function setup(options: {
   platforms?: Platform[];
   enabled?: boolean;
 } = {}) {
-  const deps = {
-    provider: options.provider ?? provider(options.entries ?? [entry()]),
-    games: gameRepository(options.games),
-    platforms: platformRepository(options.platforms),
-    gamePlatforms: gamePlatformRepository(),
-    queue: queueRepository(),
-  };
+  const games = gameRepository(options.games);
+  const platforms = platformRepository(options.platforms);
   const sessions = sessionRepository();
   const playthroughs = playthroughRepository();
+  const achievements = achievementRepository();
+  const deps = {
+    provider: options.provider ?? provider(options.entries ?? [entry()]),
+    games,
+    platforms,
+    gamePlatforms: gamePlatformRepository(games, platforms),
+    queue: queueRepository(),
+    sessions,
+    achievements,
+  };
   const runner = new ExternalSyncRunner(deps, () => now);
   const app = buildApp({
     gameRepository: deps.games, platformRepository: deps.platforms, gamePlatformRepository: deps.gamePlatforms,
     playthroughRepository: playthroughs, sessionRepository: sessions,
+    externalAchievementRepository: achievements,
     ...(options.enabled === false ? {} : { externalLibraryProvider: deps.provider, externalSyncRunner: runner }),
     externalMatchQueueRepository: deps.queue,
   });
-  return { app, runner, sessions, playthroughs, ...deps };
+  return { app, runner, playthroughs, ...deps };
 }
 
 async function sync(context: Awaited<ReturnType<typeof setup>>) {
@@ -243,7 +331,7 @@ const track = <T extends { app: { close: () => Promise<unknown> } }>(context: T)
 afterEach(async () => { await Promise.all(apps.splice(0).map((app) => app.close())); });
 
 describe('sincronização com a fonte externa', () => {
-  it('não cria sessões nem jornadas, e grava o tempo externo separado do local', async () => {
+  it('importa o tempo externo como horas retroativas, sem criar sessões nem jornadas', async () => {
     const context = track(setup());
     // Vínculo já confirmado antes da rodada.
     await context.gamePlatforms.attachExternal(HADES, STEAM, {
@@ -256,14 +344,23 @@ describe('sincronização com a fonte externa', () => {
     expect(response.statusCode).toBe(202);
     expect(state.json()).toMatchObject({
       status: 'succeeded',
-      summary: { fetched: 1, updated: 1, pending: 0, ignored: 0, sessionsCreated: 0, playthroughsCreated: 0 },
+      summary: {
+        fetched: 1, updated: 1, pending: 0, ignored: 0,
+        playtimeImported: 1, playtimeImportedMinutes: 1_200,
+        sessionsCreated: 0, playthroughsCreated: 0,
+      },
     });
     expect(context.sessions.rows).toHaveLength(0);
     expect(context.playthroughs.rows).toHaveLength(0);
     const [association] = await context.gamePlatforms.listForGame(HADES);
-    expect(association).toMatchObject({ externalPlaytimeMinutes: 1_200, externalSyncedAt: now });
-    // O jogo canônico não é tocado: horas locais, nota e anotação ficam como estavam.
-    expect(await context.games.find(HADES)).toMatchObject({ retroactivePlayedHours: 3, rating: 7, notes: 'anotação do usuário' });
+    expect(association).toMatchObject({
+      externalPlaytimeMinutes: 1_200, externalPlaytimeImportedMinutes: 1_200, externalSyncedAt: now,
+    });
+    // O tempo vira horas retroativas, mas nota e anotação do usuário ficam como estavam.
+    expect(await context.games.find(HADES)).toMatchObject({ retroactivePlayedHours: 23, rating: 7, notes: 'anotação do usuário' });
+    expect(context.gamePlatforms.imports).toMatchObject([{
+      gameId: HADES, platformName: 'Steam', source: 'achievist', importedMinutes: 1_200, totalImportedMinutes: 1_200,
+    }]);
   });
 
   it('sincronizar duas vezes não duplica nada nem altera o que o usuário declarou', async () => {
@@ -519,6 +616,36 @@ describe('ExternalSyncRunner', () => {
     await expect(context.runner.settled()).resolves.toBeUndefined();
     expect(context.runner.snapshot()).toMatchObject({ status: 'failed', error: 'fetch failed' });
     await context.app.close();
+  });
+});
+
+describe('diagnóstico da conexão com a fonte', () => {
+  it('diz que a integração está desligada quando não há provedor configurado', async () => {
+    const context = track(setup({ enabled: false }));
+    const response = await context.app.inject({ method: 'GET', url: '/integrations/achievist/status' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ source: 'achievist', configured: false, reachable: null, accounts: null, error: null });
+  });
+
+  it('fica sem teste quando o provedor não sabe testar a própria conexão', async () => {
+    const context = track(setup());
+    const response = await context.app.inject({ method: 'GET', url: '/integrations/achievist/status' });
+    expect(response.json()).toMatchObject({ configured: true, reachable: null, accounts: null });
+  });
+
+  it('reporta a conexão confirmada com o número de contas conectadas', async () => {
+    const context = track(setup({ provider: { ...provider([]), ping: async () => ({ accounts: 3 }) } }));
+    const response = await context.app.inject({ method: 'GET', url: '/integrations/achievist/status' });
+    expect(response.json()).toMatchObject({ configured: true, reachable: true, accounts: 3, error: null });
+  });
+
+  it('devolve a mensagem de falha de login sem derrubar o resto da API', async () => {
+    const context = track(setup({
+      provider: { ...provider([]), ping: () => Promise.reject(new Error('O login no Achievist falhou com HTTP 401.')) },
+    }));
+    const response = await context.app.inject({ method: 'GET', url: '/integrations/achievist/status' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ configured: true, reachable: false, accounts: null, error: 'O login no Achievist falhou com HTTP 401.' });
   });
 });
 

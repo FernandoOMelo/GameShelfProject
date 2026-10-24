@@ -41,6 +41,8 @@ export class DrizzleBackupImporter implements BackupImporter {
         ...link,
         externalLastPlayedAt: link.externalLastPlayedAt ? date(link.externalLastPlayedAt) : null,
         externalSyncedAt: link.externalSyncedAt ? date(link.externalSyncedAt) : null,
+        externalActivityStartedAt: link.externalActivityStartedAt ? date(link.externalActivityStartedAt) : null,
+        externalActivityEndedAt: link.externalActivityEndedAt ? date(link.externalActivityEndedAt) : null,
         createdAt: date(link.createdAt), updatedAt: date(link.updatedAt),
       }))));
       // As jornadas entram antes das sessões: uma sessão pode referenciar a jornada.

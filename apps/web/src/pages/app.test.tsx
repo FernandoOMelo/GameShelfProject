@@ -518,11 +518,11 @@ describe('library page', () => {
     expect(await screen.findByText('Você ainda não criou listas.')).toBeInTheDocument();
   });
 
-  it('puts one platform inside another as a group from the dashboard', async () => {
+  it('puts one platform inside another as a group from the settings page', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Painel' }));
-    await screen.findByRole('heading', { name: 'Grupos de plataforma' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Configurações' }));
+    await screen.findByRole('heading', { name: 'Plataformas' });
 
     const select = await screen.findByRole('combobox', { name: 'Grupo de Steam' });
     fireEvent.change(select, { target: { value: '00000000-0000-4000-8000-000000000020' } });
@@ -893,7 +893,7 @@ describe('library page', () => {
     await waitFor(() => expect(screen.getAllByRole('listitem')[0]?.textContent).toContain('Hollow Knight'));
   });
 
-  it('filters library games and displays the dashboard with its weekly goal', async () => {
+  it('filters library games and saves the weekly goal from the settings page', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING'), makeGame('00000000-0000-4000-8000-000000000002', 'Celeste')]);
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
@@ -901,8 +901,8 @@ describe('library page', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por status' }), { target: { value: 'PLAYING' } });
     expect(screen.getByRole('button', { name: 'Ver detalhes de Hades' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Ver detalhes de Celeste' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Painel' }));
-    expect(await screen.findByRole('heading', { name: 'Seu ritmo de jogo' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Configurações' }));
+    expect(await screen.findByRole('heading', { name: 'Configurações' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '360' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
     expect(await screen.findByText('Meta semanal salva.')).toBeInTheDocument();
@@ -912,8 +912,11 @@ describe('library page', () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
     expect(await screen.findByText('Defina a meta semanal para ver quando o backlog acaba.', {}, { timeout: 3000 })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '360' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Configurações' }));
+    fireEvent.change(await screen.findByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '360' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
+    await screen.findByText('Meta semanal salva.');
+    fireEvent.click(screen.getByRole('button', { name: 'Painel' }));
     expect(await screen.findByText(/1,8 meses/, {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByText(/2 jogos sem estimativa/)).toBeInTheDocument();
     expect(screen.getByText(/45 dias · faltam/)).toBeInTheDocument();

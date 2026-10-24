@@ -148,6 +148,16 @@ export class AchievistClient implements ExternalLibraryProvider {
       .map(([platform, labels]) => [platform, labels[0]]));
   }
 
+  /**
+   * Testa a conexão sem ler a biblioteca: login + lista de contas. Devolve o
+   * número de contas conectadas na fonte; a mensagem de erro do login nunca
+   * repete usuário ou senha.
+   */
+  async ping(): Promise<{ accounts: number }> {
+    const accounts = accountsSchema.parse(await this.get('/api/accounts'));
+    return { accounts: accounts.length };
+  }
+
   /** GET autenticado. Sessão expirada (401) refaz o login uma vez e repete. */
   private async get(path: string): Promise<unknown> {
     const response = await this.request(path);

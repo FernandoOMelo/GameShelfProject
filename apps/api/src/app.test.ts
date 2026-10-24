@@ -54,11 +54,36 @@ function createFranchiseRepository(): FranchiseRepository {
   };
 }
 
-function createPlatformRepository(): PlatformRepository {
+function createPlatformRepository(options: { gameLinks?: Record<string, number> } = {}): PlatformRepository {
+  const catalog: Array<{ id: string; name: string; parentId: string | null }> = [
+    { id: '00000000-0000-4000-8000-000000000020', name: 'PC', parentId: null },
+  ];
   return {
-    list: async () => [{ id: '00000000-0000-4000-8000-000000000020', name: 'PC', parentId: null }],
-    create: async (name) => ({ id: '00000000-0000-4000-8000-000000000021', name, parentId: null }),
-    setParent: async (id, parentId) => ({ id, name: 'PC', parentId }),
+    list: async () => [...catalog],
+    create: async (name, parentId = null) => {
+      const platform = { id: '00000000-0000-4000-8000-000000000021', name, parentId };
+      catalog.push(platform);
+      return platform;
+    },
+    rename: async (id, name) => {
+      const platform = catalog.find((item) => item.id === id);
+      if (!platform) return undefined;
+      platform.name = name;
+      return { ...platform };
+    },
+    setParent: async (id, parentId) => {
+      const platform = catalog.find((item) => item.id === id);
+      if (!platform) return undefined;
+      platform.parentId = parentId;
+      return { ...platform };
+    },
+    countGameLinks: async (id) => options.gameLinks?.[id] ?? 0,
+    remove: async (id) => {
+      const index = catalog.findIndex((item) => item.id === id);
+      if (index < 0) return false;
+      catalog.splice(index, 1);
+      return true;
+    },
   };
 }
 
@@ -425,6 +450,31 @@ describe('platforms and genres APIs', () => {
     const genre = await app.inject({ method: 'POST', url: '/genres', payload: { name: '' } });
     expect(platform.statusCode).toBe(400);
     expect(genre.statusCode).toBe(400);
+  });
+
+  it('renames a platform, keeps its group and refuses an empty patch', async () => {
+    const app = buildApp({ platformRepository: createPlatformRepository(), genreRepository: createGenreRepository() });
+    apps.push(app);
+    const renamed = await app.inject({ method: 'PATCH', url: '/platforms/00000000-0000-4000-8000-000000000020', payload: { name: 'PC Gamer' } });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({ id: '00000000-0000-4000-8000-000000000020', name: 'PC Gamer', parentId: null });
+    const empty = await app.inject({ method: 'PATCH', url: '/platforms/00000000-0000-4000-8000-000000000020', payload: {} });
+    expect(empty.statusCode).toBe(400);
+  });
+
+  it('deletes an unused platform and refuses one with linked games', async () => {
+    const app = buildApp({ platformRepository: createPlatformRepository({ gameLinks: { '00000000-0000-4000-8000-000000000020': 2 } }), genreRepository: createGenreRepository() });
+    apps.push(app);
+    const refused = await app.inject({ method: 'DELETE', url: '/platforms/00000000-0000-4000-8000-000000000020' });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error).toContain('2 jogos usam esta plataforma');
+
+    const created = await app.inject({ method: 'POST', url: '/platforms', payload: { name: 'GOG' } });
+    const removed = await app.inject({ method: 'DELETE', url: `/platforms/${created.json().id}` });
+    expect(removed.statusCode).toBe(204);
+
+    const missing = await app.inject({ method: 'DELETE', url: '/platforms/00000000-0000-4000-8000-000000000099' });
+    expect(missing.statusCode).toBe(404);
   });
 });
 

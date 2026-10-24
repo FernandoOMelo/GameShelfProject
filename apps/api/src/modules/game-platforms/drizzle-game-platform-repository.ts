@@ -1,6 +1,9 @@
-import { and, asc, eq, gamePlatforms, isNull, type Database } from '@gameshelf/database';
+import { and, asc, desc, eq, externalPlaytimeImports, gamePlatforms, games, isNull, platforms, type Database } from '@gameshelf/database';
 import type { GamePlatformInput, GamePlatformUpdate } from '@gameshelf/contracts';
-import type { ExternalProvenance, GamePlatformRecord, GamePlatformRepository } from './repository.js';
+import type {
+  ExternalActivityWindow, ExternalPlaytimeImportOutcome, ExternalPlaytimeImportRecord,
+  ExternalProvenance, GamePlatformRecord, GamePlatformRepository,
+} from './repository.js';
 
 export class DrizzleGamePlatformRepository implements GamePlatformRepository {
   constructor(private readonly db: Database) {}
@@ -38,11 +41,57 @@ export class DrizzleGamePlatformRepository implements GamePlatformRepository {
     });
   }
 
-  async markPlaytimeImported(id: string, importedMinutes: number): Promise<GamePlatformRecord | undefined> {
+  async updateExternalActivity(id: string, activity: ExternalActivityWindow): Promise<GamePlatformRecord | undefined> {
     const [row] = await this.db.update(gamePlatforms)
-      .set({ externalPlaytimeImportedMinutes: importedMinutes, updatedAt: new Date() })
+      .set({
+        externalActivityStartedAt: activity.startedAt,
+        externalActivityEndedAt: activity.endedAt,
+        externalActivityDays: activity.days,
+        updatedAt: new Date(),
+      })
       .where(eq(gamePlatforms.id, id)).returning();
     return row;
+  }
+
+  async applyExternalPlaytimeImport(
+    gameId: string,
+    id: string,
+    input: { importedMinutes: number; totalImportedMinutes: number; retroactivePlayedHours: number; importedAt: Date },
+  ): Promise<ExternalPlaytimeImportOutcome | undefined> {
+    return this.db.transaction(async (tx) => {
+      const [link] = await tx.update(gamePlatforms)
+        .set({ externalPlaytimeImportedMinutes: input.totalImportedMinutes, updatedAt: input.importedAt })
+        .where(and(eq(gamePlatforms.gameId, gameId), eq(gamePlatforms.id, id))).returning();
+      if (!link) return undefined;
+
+      const [game] = await tx.update(games)
+        .set({ retroactivePlayedHours: input.retroactivePlayedHours.toString(), updatedAt: input.importedAt })
+        .where(eq(games.id, gameId)).returning({ retroactivePlayedHours: games.retroactivePlayedHours });
+      if (!game) return undefined;
+
+      const [platform] = await tx.select({ name: platforms.name }).from(platforms)
+        .where(eq(platforms.id, link.platformId)).limit(1);
+      const [record] = await tx.insert(externalPlaytimeImports).values({
+        gameId,
+        gamePlatformId: link.id,
+        platformName: platform?.name ?? 'Plataforma',
+        source: link.externalSource ?? 'external',
+        importedMinutes: input.importedMinutes,
+        totalImportedMinutes: input.totalImportedMinutes,
+        externalLastPlayedAt: link.externalLastPlayedAt,
+        activityStartedAt: link.externalActivityStartedAt,
+        activityEndedAt: link.externalActivityEndedAt,
+        activityDays: link.externalActivityDays,
+        importedAt: input.importedAt,
+      }).returning();
+
+      return { link, import: record, retroactivePlayedHours: Number(game.retroactivePlayedHours) };
+    });
+  }
+
+  async listExternalPlaytimeImports(): Promise<ExternalPlaytimeImportRecord[]> {
+    return this.db.select().from(externalPlaytimeImports)
+      .orderBy(desc(externalPlaytimeImports.importedAt), desc(externalPlaytimeImports.id));
   }
 
   async delete(gameId: string, id: string): Promise<boolean> {

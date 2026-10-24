@@ -35,14 +35,17 @@ function gameRepository(): GameRepository {
 const platformRepository: PlatformRepository = {
   list: async () => [{ id: PC, name: 'PC', parentId: null }, { id: PS5, name: 'PlayStation 5', parentId: null }],
   create: async (name) => ({ id: id(12), name, parentId: null }),
+  rename: async () => undefined,
   setParent: async (platformId, parentId) => ({ id: platformId, name: 'PC', parentId }),
+  countGameLinks: async () => 0,
+  remove: async () => false,
 };
 
 // Tempo que a fonte externa informa para uma associação, por id. Um teste o
 // preenche para simular o que a sincronização teria gravado.
 const externalMinutes = new Map<string, number>();
 
-function gamePlatformRepository(): GamePlatformRepository {
+function gamePlatformRepository(games: GameRepository): GamePlatformRepository {
   const rows: GamePlatformRecord[] = [];
   let seq = 100;
   const withExternal = (row: GamePlatformRecord): GamePlatformRecord => externalMinutes.has(row.id)
@@ -61,7 +64,9 @@ function gamePlatformRepository(): GamePlatformRepository {
         id: id(seq += 1), gameId, platformId: input.platformId, edition: input.edition?.trim() ?? null,
         format: input.format ?? null, owned: input.owned ?? false, isPrimary: input.isPrimary ?? false,
         externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: input.notes?.trim() ?? null,
+        externalLastPlayedAt: null, externalSyncedAt: null,
+        externalActivityStartedAt: null, externalActivityEndedAt: null, externalActivityDays: 0,
+        externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: input.notes?.trim() ?? null,
         createdAt: now, updatedAt: now,
       };
       rows.push(row);
@@ -93,16 +98,42 @@ function gamePlatformRepository(): GamePlatformRepository {
       const row: GamePlatformRecord = {
         id: id(seq += 1), gameId, platformId, edition: null, format: null, owned: true, isPrimary: false,
         externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
-        externalLastPlayedAt: null, externalSyncedAt: null, externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
+        externalLastPlayedAt: null, externalSyncedAt: null,
+        externalActivityStartedAt: null, externalActivityEndedAt: null, externalActivityDays: 0,
+        externalPlaytimeImportedMinutes: 0, countsTowardTotal: false, notes: null, createdAt: now, updatedAt: now,
       };
       rows.push(row);
       return row;
     },
     updateExternalSnapshot: async (rowId) => rows.find((row) => row.id === rowId),
-    markPlaytimeImported: async (rowId, importedMinutes) => {
+    updateExternalActivity: async (rowId, activity) => {
       const row = rows.find((item) => item.id === rowId);
-      return row ? Object.assign(row, { externalPlaytimeImportedMinutes: importedMinutes }) : undefined;
+      return row ? Object.assign(row, {
+        externalActivityStartedAt: activity.startedAt,
+        externalActivityEndedAt: activity.endedAt,
+        externalActivityDays: activity.days,
+      }) : undefined;
     },
+    applyExternalPlaytimeImport: async (gameId, rowId, input) => {
+      const row = rows.find((item) => item.gameId === gameId && item.id === rowId);
+      if (!row) return undefined;
+      const game = await games.update(gameId, { retroactivePlayedHours: input.retroactivePlayedHours });
+      if (!game) return undefined;
+      Object.assign(row, { externalPlaytimeImportedMinutes: input.totalImportedMinutes, updatedAt: input.importedAt });
+      const platformName = (await platformRepository.list()).find((platform) => platform.id === row.platformId)?.name ?? 'Plataforma';
+      return {
+        link: row,
+        import: {
+          id: id(seq += 1), gameId, gamePlatformId: row.id, platformName,
+          source: row.externalSource ?? 'external', importedMinutes: input.importedMinutes,
+          totalImportedMinutes: input.totalImportedMinutes, externalLastPlayedAt: row.externalLastPlayedAt,
+          activityStartedAt: row.externalActivityStartedAt, activityEndedAt: row.externalActivityEndedAt,
+          activityDays: row.externalActivityDays, importedAt: input.importedAt,
+        },
+        retroactivePlayedHours: Number(game.retroactivePlayedHours ?? 0),
+      };
+    },
+    listExternalPlaytimeImports: async () => [],
   };
 }
 
@@ -183,10 +214,11 @@ function sessionRepository(): SessionRepository {
 
 const apps: Array<ReturnType<typeof buildApp>> = [];
 function setup() {
+  const games = gameRepository();
   const app = buildApp({
-    gameRepository: gameRepository(),
+    gameRepository: games,
     platformRepository,
-    gamePlatformRepository: gamePlatformRepository(),
+    gamePlatformRepository: gamePlatformRepository(games),
     playthroughRepository: playthroughRepository(),
     sessionRepository: sessionRepository(),
   });

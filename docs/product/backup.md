@@ -8,7 +8,7 @@ Decisões e motivos em ADR-014.
 
 ## Exportar e importar (JSON)
 
-No Painel, o cartão **Backup dos dados**:
+Em Configurações, o cartão **Backup dos dados**:
 
 - **Exportar dados** baixa `gameshelf-backup-AAAA-MM-DD.json` (`GET /backup/export`).
 - **Importar backup** envia um arquivo exportado (`POST /backup/import`). Só funciona em

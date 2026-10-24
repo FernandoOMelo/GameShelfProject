@@ -32,7 +32,8 @@ export const platformInputSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
 }).strict();
 export const platformUpdateSchema = z.object({
-  parentId: z.string().uuid().nullable(),
+  name: z.string().trim().min(1).max(200).optional(),
+  parentId: z.string().uuid().nullable().optional(),
 }).strict();
 export const platformSchema = z.object({
   id: z.string().uuid(),
@@ -253,6 +254,13 @@ export const gamePlatformSchema = z.object({
   externalPlaytimeMinutes: z.number().int().nonnegative().nullable(),
   externalLastPlayedAt: z.string().datetime().nullable(),
   externalSyncedAt: z.string().datetime().nullable(),
+  /**
+   * Janela de atividade derivada dos desbloqueios de conquista (ADR-030).
+   * `externalActivityDays` é o número de dias distintos com desbloqueio.
+   */
+  externalActivityStartedAt: z.string().datetime().nullable().default(null),
+  externalActivityEndedAt: z.string().datetime().nullable().default(null),
+  externalActivityDays: z.number().int().nonnegative().default(0),
   /** Quanto do tempo externo já virou horas retroativas do jogo (ADR-026). */
   externalPlaytimeImportedMinutes: z.number().int().nonnegative().default(0),
   /** Se o tempo desta plataforma entra no total consolidado (ADR-027). */
@@ -288,13 +296,26 @@ export const externalAchievementSchema = z.object({
   unlockedAt: z.string().datetime().nullable(),
   syncedAt: z.string().datetime(),
 }).strict();
+export const externalAchievementsQuerySchema = z.object({
+  /**
+   * Sem `refresh`, a resposta vem só do espelho local: abrir a ficha do jogo
+   * nunca depende da fonte externa. A atualização é uma ação explícita.
+   */
+  refresh: z.enum(['true', 'false']).default('false'),
+}).strict().transform((value) => ({ refresh: value.refresh === 'true' }));
 export const externalAchievementsResponseSchema = z.object({
   achievements: z.array(externalAchievementSchema),
   unlockedCount: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
   points: z.number().int().nonnegative(),
-  /** Nulo quando a fonte está indisponível e a resposta veio do espelho local. */
+  /** Quando os dados exibidos foram buscados da fonte pela última vez. */
   refreshedAt: z.string().datetime().nullable(),
+  /** Preenchido quando uma atualização explícita falhou e o espelho foi usado. */
+  refreshError: z.string().nullable().default(null),
+  /** Primeiro e último desbloqueio conhecidos, e quantos dias distintos tiveram atividade. */
+  activityStartedAt: z.string().datetime().nullable(),
+  activityEndedAt: z.string().datetime().nullable(),
+  activityDays: z.number().int().nonnegative(),
 }).strict();
 export type ExternalAchievement = z.infer<typeof externalAchievementSchema>;
 export type ExternalAchievementsResponse = z.infer<typeof externalAchievementsResponseSchema>;
@@ -374,6 +395,16 @@ export const externalSyncSummarySchema = z.object({
   pending: z.number().int().nonnegative(),
   /** Entradas que o usuário já marcou para ignorar. */
   ignored: z.number().int().nonnegative(),
+  /** Associações que receberam tempo novo como horas retroativas nesta rodada. */
+  playtimeImported: z.number().int().nonnegative(),
+  /** Minutos efetivamente lançados como horas retroativas nesta rodada. */
+  playtimeImportedMinutes: z.number().int().nonnegative(),
+  /** Associações cujo espelho de conquistas foi atualizado nesta rodada. */
+  achievementsSynced: z.number().int().nonnegative(),
+  /** Associações cujas conquistas não puderam ser buscadas; o espelho antigo fica. */
+  achievementsFailed: z.number().int().nonnegative(),
+  /** Jogos que ganharam data de início a partir do primeiro desbloqueio. */
+  gamesStarted: z.number().int().nonnegative(),
   // Explícito no contrato porque é um limite da decisão, não um detalhe: a
   // sincronização nunca cria sessões nem jornadas.
   sessionsCreated: z.literal(0),
@@ -391,6 +422,21 @@ export const externalSyncStateSchema = z.object({
   error: z.string().nullable(),
 }).strict();
 export type ExternalSyncState = z.infer<typeof externalSyncStateSchema>;
+
+/**
+ * Diagnóstico da conexão com a fonte (ADR-024). Diz se o servidor tem as
+ * credenciais e se elas autenticam agora — sem expor usuário, senha ou URL:
+ * o navegador nunca fala com a fonte.
+ */
+export const externalIntegrationStatusSchema = z.object({
+  source: z.string(),
+  configured: z.boolean(),
+  /** `null` quando ainda não foi testado (ou a fonte não sabe testar). */
+  reachable: z.boolean().nullable(),
+  accounts: z.number().int().nonnegative().nullable(),
+  error: z.string().nullable(),
+}).strict();
+export type ExternalIntegrationStatus = z.infer<typeof externalIntegrationStatusSchema>;
 
 /** Sugestão por título normalizado. É só sugestão: nunca é aplicada sozinha. */
 export const externalMatchSuggestionSchema = z.object({
@@ -681,6 +727,19 @@ export const timelineEventSchema = z.discriminatedUnion('type', [
     notes: z.string().nullable(),
     keyDecisions: z.string().nullable(),
     tips: z.string().nullable(),
+  }).merge(timelineGameRefSchema).strict(),
+  timelineBaseSchema.extend({
+    type: z.literal('EXTERNAL_PLAYTIME_IMPORTED'),
+    importId: z.string().uuid(),
+    platformName: z.string(),
+    source: z.string(),
+    importedMinutes: z.number().int().positive(),
+    /** Última atividade na plataforma, não a data do lançamento. */
+    externalLastPlayedAt: z.string().datetime().nullable(),
+    /** Janela de atividade conhecida na plataforma no momento do lançamento. */
+    activityStartedAt: z.string().datetime().nullable(),
+    activityEndedAt: z.string().datetime().nullable(),
+    activityDays: z.number().int().nonnegative(),
   }).merge(timelineGameRefSchema).strict(),
   timelineBaseSchema.extend({
     type: z.literal('CHALLENGE_COMPLETED'),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Platform } from '@gameshelf/contracts';
-import { checkParent, groupOf } from './service.js';
+import { checkParent, checkRemovable, groupOf } from './service.js';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const PC = id(1);
@@ -50,5 +50,28 @@ describe('grupos de plataforma', () => {
 
   it('não resolve uma plataforma ausente do catálogo', () => {
     expect(groupOf(id(99), catalog)).toBeUndefined();
+  });
+});
+
+describe('regras de exclusão de plataforma', () => {
+  it('permite excluir uma plataforma sem filhos no catálogo', () => {
+    expect(checkRemovable(at(STEAM), catalog)).toBeUndefined();
+    expect(checkRemovable(at(PS5), catalog)).toBeUndefined();
+  });
+
+  it('recusa excluir um grupo que ainda é grupo de outras plataformas', () => {
+    expect(checkRemovable(at(PC), catalog)).toContain('Mova');
+    expect(checkRemovable(at(PC), catalog)).toContain('Steam');
+  });
+
+  it('nomeia todos os filhos na recusa de exclusão do grupo', () => {
+    const problem = checkRemovable(at(PC), catalog);
+    expect(problem).toContain('Steam');
+    expect(problem).toContain('GOG');
+  });
+
+  it('permite excluir o grupo quando os filhos saem dele', () => {
+    const withoutChildren = catalog.filter((item) => item.parentId !== PC);
+    expect(checkRemovable(at(PC), withoutChildren)).toBeUndefined();
   });
 });

@@ -40,7 +40,15 @@ compartilhar o link, recarregar a página na mesma tela e usar o botão voltar d
 navegador — no PWA instalado, ele fecha o detalhe em vez de sair do app.
 
 Caminhos: `/painel`, `/biblioteca`, `/fila`, `/listas`, `/estatisticas`,
-`/atividade` e `/jogos/:id`. Caminhos desconhecidos caem no painel.
+`/atividade`, `/configuracoes` e `/jogos/:id`. Caminhos desconhecidos caem no
+painel.
+
+## Configurações
+
+A tela `/configuracoes` (ADR-029) reúne o que configura o app, e não é visão do
+dia a dia: cadastro de plataformas (criar, renomear, agrupar, excluir),
+integração com o Achievist, backup dos dados e meta semanal. Seções
+empilhadas em uma única página, sem sub-abas.
 
 ## Acessibilidade
 

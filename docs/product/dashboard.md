@@ -4,6 +4,9 @@
 
 O Painel é a tela inicial do GameShelf. Ele apresenta a situação atual da
 biblioteca, ações para os jogos em andamento e estatísticas de atividade.
+Configuração — cadastro de plataformas, sincronização com o Achievist, backup
+e meta semanal — vive na tela Configurações, não aqui (ADR-029); a meta
+semanal editada lá continua alimentando a previsão do backlog deste painel.
 
 ## Jogando agora
 

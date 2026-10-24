@@ -34,12 +34,15 @@ export function toGamePlatform(record: {
   externalPlaytimeImportedMinutes: number; countsTowardTotal: boolean;
   externalSource: string | null; externalId: string | null; externalAccountLabel: string | null;
   externalPlaytimeMinutes: number | null; externalLastPlayedAt: Date | null; externalSyncedAt: Date | null;
+  externalActivityStartedAt: Date | null; externalActivityEndedAt: Date | null; externalActivityDays: number;
   notes: string | null; createdAt: Date; updatedAt: Date;
 }) {
   return gamePlatformSchema.parse({
     ...record,
     externalLastPlayedAt: record.externalLastPlayedAt?.toISOString() ?? null,
     externalSyncedAt: record.externalSyncedAt?.toISOString() ?? null,
+    externalActivityStartedAt: record.externalActivityStartedAt?.toISOString() ?? null,
+    externalActivityEndedAt: record.externalActivityEndedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   });

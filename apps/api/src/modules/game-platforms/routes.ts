@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  externalAchievementsResponseSchema, externalPlaytimeImportSchema,
+  externalAchievementsQuerySchema, externalAchievementsResponseSchema, externalPlaytimeImportSchema,
   gamePlatformInputSchema, gamePlatformSchema, gamePlatformUpdateSchema,
 } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
@@ -9,10 +9,11 @@ import type { SessionRepository } from '../sessions/repository.js';
 import { parseId } from '../shared/parse-id.js';
 import { toGamePlatform } from '../shared/serialize.js';
 import type { GamePlatformRepository } from './repository.js';
-import { planPlaytimeImport } from './playtime-import.js';
+import { localMinutesOnPlatform, planPlaytimeImport } from './playtime-import.js';
 import type { ExternalAchievementRepository } from './achievement-repository.js';
 import type { ExternalLibraryProvider } from '../integrations/external-library.js';
-import { toExternalAchievements } from './achievements.js';
+import { deriveActivityWindow, toExternalAchievements } from './achievements.js';
+import { earliestActivityStart, setGameStartIfMissing } from './activity.js';
 
 export async function registerGamePlatformRoutes(
   app: FastifyInstance,
@@ -22,42 +23,43 @@ export async function registerGamePlatformRoutes(
   achievements?: { store: ExternalAchievementRepository; provider?: ExternalLibraryProvider },
   sessions?: SessionRepository,
 ) {
-  /** Minutos de sessão encerrada registrados para aquele jogo naquela plataforma. */
-  async function localMinutesOn(gameId: string, platformId: string): Promise<number> {
-    if (!sessions) return 0;
-    const records = await sessions.listForGame(gameId);
-    return records.reduce((total, session) => {
-      if (session.platformId !== platformId || session.endedAt === null) return total;
-      return total + Math.floor((session.endedAt.getTime() - session.startedAt.getTime()) / 60_000);
-    }, 0);
-  }
-
-  // Conquistas são buscadas sob demanda, por jogo (ADR-028). Se a fonte estiver
-  // fora do ar — ou desligada —, a resposta vem do espelho local com
-  // `refreshedAt` nulo, em vez de falhar: ver conquista nunca pode derrubar a
-  // tela de detalhes.
+  // Conquistas vêm do espelho local por padrão: abrir a ficha do jogo não faz
+  // requisição à fonte. `?refresh=true` busca na fonte e atualiza o espelho
+  // (ADR-031). Se a fonte cair, a resposta continua sendo o último dado
+  // guardado, com `refreshError` explicando a falha.
   app.get<{ Params: { gameId: string; id: string } }>('/games/:gameId/platforms/:id/achievements', async (request, reply) => {
     if (!achievements) return reply.code(404).send({ error: 'Conquistas não estão disponíveis nesta instalação.' });
     const gameId = parseId(request.params.gameId);
     const id = parseId(request.params.id);
     if (!gameId || !id) return reply.code(400).send({ error: 'ID inválido.' });
+    const parsedQuery = externalAchievementsQuerySchema.safeParse(request.query);
+    if (!parsedQuery.success) return reply.code(400).send({ error: 'Parâmetros de conquistas inválidos.', issues: parsedQuery.error.issues });
     const link = await repository.find(gameId, id);
     if (!link) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
 
-    let refreshedAt: Date | null = null;
     let records = await achievements.store.listForGamePlatform(id);
+    let refreshedAt = latestSyncedAt(records);
+    let refreshError: string | null = null;
     const provider = achievements.provider;
-    if (provider && link.externalSource === provider.source && link.externalId) {
-      try {
-        const fetched = await provider.fetchAchievements(link.externalId);
-        refreshedAt = new Date();
-        records = await achievements.store.replaceForGamePlatform(id, fetched, refreshedAt);
-      } catch (error) {
-        // A fonte caiu: segue com o que já havia sido espelhado.
-        request.log.warn({ err: error instanceof Error ? error.message : 'erro' }, 'Falha ao buscar conquistas');
+    if (parsedQuery.data.refresh) {
+      if (!provider || link.externalSource !== provider.source || !link.externalId) {
+        refreshError = 'Esta associação não está ligada a uma fonte externa configurada.';
+      } else {
+        try {
+          const fetched = await provider.fetchAchievements(link.externalId);
+          refreshedAt = new Date();
+          records = await achievements.store.replaceForGamePlatform(id, fetched, refreshedAt);
+          // A janela de atividade também é atualizada aqui: o espelho e a data
+          // de início do jogo não podem discordar do que acabou de ser buscado.
+          await repository.updateExternalActivity(id, deriveActivityWindow(records));
+          await setGameStartIfMissing(games, gameId, earliestActivityStart(await repository.listForGame(gameId)));
+        } catch (error) {
+          refreshError = error instanceof Error ? error.message : 'Não foi possível atualizar as conquistas.';
+          request.log.warn({ err: refreshError }, 'Falha ao buscar conquistas');
+        }
       }
     }
-    return reply.send(externalAchievementsResponseSchema.parse(toExternalAchievements(records, refreshedAt)));
+    return reply.send(externalAchievementsResponseSchema.parse(toExternalAchievements(records, refreshedAt, refreshError)));
   });
 
 
@@ -110,8 +112,9 @@ export async function registerGamePlatformRoutes(
   });
 
   // Lançar o tempo informado pela plataforma como horas retroativas do jogo.
-  // Ação explícita e idempotente: só a parte ainda não lançada é somada, e a
-  // sincronização nunca faz isso sozinha (ADR-026).
+  // Ação explícita e idempotente: só a parte ainda não lançada é somada. A
+  // sincronização também faz isso automaticamente (ADR-030), mas a rota
+  // continua existindo para lançar sob demanda e corrigir associações antigas.
   app.post<{ Params: { gameId: string; id: string } }>('/games/:gameId/platforms/:id/import-playtime', async (request, reply) => {
     const gameId = parseId(request.params.gameId);
     const id = parseId(request.params.id);
@@ -121,18 +124,24 @@ export async function registerGamePlatformRoutes(
     const link = await repository.find(gameId, id);
     if (!link) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
 
-    const plan = planPlaytimeImport(link, Number(game.retroactivePlayedHours ?? 0), await localMinutesOn(gameId, link.platformId));
+    const localMinutes = sessions
+      ? localMinutesOnPlatform(await sessions.listForGame(gameId), link.platformId)
+      : 0;
+    const plan = planPlaytimeImport(link, Number(game.retroactivePlayedHours ?? 0), localMinutes);
     if (!plan.ok) return reply.code(409).send({ error: plan.error });
 
-    const updatedGame = await games.update(gameId, { retroactivePlayedHours: plan.retroactivePlayedHours });
-    if (!updatedGame) return reply.code(404).send({ error: 'Jogo não encontrado.' });
-    const updatedLink = await repository.markPlaytimeImported(id, plan.totalImportedMinutes);
-    if (!updatedLink) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
+    const outcome = await repository.applyExternalPlaytimeImport(gameId, id, {
+      importedMinutes: plan.importedMinutes,
+      totalImportedMinutes: plan.totalImportedMinutes,
+      retroactivePlayedHours: plan.retroactivePlayedHours,
+      importedAt: new Date(),
+    });
+    if (!outcome) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
 
     return reply.send(externalPlaytimeImportSchema.parse({
-      platform: toGamePlatform(updatedLink),
+      platform: toGamePlatform(outcome.link),
       importedMinutes: plan.importedMinutes,
-      retroactivePlayedHours: Number(updatedGame.retroactivePlayedHours ?? 0),
+      retroactivePlayedHours: outcome.retroactivePlayedHours,
     }));
   });
 
@@ -145,4 +154,12 @@ export async function registerGamePlatformRoutes(
     if (!await repository.delete(gameId, id)) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
     return reply.code(204).send();
   });
+}
+
+function latestSyncedAt(records: Array<{ syncedAt: Date }>): Date | null {
+  let latest: Date | null = null;
+  for (const record of records) {
+    if (!latest || record.syncedAt > latest) latest = record.syncedAt;
+  }
+  return latest;
 }

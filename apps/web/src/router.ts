@@ -4,7 +4,7 @@
  */
 
 /** Views de topo do app. Cada uma tem um caminho estável e compartilhável. */
-export type AppView = 'library' | 'queue' | 'lists' | 'dashboard' | 'stats' | 'timeline';
+export type AppView = 'library' | 'queue' | 'lists' | 'dashboard' | 'stats' | 'timeline' | 'settings';
 
 export type AppRoute = {
   view: AppView;
@@ -19,6 +19,7 @@ const viewPaths: Record<AppView, string> = {
   lists: '/listas',
   stats: '/estatisticas',
   timeline: '/atividade',
+  settings: '/configuracoes',
 };
 
 const pathViews = new Map(Object.entries(viewPaths).map(([view, path]) => [path, view as AppView]));

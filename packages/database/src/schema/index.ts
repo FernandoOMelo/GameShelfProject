@@ -213,6 +213,12 @@ export const gamePlatforms = pgTable('game_platforms', {
   externalPlaytimeMinutes: integer('external_playtime_minutes'),
   externalLastPlayedAt: timestamp('external_last_played_at', { withTimezone: true }),
   externalSyncedAt: timestamp('external_synced_at', { withTimezone: true }),
+  // Janela de atividade derivada dos desbloqueios de conquista (ADR-030). É o
+  // primeiro e o último instante de desbloqueio, não uma sessão: só delimita
+  // quando houve atividade conhecida naquela plataforma.
+  externalActivityStartedAt: timestamp('external_activity_started_at', { withTimezone: true }),
+  externalActivityEndedAt: timestamp('external_activity_ended_at', { withTimezone: true }),
+  externalActivityDays: integer('external_activity_days').notNull().default(0),
   // Quanto do tempo externo já foi lançado como horas retroativas do jogo
   // (ADR-026). Guardar o que já foi lançado é o que torna a ação idempotente e
   // o que permite lançar só a diferença quando a fonte reporta mais tempo.
@@ -235,6 +241,8 @@ export const gamePlatforms = pgTable('game_platforms', {
   check('game_platforms_external_playtime_nonnegative', sql`${table.externalPlaytimeMinutes} IS NULL OR ${table.externalPlaytimeMinutes} >= 0`),
   check('game_platforms_external_pair', sql`(${table.externalSource} IS NULL) = (${table.externalId} IS NULL)`),
   check('game_platforms_imported_nonnegative', sql`${table.externalPlaytimeImportedMinutes} >= 0`),
+  check('game_platforms_activity_days_nonnegative', sql`${table.externalActivityDays} >= 0`),
+  check('game_platforms_activity_window', sql`${table.externalActivityStartedAt} IS NULL OR ${table.externalActivityEndedAt} IS NULL OR ${table.externalActivityEndedAt} >= ${table.externalActivityStartedAt}`),
 ]);
 
 // Conquistas trazidas da fonte externa (ADR-028). Penduradas na associação de
@@ -261,6 +269,35 @@ export const externalAchievements = pgTable('external_achievements', {
   // Data de desbloqueio sem desbloqueio seria contradição; o contrário é normal
   // (a fonte nem sempre informa quando).
   check('external_achievements_unlocked_at_requires_unlock', sql`${table.unlockedAt} IS NULL OR ${table.unlocked}`),
+]);
+
+// Histórico dos lançamentos de tempo externo como horas retroativas (ADR-030).
+// O tempo em si continua em `games.retroactive_played_hours`; esta tabela existe
+// para a linha do tempo poder mostrar quando cada lançamento aconteceu e qual
+// era a última atividade conhecida na plataforma. `game_platform_id` usa
+// `set null` para o histórico sobreviver à desassociação da plataforma.
+export const externalPlaytimeImports = pgTable('external_playtime_imports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
+  gamePlatformId: uuid('game_platform_id').references(() => gamePlatforms.id, { onDelete: 'set null' }),
+  platformName: text('platform_name').notNull(),
+  source: text('source').notNull(),
+  importedMinutes: integer('imported_minutes').notNull(),
+  totalImportedMinutes: integer('total_imported_minutes').notNull(),
+  externalLastPlayedAt: timestamp('external_last_played_at', { withTimezone: true }),
+  activityStartedAt: timestamp('activity_started_at', { withTimezone: true }),
+  activityEndedAt: timestamp('activity_ended_at', { withTimezone: true }),
+  activityDays: integer('activity_days').notNull().default(0),
+  importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('external_playtime_imports_game_idx').on(table.gameId),
+  index('external_playtime_imports_imported_at_idx').on(table.importedAt),
+  check('external_playtime_imports_imported_positive', sql`${table.importedMinutes} > 0`),
+  check('external_playtime_imports_total_nonnegative', sql`${table.totalImportedMinutes} >= 0`),
+  check('external_playtime_imports_total_covers_imported', sql`${table.totalImportedMinutes} >= ${table.importedMinutes}`),
+  check('external_playtime_imports_platform_not_blank', sql`length(trim(${table.platformName})) > 0`),
+  check('external_playtime_imports_activity_days_nonnegative', sql`${table.activityDays} >= 0`),
+  check('external_playtime_imports_activity_window', sql`${table.activityStartedAt} IS NULL OR ${table.activityEndedAt} IS NULL OR ${table.activityEndedAt} >= ${table.activityStartedAt}`),
 ]);
 
 export const playthroughStatus = pgEnum('playthrough_status', ['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);

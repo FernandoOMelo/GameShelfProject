@@ -2,20 +2,37 @@ import type { Game, Session, TimelineEvent, TimelineResponse } from '@gameshelf/
 
 type Completion = { title: string; gamesCount: number; completedAt: string };
 
+type PlaytimeImport = {
+  id: string;
+  gameId: string;
+  platformName: string;
+  source: string;
+  importedMinutes: number;
+  importedAt: string;
+  externalLastPlayedAt: string | null;
+  activityStartedAt: string | null;
+  activityEndedAt: string | null;
+  activityDays: number;
+};
+
 type Input = {
   games: Game[];
   sessions: Session[];
   completions: Completion[];
+  playtimeImports?: PlaytimeImport[];
   limit: number;
   before?: string;
   timezoneOffsetMinutes?: number;
 };
 
-export function buildTimeline({ games, sessions, completions, limit, before, timezoneOffsetMinutes = 0 }: Input): TimelineResponse {
+export function buildTimeline({
+  games, sessions, completions, playtimeImports = [], limit, before, timezoneOffsetMinutes = 0,
+}: Input): TimelineResponse {
   const gamesById = new Map(games.map((game) => [game.id, game]));
   const events = [
     ...games.flatMap((game) => gameEvents(game)),
     ...sessions.flatMap((session) => sessionEvents(session, gamesById.get(session.gameId), timezoneOffsetMinutes)),
+    ...playtimeImports.flatMap((entry) => playtimeImportEvents(entry, gamesById.get(entry.gameId), timezoneOffsetMinutes)),
     ...completions.map((completion) => challengeEvent(completion, timezoneOffsetMinutes)),
   ];
 
@@ -53,6 +70,30 @@ function sessionEvents(session: Session, game: Game | undefined, offsetMinutes: 
   }];
 }
 
+function playtimeImportEvents(
+  entry: PlaytimeImport,
+  game: Game | undefined,
+  offsetMinutes: number,
+): TimelineEvent[] {
+  if (!game) return [];
+  return [{
+    type: 'EXTERNAL_PLAYTIME_IMPORTED',
+    at: entry.importedAt,
+    date: localDay(entry.importedAt, offsetMinutes),
+    gameId: game.id,
+    gameTitle: game.title,
+    coverUrl: game.coverUrl,
+    importId: entry.id,
+    platformName: entry.platformName,
+    source: entry.source,
+    importedMinutes: entry.importedMinutes,
+    externalLastPlayedAt: entry.externalLastPlayedAt,
+    activityStartedAt: entry.activityStartedAt,
+    activityEndedAt: entry.activityEndedAt,
+    activityDays: entry.activityDays,
+  }];
+}
+
 function challengeEvent(completion: Completion, offsetMinutes: number): TimelineEvent {
   return {
     type: 'CHALLENGE_COMPLETED',
@@ -72,5 +113,7 @@ function localDay(instant: string, offsetMinutes: number): string {
 }
 
 function eventKey(event: TimelineEvent): string {
-  return event.type === 'CHALLENGE_COMPLETED' ? `${event.type}:${event.title}` : `${event.type}:${event.gameId}`;
+  if (event.type === 'CHALLENGE_COMPLETED') return `${event.type}:${event.title}`;
+  if (event.type === 'EXTERNAL_PLAYTIME_IMPORTED') return `${event.type}:${event.importId}`;
+  return `${event.type}:${event.gameId}`;
 }

@@ -17,13 +17,26 @@ export async function registerStatsRoutes(app: FastifyInstance, games: GameRepos
   app.get('/stats/timeline', async (request, reply) => {
     const parsed = timelineQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ message: 'Parâmetros da linha do tempo inválidos.', issues: parsed.error.issues });
-    const [gameRecords, sessionRecords, completionRecords] = await Promise.all([
+    const [gameRecords, sessionRecords, completionRecords, importRecords] = await Promise.all([
       games.list(), sessions.listAll(), completions?.listAll() ?? Promise.resolve([]),
+      library?.gamePlatforms.listExternalPlaytimeImports() ?? Promise.resolve([]),
     ]);
     return reply.send(timelineResponseSchema.parse(buildTimeline({
       games: gameRecords.map(toGame),
       sessions: sessionRecords.map(toSession),
       completions: completionRecords.map((record) => ({ title: record.title, gamesCount: record.gamesCount, completedAt: record.completedAt.toISOString() })),
+      playtimeImports: importRecords.map((record) => ({
+        id: record.id,
+        gameId: record.gameId,
+        platformName: record.platformName,
+        source: record.source,
+        importedMinutes: record.importedMinutes,
+        importedAt: record.importedAt.toISOString(),
+        externalLastPlayedAt: record.externalLastPlayedAt?.toISOString() ?? null,
+        activityStartedAt: record.activityStartedAt?.toISOString() ?? null,
+        activityEndedAt: record.activityEndedAt?.toISOString() ?? null,
+        activityDays: record.activityDays,
+      })),
       limit: parsed.data.limit,
       before: parsed.data.before,
       timezoneOffsetMinutes: parsed.data.timezoneOffsetMinutes,

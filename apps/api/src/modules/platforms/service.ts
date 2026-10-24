@@ -27,6 +27,20 @@ export function checkParent(
   return undefined;
 }
 
+/**
+ * Regra de exclusão do catálogo (ADR-029): uma plataforma que é grupo de
+ * outras não pode ser excluída — o banco promoveria os filos a grupos soltos
+ * por acidente e o catálogo de dois níveis mudaria de significado.
+ */
+export function checkRemovable(platform: Platform, catalog: Platform[]): string | undefined {
+  const children = catalog.filter((item) => item.parentId === platform.id);
+  if (children.length > 0) {
+    const names = children.map((child) => child.name).join(', ');
+    return `Esta plataforma é o grupo de ${children.map((child) => `“${child.name}”`).join(', ')}. Mova ${children.length === 1 ? names : `${names} para outro grupo`} antes de excluí-la.`;
+  }
+  return undefined;
+}
+
 /** O grupo ao qual a plataforma pertence: ela mesma, quando não tem pai. */
 export function groupOf(platformId: string, catalog: Platform[]): Platform | undefined {
   const platform = catalog.find((item) => item.id === platformId);

@@ -108,6 +108,30 @@ describe('AchievistClient', () => {
 
     await expect(client.fetchLibrary()).rejects.toThrow('HTTP 502');
   });
+
+  it('tests the connection with a login and the accounts list, without reading the library', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(loginResponse())
+      .mockResolvedValueOnce(accounts([
+        { platform: 'steam', display_name: 'conta-a', enabled: true },
+        { platform: 'psn', display_name: 'conta-b', enabled: true },
+      ]));
+    const client = new AchievistClient('http://achievist-app:8000', 'user', 'secret', fetcher);
+
+    await expect(client.ping()).resolves.toEqual({ accounts: 2 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[1]?.[0])).toBe('http://achievist-app:8000/api/accounts');
+  });
+
+  it('surfaces a failed login on ping without echoing the password', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ detail: 'Invalid username or password' }), { status: 401 }));
+    const client = new AchievistClient('http://achievist-app:8000', 'user', 'senha-secreta', fetcher);
+
+    const error = await client.ping().then(() => undefined, (reason: unknown) => reason as Error);
+    expect(error?.message).toBe('O login no Achievist falhou com HTTP 401.');
+    expect(error?.message).not.toContain('senha-secreta');
+  });
 });
 
 describe('conquistas da fonte', () => {

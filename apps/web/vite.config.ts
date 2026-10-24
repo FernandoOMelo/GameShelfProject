@@ -21,13 +21,15 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // Em dev local a API pode subir em outra porta (ex.: ao lado do container
+      // docker na 3000); `VITE_PROXY_TARGET` escolhe o alvo sem editar isto.
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        target: process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/media': {
-        target: 'http://127.0.0.1:3000',
+        target: process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
     },

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExternalPendingMatch, ExternalSyncState, Game, Platform } from '@gameshelf/contracts';
+import type { ExternalIntegrationStatus, ExternalPendingMatch, ExternalSyncState, Game, Platform } from '@gameshelf/contracts';
 import { AchievistSyncPanel } from './achievist-sync-panel';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -16,7 +16,7 @@ const platforms: Platform[] = [{ id: 'platform-1', name: 'Steam', parentId: null
 
 const state = (overrides: Partial<ExternalSyncState> = {}): ExternalSyncState => ({
   source: 'achievist', status: 'succeeded', startedAt: '2026-06-01T12:00:00.000Z', finishedAt: '2026-06-01T12:00:05.000Z',
-  summary: { source: 'achievist', fetched: 4, updated: 1, pending: 1, ignored: 0, sessionsCreated: 0, playthroughsCreated: 0 },
+  summary: { source: 'achievist', fetched: 4, updated: 1, pending: 1, ignored: 0, playtimeImported: 0, playtimeImportedMinutes: 0, achievementsSynced: 0, achievementsFailed: 0, gamesStarted: 0, sessionsCreated: 0, playthroughsCreated: 0 },
   error: null, ...overrides,
 });
 
@@ -27,10 +27,12 @@ const match = (overrides: Partial<ExternalPendingMatch> = {}): ExternalPendingMa
   suggestions: [{ gameId: 'game-1', title: 'Hades' }], ambiguous: false, ...overrides,
 });
 
-/** Responde na ordem em que o painel consulta: estado e depois a fila. */
-function serve(current: ExternalSyncState, pending: ExternalPendingMatch[]) {
+/** Responde na ordem em que o painel consulta: diagnóstico, estado e fila. */
+function serve(current: ExternalSyncState, pending: ExternalPendingMatch[], status: Partial<ExternalIntegrationStatus> = {}) {
+  const integration: ExternalIntegrationStatus = { source: 'achievist', configured: true, reachable: true, accounts: 1, error: null, ...status };
   fetchMock.mockImplementation((input, init) => {
     const url = String(input);
+    if (url.endsWith('/status')) return Promise.resolve(Response.json(integration));
     if (url.endsWith('/sync')) return Promise.resolve(Response.json(current, { status: init?.method === 'POST' ? 202 : 200 }));
     if (url.endsWith('/pending')) return Promise.resolve(Response.json(pending));
     return Promise.resolve(Response.json({}, { status: 404 }));
@@ -96,5 +98,28 @@ describe('AchievistSyncPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ignorar' }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/pending/match-1/ignore'))).toBe(true));
+  });
+
+  it('tests the connection and reports how many accounts are connected', async () => {
+    serve(state(), [], { reachable: true, accounts: 2 });
+    render(<AchievistSyncPanel games={games} platforms={platforms} />);
+
+    expect(await screen.findByText(/2 contas conectadas no Achievist/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Testar conexão' }));
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/status'));
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByText(/Conexão confirmada/)).toBeInTheDocument();
+    // O diagnóstico nunca exige usuário, senha ou URL no navegador.
+    expect(screen.queryByText(/ACHIEVIST_USERNAME=/)).not.toBeInTheDocument();
+  });
+
+  it('reports a failed connection test without blaming the library', async () => {
+    serve(state(), [], { reachable: false, accounts: null, error: 'O login no Achievist falhou com HTTP 401.' });
+    render(<AchievistSyncPanel games={games} platforms={platforms} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('O login no Achievist falhou com HTTP 401.');
+    expect(screen.getByRole('button', { name: 'Sincronizar agora' })).toBeInTheDocument();
   });
 });

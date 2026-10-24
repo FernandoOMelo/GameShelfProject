@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  externalMatchConfirmSchema, externalMatchCreatedSchema, externalMatchCreateGameSchema,
+  externalIntegrationStatusSchema, externalMatchConfirmSchema, externalMatchCreatedSchema, externalMatchCreateGameSchema,
   externalPendingMatchSchema, externalSyncStateSchema,
 } from '@gameshelf/contracts';
 import { parseId } from '../shared/parse-id.js';
@@ -11,6 +11,8 @@ import type { ExternalSyncRunner } from './sync-runner.js';
 export type IntegrationContext = {
   runner: ExternalSyncRunner;
   deps: ImportDependencies;
+  /** Testa credenciais e alcance da fonte, quando o provedor sabe fazer. */
+  checkConnection?: () => Promise<{ accounts: number }>;
 };
 
 /**
@@ -28,6 +30,26 @@ export async function registerIntegrationRoutes(app: FastifyInstance, source: st
   app.get(`${base}/sync`, async (_request, reply) => {
     if (!context) return reply.send(disabled());
     return reply.send(externalSyncStateSchema.parse(context.runner.snapshot()));
+  });
+
+  // Diagnóstico para a tela de Configurações: o servidor diz se tem as
+  // credenciais e, quando testado, se elas autenticam. Nada sensível sai daqui.
+  app.get(`${base}/status`, async (_request, reply) => {
+    if (!context?.checkConnection) {
+      return reply.send(externalIntegrationStatusSchema.parse({
+        source, configured: Boolean(context), reachable: null, accounts: null, error: null,
+      }));
+    }
+    try {
+      const { accounts } = await context.checkConnection();
+      return reply.send(externalIntegrationStatusSchema.parse({ source, configured: true, reachable: true, accounts, error: null }));
+    } catch (error) {
+      // A mensagem vem do cliente da fonte, que nunca repete usuário nem senha.
+      return reply.send(externalIntegrationStatusSchema.parse({
+        source, configured: true, reachable: false, accounts: null,
+        error: error instanceof Error ? error.message : 'Não foi possível falar com a fonte.',
+      }));
+    }
   });
 
   app.post(`${base}/sync`, async (_request, reply) => {
