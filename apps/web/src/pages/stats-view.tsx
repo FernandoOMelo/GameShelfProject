@@ -1,21 +1,26 @@
 import { useEffect, useState } from 'react';
-import type { StatsGroup, StatsResponse } from '@gameshelf/contracts';
+import type { PlatformSummary, StatsGroup, StatsResponse } from '@gameshelf/contracts';
 import { BarList, ErrorState, LoadingState, StatCard } from '@gameshelf/ui';
 import { ActivityHeatmap } from './activity-heatmap';
+import { PlatformIcon } from './platform-icons';
 import { ReplayPanel } from './replay-panel';
-import { apiUrl,difficultyLabels, formatCompactHours } from './shared';
+import { apiUrl, difficultyLabels, formatCompactHours } from './shared';
 
 export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onOpenGame: (gameId: string) => void }) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [summaries, setSummaries] = useState<PlatformSummary[]>([]);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
     setFailed(false);
-    void fetch(`${apiUrl}/stats`).then(async (response) => {
-      const body = response.ok ? await response.json() as StatsResponse : null;
+    Promise.all([
+      fetch(`${apiUrl}/stats`).then((r) => r.ok ? r.json() as Promise<StatsResponse> : Promise.reject()),
+      fetch(`${apiUrl}/platforms/summaries`).then((r) => r.ok ? r.json() as Promise<PlatformSummary[]> : Promise.resolve([])),
+    ]).then(([body, sums]) => {
       if (!active) return;
-      if (body && typeof body === 'object' && 'totals' in body) setStats(body); else setFailed(true);
+      if (body && typeof body === 'object' && 'totals' in body) { setStats(body); setSummaries(Array.isArray(sums) ? sums : []); }
+      else setFailed(true);
     }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, [refreshKey]);
@@ -72,6 +77,8 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
     </div>
     <small className="stats-note">A taxa de conclusão ignora jogos desejados, que ainda não estão na biblioteca. A média por jogo jogado considera todo jogo com horas registradas, zerado ou não.</small>
 
+    {summaries.length > 0 && <PlatformSummaryGrid summaries={summaries} />}
+
     <ReplayPanel refreshKey={refreshKey} onOpenGame={onOpenGame} />
     <ActivityHeatmap refreshKey={refreshKey} />
 
@@ -116,6 +123,49 @@ export function StatsView({ refreshKey, onOpenGame }: { refreshKey: unknown; onO
       </div>
     </div>
     <small className="stats-note">Rankings de gênero e tipo usam a média das notas dos jogos zerados.</small>
+  </section>;
+}
+
+function PlatformSummaryGrid({ summaries }: { summaries: PlatformSummary[] }) {
+  const visible = summaries.filter((s) => s.gameCount > 0);
+  if (!visible.length) return null;
+  return <section className="panel" aria-labelledby="platform-summary-title">
+    <div className="section-heading"><h2 id="platform-summary-title">Plataformas</h2></div>
+    <p className="library-subtitle">Toda a biblioteca, não só os jogos zerados.</p>
+    <ul className="platform-summary-grid">
+      {visible.map((s) => {
+        const totalMinutes = s.localPlayedMinutes + s.externalPlayedMinutes;
+        const hours = totalMinutes / 60;
+        const completionPct = s.gameCount > 0 ? Math.round((s.completedCount / s.gameCount) * 100) : 0;
+        const achievPct = s.achievementsTotal > 0 ? Math.round((s.achievementsUnlocked / s.achievementsTotal) * 100) : null;
+        return <li key={s.platform.id} className="platform-summary-card">
+          <div className="platform-summary-covers">
+            {s.recentGameCovers.filter(Boolean).slice(0, 4).map((cover, i) => (
+              cover ? <img key={i} src={cover} alt="" aria-hidden="true" /> : null
+            ))}
+          </div>
+          <div className="platform-summary-body">
+            <p className="platform-summary-name">
+              <PlatformIcon iconKey={s.platform.iconKey} />
+              {s.platform.name}
+            </p>
+            <p className="platform-summary-counts">
+              {s.gameCount} {s.gameCount === 1 ? 'jogo' : 'jogos'}
+              {s.completedCount > 0 && <> · {s.completedCount} zerado{s.completedCount !== 1 ? 's' : ''}</>}
+              {s.dominatedCount > 0 && <> · {s.dominatedCount} dominado{s.dominatedCount !== 1 ? 's' : ''}</>}
+            </p>
+            {hours >= 0.1 && <p className="platform-summary-hours">{formatCompactHours(hours)}</p>}
+            {achievPct !== null && <div className="platform-summary-achiev" title={`${s.achievementsUnlocked}/${s.achievementsTotal} conquistas`}>
+              <div className="platform-summary-achiev-bar" style={{ width: `${achievPct}%` }} />
+              <span>{s.achievementsUnlocked}/{s.achievementsTotal}</span>
+            </div>}
+            <div className="platform-summary-progress" title={`${completionPct}% zerados`}>
+              <div className="platform-summary-progress-bar" style={{ width: `${completionPct}%` }} />
+            </div>
+          </div>
+        </li>;
+      })}
+    </ul>
   </section>;
 }
 
