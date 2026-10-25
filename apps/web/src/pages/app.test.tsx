@@ -261,7 +261,7 @@ describe('library page', () => {
     const game = { ...makeGame('00000000-0000-4000-8000-000000000009', 'Local game', 'PLAYING'), coverUrl: '/media/00000000-0000-4000-8000-000000000050.jpg' };
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Local game' }));
     fireEvent.click(screen.getByRole('button', { name: 'Editar jogo' }));
     const coverInput = screen.getByLabelText(/Capa/) as HTMLInputElement;
@@ -288,7 +288,7 @@ describe('library page', () => {
   it('searches metadata and fills the game form for review before saving', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
 
@@ -305,7 +305,7 @@ describe('library page', () => {
   it('searches HowLongToBeat time estimates and fills the estimate fields', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
 
@@ -321,7 +321,7 @@ describe('library page', () => {
   it('searches metadata and time estimates while the title is typed', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
 
@@ -338,7 +338,7 @@ describe('library page', () => {
     const game = { ...makeGame('00000000-0000-4000-8000-000000000006', 'Hades', 'PLAYING'), estimatedMainHours: null, estimatedCompletionistHours: null, personalEstimatedHours: null };
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     fireEvent.click(screen.getByRole('button', { name: 'Editar jogo' }));
 
@@ -352,7 +352,7 @@ describe('library page', () => {
   it('closes the search results and then the dialog with Escape', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
     await screen.findByRole('list', { name: 'Resultados de metadata' });
@@ -369,7 +369,7 @@ describe('library page', () => {
     const game = { ...makeGame('00000000-0000-4000-8000-000000000005', 'Hades', 'PLAYING'), estimatedMainHours: 25, estimatedCompletionistHours: 80, personalEstimatedHours: 40 };
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     fireEvent.click(screen.getByRole('button', { name: 'Editar jogo' }));
 
@@ -380,14 +380,14 @@ describe('library page', () => {
   it('shows an empty state when the API has no games', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     expect(await screen.findByText('Sua biblioteca começa aqui')).toBeInTheDocument();
   });
 
   it('creates a game through the API', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Adicionar primeiro jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar jogo' }));
@@ -405,7 +405,7 @@ describe('library page', () => {
     };
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     expect(screen.getByRole('heading', { name: 'Hades' })).toBeInTheDocument();
     expect(screen.getByText('Escape from the Underworld.')).toBeInTheDocument();
@@ -419,7 +419,7 @@ describe('library page', () => {
     const second = makeGame('00000000-0000-4000-8000-000000000002', 'Celeste', 'PLAYING');
     mockApi([first, second]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por status' }), { target: { value: 'PLAYING' } });
     fireEvent.click(screen.getByRole('button', { name: 'Ver detalhes de Hades' }));
     fireEvent.click(screen.getByRole('button', { name: 'Próximo jogo →' }));
@@ -437,7 +437,7 @@ describe('library page', () => {
   it('creates and associates a franchise, platform and genre', async () => {
     mockApi();
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Adicionar primeiro jogo' }));
     await screen.findByRole('heading', { name: 'Adicionar jogo' });
     screen.getByRole('textbox', { name: /Adicionar plataforma/ });
@@ -466,8 +466,8 @@ describe('library page', () => {
   it('creates a named list and adds or removes games from it', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Listas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Coleções' }));
     fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Favoritos' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }));
 
@@ -483,8 +483,8 @@ describe('library page', () => {
   it('adds the games of a list to the queue and reports what was added', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'BACKLOG')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Listas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Coleções' }));
     fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Curtos' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }));
     expect(await screen.findByRole('button', { name: 'Adicionar à fila' })).toBeDisabled();
@@ -501,8 +501,8 @@ describe('library page', () => {
   it('asks for confirmation before deleting a list', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Listas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Coleções' }));
     fireEvent.change(screen.getByLabelText('Nome da nova lista'), { target: { value: 'Clássicos' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar lista' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir lista' }));
@@ -536,7 +536,7 @@ describe('library page', () => {
     const game = { ...makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING'), retroactivePlayedHours: 10 };
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     await screen.findByRole('heading', { name: 'Horas Jogadas' });
 
@@ -558,7 +558,7 @@ describe('library page', () => {
     const game = makeGame('00000000-0000-4000-8000-000000000001', 'The Witcher 3', 'PLAYING');
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de The Witcher 3' }));
     await screen.findByRole('heading', { name: 'Plataformas e jornadas' });
     expect(screen.getByText('Nenhuma plataforma associada.')).toBeInTheDocument();
@@ -589,7 +589,7 @@ describe('library page', () => {
     };
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     await screen.findByText('Nenhuma sessão registrada.');
     fireEvent.click(screen.getByRole('button', { name: 'Continuar jogando' }));
@@ -615,7 +615,7 @@ describe('library page', () => {
     const game = makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING');
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     await screen.findByText('Nenhuma sessão registrada.');
     fireEvent.click(screen.getByRole('button', { name: 'Continuar jogando' }));
@@ -656,7 +656,7 @@ describe('library page', () => {
       return new Response(JSON.stringify([game]), { status: 200 });
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir sessão' }));
     const dialog = await screen.findByRole('dialog', { name: 'Excluir sessão' });
@@ -672,7 +672,7 @@ describe('library page', () => {
     const game = makeGame('00000000-0000-4000-8000-000000000001', 'Hades');
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     const trigger = await screen.findByRole('button', { name: 'Excluir jogo' });
     // No navegador real o clique foca o botão; o jsdom não faz isso, então
@@ -692,7 +692,7 @@ describe('library page', () => {
     const game = makeGame('00000000-0000-4000-8000-000000000001', 'Hades');
     mockApi([game]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir jogo' }));
     const dialog = await screen.findByRole('dialog', { name: 'Excluir jogo' });
@@ -796,7 +796,7 @@ describe('library page', () => {
       return base(input, init);
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
 
     const panel = (await screen.findByRole('heading', { name: 'Onde parei' })).closest('section')!;
@@ -830,7 +830,7 @@ describe('library page', () => {
       return base(input, init);
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     await screen.findByRole('button', { name: 'Imagens' });
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/screenshots'))).toBe(false);
@@ -856,14 +856,14 @@ describe('library page', () => {
     const hollowKnight = makeGame('00000000-0000-4000-8000-000000000002', 'Hollow Knight');
     mockApi([hades, hollowKnight]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
     fireEvent.click(screen.getAllByRole('button', { name: '＋ Adicionar à fila' })[0]!);
     await screen.findByRole('button', { name: 'Na fila · Remover' });
     fireEvent.click(screen.getByRole('button', { name: /^Fila/ }));
     expect(await screen.findByRole('heading', { name: 'Fila de jogos' })).toBeInTheDocument();
     expect(screen.getByText('Hades')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jogos' }));
     fireEvent.click(screen.getByRole('button', { name: '＋ Adicionar à fila' }));
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Na fila · Remover' })).toHaveLength(2));
     fireEvent.click(screen.getByRole('button', { name: /^Fila/ }));
@@ -878,7 +878,7 @@ describe('library page', () => {
   it('reorders the queue by dragging an entry', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades'), makeGame('00000000-0000-4000-8000-000000000002', 'Hollow Knight')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
     fireEvent.click(screen.getAllByRole('button', { name: '＋ Adicionar à fila' })[0]!);
     await screen.findByRole('button', { name: 'Na fila · Remover' });
@@ -896,7 +896,7 @@ describe('library page', () => {
   it('filters library games and saves the weekly goal from the settings page', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING'), makeGame('00000000-0000-4000-8000-000000000002', 'Celeste')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
     fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar por status' }), { target: { value: 'PLAYING' } });
     expect(screen.getByRole('button', { name: 'Ver detalhes de Hades' })).toBeInTheDocument();
@@ -962,7 +962,7 @@ describe('offline session registration', () => {
   }
 
   async function openDetails() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
   }
 
@@ -1114,7 +1114,7 @@ describe('statistics and classification', () => {
   it('sends difficulty, type, completion condition, favorite and game of the year when saving a game', async () => {
     mockApi([]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Chrono Trigger' } });
     fireEvent.change(screen.getByLabelText('Dificuldade'), { target: { value: 'B' } });
@@ -1133,7 +1133,7 @@ describe('activity timeline', () => {
   it('groups events by day, shows session details and loads more', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Atividade' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sessões de jogo' }));
     expect(await screen.findByRole('heading', { name: 'Linha do tempo' })).toBeInTheDocument();
 
     expect(await screen.findByText(/Iniciou/)).toBeInTheDocument();
@@ -1149,7 +1149,7 @@ describe('activity timeline', () => {
   it('opens a game detail from the timeline', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Atividade' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sessões de jogo' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Hades' }));
     expect(await screen.findByRole('heading', { name: 'Hades' })).toBeInTheDocument();
   });
@@ -1161,14 +1161,14 @@ describe('activity timeline', () => {
       String(input).startsWith('/api/stats/timeline') ? new Response('{}', { status: 500 }) : base(input, init)
     ));
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Atividade' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sessões de jogo' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar a linha do tempo.');
   });
 });
 
 describe('library sorting and filters', () => {
   const cardTitles = () => screen.getAllByRole('button', { name: /^Ver detalhes de / }).map((button) => button.getAttribute('aria-label')?.replace('Ver detalhes de ', ''));
-  const openAdvancedFilters = () => fireEvent.click(screen.getByRole('button', { name: 'Mais filtros' }));
+  const openAdvancedFilters = () => fireEvent.click(screen.getByRole('button', { name: 'Filtrar' }));
 
   it('sorts by start date with undated games last', async () => {
     mockApi([
@@ -1177,7 +1177,7 @@ describe('library sorting and filters', () => {
       { ...makeGame('00000000-0000-4000-8000-000000000003', 'Começou em janeiro'), startedAt: '2026-01-01' },
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Sem data' });
     fireEvent.change(screen.getByLabelText('Ordenar jogos'), { target: { value: 'STARTED_DESC' } });
     await waitFor(() => expect(cardTitles()).toEqual(['Começou em março', 'Começou em janeiro', 'Sem data']));
@@ -1190,7 +1190,7 @@ describe('library sorting and filters', () => {
       { ...makeGame('00000000-0000-4000-8000-000000000003', 'Zerado em 2026', 'COMPLETED'), completedAt: '2026-02-20' },
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Nunca zerado' });
     fireEvent.change(screen.getByLabelText('Ordenar jogos'), { target: { value: 'COMPLETED_DESC' } });
     await waitFor(() => expect(cardTitles()).toEqual(['Zerado em 2026', 'Zerado em 2025', 'Nunca zerado']));
@@ -1201,7 +1201,7 @@ describe('library sorting and filters', () => {
     const outOfList = makeGame('00000000-0000-4000-8000-000000000002', 'Fora da lista');
     mockApi([inList, outOfList], [], [{ id: '00000000-0000-4000-8000-000000000070', name: 'Clássicos', gameIds: [inList.id] }]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Fora da lista' });
     openAdvancedFilters();
     fireEvent.change(await screen.findByLabelText('Filtrar por lista'), { target: { value: '00000000-0000-4000-8000-000000000070' } });
@@ -1214,7 +1214,7 @@ describe('library sorting and filters', () => {
       { ...makeGame('00000000-0000-4000-8000-000000000002', 'Zerado em 2026', 'COMPLETED'), completedAt: '2026-02-20' },
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Zerado em 2025' });
     openAdvancedFilters();
     fireEvent.change(screen.getByLabelText('Filtrar por ano de conclusão'), { target: { value: '2026' } });
@@ -1238,7 +1238,7 @@ describe('library sorting and filters', () => {
       makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Jogando agora' });
     fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
     await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
@@ -1257,7 +1257,7 @@ describe('library sorting and filters', () => {
   it('reports a duplicate list name without creating it', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')], [], [{ id: '00000000-0000-4000-8000-000000000070', name: 'Clássicos', gameIds: [] }]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
     openAdvancedFilters();
     fireEvent.click(screen.getByRole('button', { name: 'Criar lista com estes jogos' }));
@@ -1272,7 +1272,7 @@ describe('library sorting and filters', () => {
       makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Jogando agora' });
 
     fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
@@ -1298,13 +1298,13 @@ describe('library sorting and filters', () => {
     await waitFor(() => expect(screen.queryByRole('option', { name: 'Em andamento' })).not.toBeInTheDocument());
   });
 
-  it('reapplies a saved view from the sidebar', async () => {
+  it('reapplies a saved view from the profile tabs', async () => {
     mockApi([
       makeGame('00000000-0000-4000-8000-000000000001', 'Jogando agora', 'PLAYING'),
       makeGame('00000000-0000-4000-8000-000000000002', 'Só no backlog'),
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Só no backlog' });
 
     fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'PLAYING' } });
@@ -1312,19 +1312,19 @@ describe('library sorting and filters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));
     fireEvent.change(screen.getByLabelText('Nome do filtro salvo'), { target: { value: 'Em andamento' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro' }));
-    const sidebarView = await screen.findByRole('button', { name: 'Abrir view Em andamento' });
+    const viewChip = await screen.findByRole('button', { name: 'Abrir view Em andamento' });
 
     fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'ALL' } });
     await waitFor(() => expect(cardTitles()).toHaveLength(2));
 
-    fireEvent.click(sidebarView);
+    fireEvent.click(viewChip);
     await waitFor(() => expect(cardTitles()).toEqual(['Jogando agora']));
   });
 
   it('reports a duplicate saved filter name', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Biblioteca' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     await screen.findByRole('button', { name: 'Ver detalhes de Hades' });
     openAdvancedFilters();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar filtro atual' }));

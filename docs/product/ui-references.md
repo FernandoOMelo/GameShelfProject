@@ -278,6 +278,17 @@ As quatro fases foram executadas (decisão registrada em
 Pendências conscientes: componente de chart único (gráficos seguem artesanais em
 CSS) e adoção efetiva do shadcn/ui/Radix (ex.: Dialog com focus trap nativo).
 
+**Referência Trophies Hunter — casca (2026):** adotada conforme a
+[ADR-032](../decisions/ADR-032-trophies-hunter-inspired-shell.md). A sidebar da
+Fase B foi substituída por topnav fixa + abas do perfil (sem drawer mobile), o
+acento dourado virou azul e a serifa saiu dos títulos. A biblioteca ganhou
+cards largos (2 colunas, capa quadrada), as views salvas viraram chips na barra
+de abas, e uma nova aba `Plataformas`
+(`/plataformas`) mostra o resumo por plataforma dos sumários da
+[ADR-031](../decisions/ADR-031-platform-catalog-and-summaries.md). Dados sociais
+da referência (pontuações, seguidores) continuam fora de escopo, e progresso só
+aparece quando existe dado real.
+
 ## O que evitar
 
 - Efeitos de "vitrine" (glassmorphism pesado, AR, animações longas) que

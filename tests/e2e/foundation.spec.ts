@@ -46,7 +46,7 @@ test('adds a game to the queue and opens the weekly planning dashboard', async (
     return route.fulfill({ json: [] });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Biblioteca', exact: true }).click();
+  await page.getByRole('button', { name: 'Jogos', exact: true }).click();
   await page.getByRole('button', { name: '＋ Adicionar à fila' }).click();
   await expect(page.getByRole('button', { name: 'Na fila · Remover' })).toBeVisible();
   await page.getByRole('button', { name: 'Fila', exact: true }).click();

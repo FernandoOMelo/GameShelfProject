@@ -39,9 +39,14 @@ Cada tela de topo e o detalhe de um jogo têm URL própria (ADR-021). Isso permi
 compartilhar o link, recarregar a página na mesma tela e usar o botão voltar do
 navegador — no PWA instalado, ele fecha o detalhe em vez de sair do app.
 
-Caminhos: `/painel`, `/biblioteca`, `/fila`, `/listas`, `/estatisticas`,
-`/atividade`, `/configuracoes` e `/jogos/:id`. Caminhos desconhecidos caem no
-painel.
+Caminhos: `/painel`, `/biblioteca`, `/fila`, `/listas`, `/plataformas`,
+`/estatisticas`, `/atividade`, `/configuracoes` e `/jogos/:id`. Caminhos
+desconhecidos caem no painel.
+
+A casca (ADR-032) é uma topnav fixa (marca, busca, `Painel`, `Configurações`,
+selo `LOCAL`) mais a barra de abas do perfil — `Jogos`, `Fila`, `Coleções`,
+`Sessões de jogo`, `Plataformas`, `Estatísticas` —, que fica visível em todas
+as telas, inclusive no painel e nas configurações.
 
 ## Configurações
 

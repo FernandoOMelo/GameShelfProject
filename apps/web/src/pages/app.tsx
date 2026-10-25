@@ -1,9 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
 import { PlatformIcon } from './platform-icons';
+import { ProfileHeader, ProfileTabs } from './profile-nav';
 import { readRoute, routePath, type AppView } from '../router';
 import { DashboardView, type LibraryFilter } from './dashboard-view';
 import { enqueueFailureMessage, OfflineBanner, useOfflineSessions } from './offline-banner';
@@ -18,6 +19,9 @@ const GameJourneyPanel = lazy(async () => ({ default: (await import('./game-jour
 const StatsView = lazy(async () => ({ default: (await import('./stats-view')).StatsView }));
 const TimelineView = lazy(async () => ({ default: (await import('./timeline-view')).TimelineView }));
 const SettingsView = lazy(async () => ({ default: (await import('./settings-view')).SettingsView }));
+const PlatformsView = lazy(async () => ({ default: (await import('./platforms-view')).PlatformsView }));
+/** Views que fazem parte do "perfil": recebem o resumo e a barra de abas. */
+const profileViews: AppView[] = ['library', 'queue', 'lists', 'platforms', 'stats', 'timeline'];
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
 const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente' };
@@ -149,11 +153,11 @@ export function App() {
   const [pendingGameId, setPendingGameId] = useState<string | null>(initialRoute.gameId);
   const [showArchived, setShowArchived] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
-  // Preferências visuais do shell ficam no navegador (não são dados de domínio).
-  const [navCollapsed, setNavCollapsed] = useState(() => { try { return window.localStorage.getItem('gameshelf-nav-collapsed') === '1'; } catch { return false; } });
   const [density, setDensity] = useState<'comfortable' | 'compact' | 'list'>(() => { try { const stored = window.localStorage.getItem('gameshelf-library-density'); return stored === 'compact' || stored === 'list' ? stored : 'comfortable'; } catch { return 'comfortable'; } });
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  // Resumos de plataforma alimentam o cabeçalho de perfil (conquistas) e a aba
+  // Plataformas; a mesma rota já era usada por Estatísticas.
+  const [platformSummaries, setPlatformSummaries] = useState<PlatformSummary[]>([]);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [previousPeriodStats, setPreviousPeriodStats] = useState<DashboardResponse['periodStats'] | null>(null);
   const [dashboardPeriod, setDashboardPeriod] = useState<DashboardPeriod>(initialDashboardPeriod);
@@ -238,6 +242,16 @@ export function App() {
   useEffect(() => { void loadGames(); }, []);
   useEffect(() => { void loadLists(); }, []);
   useEffect(() => { void loadSavedFilters(); }, []);
+  // Sumários de plataforma: usados no cabeçalho de perfil (conquistas) e na aba
+  // Plataformas. Falha aqui não pode derrubar a tela — o bloco apenas some.
+  useEffect(() => {
+    let active = true;
+    void fetch(`${apiUrl}/platforms/summaries`)
+      .then((response) => response.ok ? response.json() as Promise<PlatformSummary[]> : Promise.reject(new Error('Falha ao carregar plataformas')))
+      .then((body) => { if (active && Array.isArray(body)) setPlatformSummaries(body); })
+      .catch(() => { if (active) setPlatformSummaries([]); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     if (listFilter === 'ALL') { setListGameIds(null); return; }
     void fetch(`${apiUrl}/lists/${listFilter}`).then(async (response) => {
@@ -999,9 +1013,6 @@ export function App() {
     setEditingSession(finished);
   }
 
-  const viewTitles: Record<AppView, string> = { library: 'Biblioteca', queue: 'Fila', lists: 'Listas', dashboard: 'Painel', stats: 'Estatísticas', timeline: 'Atividade', settings: 'Configurações' };
-  const topbarTitle = selectedGame ? selectedGame.title : viewTitles[activeView];
-
   /** Muda de view empilhando (ou substituindo) a URL, e fecha o detalhe. */
   function navigate(view: AppView, replace = false) {
     const path = routePath({ view, gameId: null });
@@ -1030,42 +1041,90 @@ export function App() {
     window.history.replaceState(null, '', routePath({ view: activeView, gameId: null }));
   }
 
-  function goTo(view: AppView) { navigate(view); setNavOpen(false); }
-  function toggleNavCollapsed() { setNavCollapsed((value) => { const next = !value; try { window.localStorage.setItem('gameshelf-nav-collapsed', next ? '1' : '0'); } catch { /* Storage pode estar indisponível. */ } return next; }); }
+  function goTo(view: AppView) { navigate(view); }
   function changeDensity(value: 'comfortable' | 'compact' | 'list') { setDensity(value); try { window.localStorage.setItem('gameshelf-library-density', value); } catch { /* Storage pode estar indisponível. */ } }
 
+  /**
+   * Progresso do card só aparece quando é um fato conhecido: jogo zerado
+   * (100%), jogo em andamento com progresso registrado na sessão/painel, ou
+   * jogo ainda não iniciado (0%). Para o resto omitimos a barra em vez de
+   * inventar um número.
+   */
+  function cardProgress(game: Game): number | null {
+    if (game.status === 'COMPLETED') return 100;
+    if (game.status === 'DESIRED' || game.status === 'BACKLOG') return 0;
+    return dashboard?.playingGames.find((item) => item.game.id === game.id)?.progress ?? null;
+  }
+
   return (
-    <div className={`app-shell${navCollapsed ? ' is-collapsed' : ''}${navOpen ? ' is-open' : ''}`}>
-      <aside id="app-sidebar" className="app-sidebar" aria-label="Navegação principal">
-        <div className="app-sidebar-head">
-          <a className="brand" href="/painel" aria-label="GameShelf início" onClick={(event) => { event.preventDefault(); goTo('dashboard'); }}><span className="brand-mark">G</span><span className="brand-name">Game<span className="brand-accent">Shelf</span></span></a>
-          <button type="button" className="sidebar-collapse" aria-label={navCollapsed ? 'Expandir menu' : 'Recolher menu'} aria-pressed={navCollapsed} onClick={toggleNavCollapsed}>‹</button>
-        </div>
-        <nav className="app-nav" aria-label="Seções">
-          <p className="app-nav-group">Coleção</p>
-          <button type="button" className="app-nav-item" aria-label="Biblioteca" aria-current={!selectedGame && activeView === 'library' ? 'page' : undefined} onClick={() => goTo('library')}><span className="app-nav-icon" aria-hidden="true">▦</span><span className="app-nav-label">Biblioteca</span></button>
-          <button type="button" className="app-nav-item" aria-label="Fila" aria-current={!selectedGame && activeView === 'queue' ? 'page' : undefined} onClick={() => goTo('queue')}><span className="app-nav-icon" aria-hidden="true">≣</span><span className="app-nav-label">Fila</span><span className="app-nav-badge" aria-hidden="true">{queue.length}</span></button>
-          <button type="button" className="app-nav-item" aria-label="Listas" aria-current={!selectedGame && activeView === 'lists' ? 'page' : undefined} onClick={() => goTo('lists')}><span className="app-nav-icon" aria-hidden="true">❐</span><span className="app-nav-label">Listas</span></button>
-          <p className="app-nav-group">Análise</p>
-          <button type="button" className="app-nav-item" aria-label="Painel" aria-current={!selectedGame && activeView === 'dashboard' ? 'page' : undefined} onClick={() => goTo('dashboard')}><span className="app-nav-icon" aria-hidden="true">◫</span><span className="app-nav-label">Painel</span></button>
-          <button type="button" className="app-nav-item" aria-label="Estatísticas" aria-current={!selectedGame && activeView === 'stats' ? 'page' : undefined} onClick={() => goTo('stats')}><span className="app-nav-icon" aria-hidden="true">∿</span><span className="app-nav-label">Estatísticas</span></button>
-          <button type="button" className="app-nav-item" aria-label="Atividade" aria-current={!selectedGame && activeView === 'timeline' ? 'page' : undefined} onClick={() => goTo('timeline')}><span className="app-nav-icon" aria-hidden="true">◔</span><span className="app-nav-label">Atividade</span></button>
-          <p className="app-nav-group">Sistema</p>
-          <button type="button" className="app-nav-item" aria-label="Configurações" aria-current={!selectedGame && activeView === 'settings' ? 'page' : undefined} onClick={() => goTo('settings')}><span className="app-nav-icon" aria-hidden="true">⚙</span><span className="app-nav-label">Configurações</span></button>
+    <div className="app-shell">
+      <header className="topnav">
+        <a className="topnav-brand" href="#/painel" onClick={(event) => { event.preventDefault(); goTo('dashboard'); }}>
+          <span className="topnav-mark" aria-hidden="true">GS</span>
+          <span className="topnav-name">GameShelf</span>
+        </a>
+        <form className="topnav-search" role="search" onSubmit={(event) => event.preventDefault()}>
+          <label className="sr-only" htmlFor="topnav-search-input">Buscar jogos</label>
+          <span className="topnav-search-icon" aria-hidden="true">⌕</span>
+          <input id="topnav-search-input" type="search" placeholder="Buscar por título, nota ou status…" value={query} onChange={(event) => setQuery(event.target.value)} />
+        </form>
+        <nav className="topnav-links" aria-label="Navegação principal">
+          <button type="button" className="topnav-link" aria-current={!selectedGame && activeView === 'dashboard' ? 'page' : undefined} onClick={() => goTo('dashboard')}>Painel</button>
+          <button type="button" className="topnav-link" aria-current={!selectedGame && activeView === 'settings' ? 'page' : undefined} onClick={() => goTo('settings')}>Configurações</button>
         </nav>
-        {savedFilters.length > 0 && <nav className="app-nav app-nav-views" aria-label="Views salvas">
-          <p className="app-nav-group">Views salvas</p>
-          {savedFilters.map((filter) => <button key={filter.id} type="button" className="app-nav-item" aria-label={`Abrir view ${filter.name}`} aria-current={!selectedGame && activeView === 'library' && activeSavedFilter === filter.id ? 'page' : undefined} onClick={() => { navigate('library'); applySavedFilter(filter.id); setNavOpen(false); }}><span className="app-nav-icon" aria-hidden="true">★</span><span className="app-nav-label">{filter.name}</span></button>)}
-        </nav>}
-        <div className="app-sidebar-foot"><span className="local-badge"><span /> LOCAL</span></div>
-      </aside>
+        <div className="topnav-meta">
+          <span className="local-badge"><span /> LOCAL</span>
+          <span className="topnav-avatar" aria-label="Usuário local">FS</span>
+        </div>
+      </header>
       <div className="app-content">
-        <header className="app-topbar">
-          <button type="button" className="nav-toggle" aria-label="Abrir menu de navegação" aria-expanded={navOpen} aria-controls="app-sidebar" onClick={() => setNavOpen((value) => !value)}>☰</button>
-          <span className="app-topbar-title">{topbarTitle}</span>
-        </header>
         <main className="library-shell">
           <OfflineBanner pending={offline.pending} online={offline.online} notice={offline.notice} onFinishOpen={offline.finishOpen} onDiscard={offline.discard} onRetry={() => void offline.flush()} />
+          {!selectedGame && (
+            <>
+              {profileViews.includes(activeView) && (
+                <ProfileHeader
+                  gameCount={dashboard?.gameCount ?? games.length}
+                  playingCount={games.filter((game) => game.status === 'PLAYING').length}
+                  completedCount={dashboard?.completedCount ?? games.filter((game) => game.status === 'COMPLETED').length}
+                  abandonedCount={games.filter((game) => game.status === 'ABANDONED').length}
+                  totalPlayedHours={dashboard?.totalPlayedHours ?? 0}
+                  weeklyHours={dashboard?.weeklyHours ?? 0}
+                  achievements={platformSummaries.length > 0
+                    ? {
+                        unlocked: platformSummaries.reduce((total, item) => total + item.achievementsUnlocked, 0),
+                        total: platformSummaries.reduce((total, item) => total + item.achievementsTotal, 0),
+                      }
+                    : null}
+                />
+              )}
+              <ProfileTabs activeView={activeView} queueCount={queue.length} onSelect={goTo}>
+                {activeView === 'library' && (
+                  <>
+                    {savedFilters.map((filter) => (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        className={`view-chip${activeSavedFilter === filter.id ? ' is-active' : ''}`}
+                        aria-label={`Abrir view ${filter.name}`}
+                        aria-pressed={activeSavedFilter === filter.id}
+                        onClick={() => applySavedFilter(filter.id)}
+                      >
+                        <span aria-hidden="true">★</span>
+                        {filter.name}
+                      </button>
+                    ))}
+                    <div className="density-toggle" role="group" aria-label="Densidade da listagem">
+                      <button type="button" aria-label="Visualizar em grade" aria-pressed={density === 'comfortable'} onClick={() => changeDensity('comfortable')}>▦</button>
+                      <button type="button" aria-label="Visualizar em grade compacta" aria-pressed={density === 'compact'} onClick={() => changeDensity('compact')}>▥</button>
+                      <button type="button" aria-label="Visualizar em lista" aria-pressed={density === 'list'} onClick={() => changeDensity('list')}>☰</button>
+                    </div>
+                    <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>
+                  </>
+                )}
+              </ProfileTabs>
+            </>
+          )}
       {selectedGame ? <section className="details-page" aria-labelledby="details-title">
         <button className="back-link" type="button" onClick={closeDetails}>← Voltar</button>
         <div className="details-navigation"><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) <= 0} onClick={() => navigateDetails(-1)}>← Jogo anterior</Button><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) < 0 || visibleGames.findIndex((game) => game.id === selectedGame.id) >= visibleGames.length - 1} onClick={() => navigateDetails(1)}>Próximo jogo →</Button></div>
@@ -1140,24 +1199,14 @@ export function App() {
           </div>
           <aside className="details-rail" aria-label="Ações do jogo"><p className="eyebrow">AÇÕES</p><div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div></aside>
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onPlatformsChanged={() => void reloadPlatforms()} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : <>
-      <section className="library-heading">
-        <div><p className="eyebrow">SUA COLEÇÃO</p><h1>Biblioteca</h1><p className="library-subtitle">Seus jogos, reunidos em um só lugar.</p></div>
-        <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>
-      </section>
+      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onPlatformsChanged={() => void reloadPlatforms()} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : activeView === 'platforms' ? <ErrorBoundary title="Não foi possível abrir as plataformas"><Suspense fallback={<LoadingState>Carregando plataformas…</LoadingState>}><PlatformsView platforms={platforms} summaries={platformSummaries} games={games} onGoToSettings={() => goTo('settings')} /></Suspense></ErrorBoundary> : <>
       <section className="library-tools" aria-label="Ferramentas da biblioteca">
-        <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="Buscar jogos" placeholder="Buscar na biblioteca" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         <label className="filter-field">Status<select aria-label="Filtrar por status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Game['status'] | 'ALL')}><option value="ALL">Todos</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label>
         <label className="filter-field">Prioridade<select aria-label="Filtrar por prioridade" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Game['priority'] | 'ALL')}><option value="ALL">Todas</option>{priorities.map((priority) => <option key={priority} value={priority}>{priority === 'LOW' ? 'Baixa' : priority === 'HIGH' ? 'Alta' : 'Normal'}</option>)}</select></label>
         <div className="filter-field"><span>Ordenar por</span><select aria-label="Ordenar jogos" value={sortBy} onChange={(event) => setSortBy(event.target.value as LibrarySort)}>{(Object.keys(sortLabels) as LibrarySort[]).map((option) => <option key={option} value={option}>{sortLabels[option]}</option>)}</select></div>
-        <span className="game-count">{games.length} {games.length === 1 ? 'jogo' : 'jogos'}</span>
-        <div className="density-toggle" role="group" aria-label="Densidade da listagem">
-          <button type="button" aria-label="Visualizar em grade" aria-pressed={density === 'comfortable'} onClick={() => changeDensity('comfortable')}>▦</button>
-          <button type="button" aria-label="Visualizar em grade compacta" aria-pressed={density === 'compact'} onClick={() => changeDensity('compact')}>▥</button>
-          <button type="button" aria-label="Visualizar em lista" aria-pressed={density === 'list'} onClick={() => changeDensity('list')}>☰</button>
-        </div>
+        <span className="game-count">{visibleGames.length} {visibleGames.length === 1 ? 'jogo' : 'jogos'}</span>
         <button type="button" className="session-edit" aria-pressed={showArchived} onClick={() => setShowArchived((value) => !value)}>{showArchived ? 'Ver biblioteca' : 'Ver arquivados'}</button>
-        <button type="button" className="session-edit filter-toggle" aria-expanded={showMoreFilters} aria-controls="library-advanced-filters" onClick={() => setShowMoreFilters((value) => !value)}>{showMoreFilters ? 'Menos filtros' : 'Mais filtros'}</button>
+        <button type="button" className="session-edit filter-toggle" aria-expanded={showMoreFilters} aria-controls="library-advanced-filters" onClick={() => setShowMoreFilters((value) => !value)}>{showMoreFilters ? 'Menos filtros' : 'Filtrar'}</button>
         <div id="library-advanced-filters" className={`filter-advanced${showMoreFilters ? ' is-open' : ''}`}>
         <div className="filter-field"><span>Plataforma</span><select aria-label="Agrupar por plataforma" value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="ALL">Todas</option>{platforms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className="filter-field"><span>Gênero</span><select aria-label="Agrupar por gênero" value={genreFilter} onChange={(event) => setGenreFilter(event.target.value)}><option value="ALL">Todos</option>{genres.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
@@ -1182,8 +1231,11 @@ export function App() {
       ) : (
         <section className={`game-grid density-${density}`} aria-label="Jogos da biblioteca">{visibleGames.map((game) => <div className="game-card-wrap" key={game.id}><button className="game-card" type="button" onClick={() => showDetails(game)} aria-label={`Ver detalhes de ${game.title}`}>
           <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span>{game.gameOfYear && <span className="cover-badge cover-goty" aria-label="Jogo do ano" title="Jogo do ano">★</span>}{game.favorite && !game.gameOfYear && <span className="cover-badge cover-fav" aria-label="Favorito" title="Favorito">♥</span>}</span>
-          <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
-          {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name}><PlatformIcon iconKey={platform.iconKey} />{badge.label}</span>; })}</span>}
+          <span className="game-card-body">
+            <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
+            {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name}><PlatformIcon iconKey={platform.iconKey} />{badge.label}</span>; })}</span>}
+            {(() => { const progress = cardProgress(game); if (progress === null) return null; return <span className="game-card-progress"><span className="game-card-progress-track" aria-hidden="true"><span className="game-card-progress-fill" style={{ width: `${progress}%` }} /></span><span className="game-card-progress-value">{progress}%</span></span>; })()}
+          </span>
         </button><button type="button" className="game-card-quick" aria-label={`Editar ${game.title}`} onClick={() => openEditor(game)}><span aria-hidden="true">✎</span></button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
       )}
       </>}
@@ -1215,7 +1267,6 @@ export function App() {
         <ConfirmDialog open={pendingDelete !== null} title={pendingDelete?.title ?? ''} description={pendingDelete?.description} confirmLabel={pendingDelete?.confirmLabel} tone="danger" busy={deleting} onCancel={() => setPendingDelete(null)} onConfirm={() => void confirmPendingDelete()} />
         </main>
       </div>
-            {navOpen && <button type="button" className="nav-scrim" aria-label="Fechar menu de navegação" onClick={() => setNavOpen(false)} />}
     </div>
   );
 }

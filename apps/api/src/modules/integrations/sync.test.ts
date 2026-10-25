@@ -283,12 +283,6 @@ function provider(
   return { source: 'achievist', fetchLibrary: async () => entries, fetchAchievements: async (externalGameId) => achievements(externalGameId) };
 }
 
-const achievement = (overrides: Partial<ExternalAchievementEntry> = {}): ExternalAchievementEntry => ({
-  externalId: 'ACH_1', name: 'Primeira vitória', description: null, iconUrl: null,
-  points: 10, rarityPercent: 42.5, unlocked: true, unlockedAt: new Date('2026-05-01T18:00:00.000Z'),
-  ...overrides,
-});
-
 function setup(options: {
   entries?: ExternalLibraryEntry[];
   provider?: ExternalLibraryProvider;
