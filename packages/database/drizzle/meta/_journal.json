@@ -162,6 +162,13 @@
             "when": 1792886400000,
             "tag": "0023_external_playtime_imports",
             "breakpoints": true
+        },
+        {
+            "idx": 23,
+            "version": "7",
+            "when": 1761321600000,
+            "tag": "0024_platform_catalog_keys",
+            "breakpoints": true
         }
     ]
 }

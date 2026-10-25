@@ -14,6 +14,11 @@ export const franchises = pgTable('franchises', {
 export const platforms = pgTable('platforms', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull().unique(),
+  // Chaves de apresentação não participam das regras de associação (ADR-031).
+  // Permitem que o catálogo padrão use ícones estáveis sem impedir nomes
+  // personalizados criados pelo usuário.
+  catalogKey: text('catalog_key'),
+  iconKey: text('icon_key'),
   parentId: uuid('parent_id').references((): AnyPgColumn => platforms.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

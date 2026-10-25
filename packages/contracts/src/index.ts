@@ -38,6 +38,8 @@ export const platformUpdateSchema = z.object({
 export const platformSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  catalogKey: z.string().nullable().optional(),
+  iconKey: z.string().nullable().optional(),
   parentId: z.string().uuid().nullable().default(null),
 }).strict();
 export type PlatformInput = z.infer<typeof platformInputSchema>;
@@ -46,6 +48,21 @@ export const genreInputSchema = franchiseInputSchema;
 export const genreSchema = franchiseSchema;
 export type Platform = z.infer<typeof platformSchema>;
 export type Genre = z.infer<typeof genreSchema>;
+
+/** Resumo de leitura para a área de plataformas; não altera o ciclo de vida do jogo. */
+export const platformSummarySchema = z.object({
+  platform: platformSchema,
+  gameCount: z.number().int().nonnegative(),
+  completedCount: z.number().int().nonnegative(),
+  dominatedCount: z.number().int().nonnegative(),
+  localPlayedMinutes: z.number().int().nonnegative(),
+  externalPlayedMinutes: z.number().int().nonnegative(),
+  achievementsUnlocked: z.number().int().nonnegative(),
+  achievementsTotal: z.number().int().nonnegative(),
+  recentGameCovers: z.array(z.string().nullable()).max(4),
+}).strict();
+export const platformSummariesSchema = z.array(platformSummarySchema);
+export type PlatformSummary = z.infer<typeof platformSummarySchema>;
 
 const optionalText = z.string().trim().max(10000).nullable().optional();
 const mediaUrl = z.string().max(2048).refine((value) => {

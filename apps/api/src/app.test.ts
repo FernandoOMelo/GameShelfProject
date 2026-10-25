@@ -84,6 +84,7 @@ function createPlatformRepository(options: { gameLinks?: Record<string, number> 
       catalog.splice(index, 1);
       return true;
     },
+    listSummaries: async () => [],
   };
 }
 

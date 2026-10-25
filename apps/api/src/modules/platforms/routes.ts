@@ -1,13 +1,19 @@
 import type { FastifyInstance } from 'fastify';
-import { platformInputSchema, platformSchema, platformUpdateSchema } from '@gameshelf/contracts';
+import { platformInputSchema, platformSchema, platformSummariesSchema, platformUpdateSchema } from '@gameshelf/contracts';
 import type { PlatformRepository } from './repository.js';
 import { parseId } from '../shared/parse-id.js';
 import { checkParent, checkRemovable } from './service.js';
+import { platformPresentation } from './catalog.js';
 
 export async function registerPlatformRoutes(app: FastifyInstance, repository: PlatformRepository) {
   app.get('/platforms', async (_request, reply) => {
     const platforms = await repository.list();
     return reply.send(platforms.map((platform) => platformSchema.parse(platform)));
+  });
+
+  app.get('/platforms/summaries', async (_request, reply) => {
+    const summaries = await repository.listSummaries();
+    return reply.send(platformSummariesSchema.parse(summaries));
   });
 
   app.post('/platforms', async (request, reply) => {
@@ -20,7 +26,7 @@ export async function registerPlatformRoutes(app: FastifyInstance, repository: P
         if (!parent) return reply.code(400).send({ error: 'Grupo não encontrado.' });
         if (parent.parentId !== null) return reply.code(400).send({ error: 'O grupo escolhido já pertence a outro grupo: o catálogo tem apenas dois níveis.' });
       }
-      return reply.code(201).send(platformSchema.parse(await repository.create(parsed.data.name, parsed.data.parentId ?? null)));
+      return reply.code(201).send(platformSchema.parse(await repository.create(parsed.data.name, parsed.data.parentId ?? null, platformPresentation(parsed.data.name))));
     } catch (error) {
       if (isUniqueViolation(error)) return reply.code(409).send({ error: 'Já existe uma plataforma com esse nome.' });
       throw error;

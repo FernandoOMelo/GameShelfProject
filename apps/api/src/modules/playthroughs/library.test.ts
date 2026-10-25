@@ -39,6 +39,7 @@ const platformRepository: PlatformRepository = {
   setParent: async (platformId, parentId) => ({ id: platformId, name: 'PC', parentId }),
   countGameLinks: async () => 0,
   remove: async () => false,
+  listSummaries: async () => [],
 };
 
 // Tempo que a fonte externa informa para uma associação, por id. Um teste o

@@ -103,7 +103,7 @@ describe('backup API', () => {
       franchiseRepository: { list: async () => [{ id: id(1), name: 'Supergiant' }], create: async () => ({ id: id(1), name: 'Supergiant' }) },
       platformRepository: {
         list: async () => [{ id: id(2), name: 'PC', parentId: null }], create: async () => ({ id: id(2), name: 'PC', parentId: null }),
-        rename: async () => undefined, setParent: async () => undefined, countGameLinks: async () => 0, remove: async () => false,
+        rename: async () => undefined, setParent: async () => undefined, countGameLinks: async () => 0, remove: async () => false, listSummaries: async () => [],
       },
       genreRepository: { list: async () => [{ id: id(3), name: 'Roguelike' }], create: async () => ({ id: id(3), name: 'Roguelike' }) },
       sessionRepository: {

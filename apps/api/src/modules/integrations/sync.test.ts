@@ -72,6 +72,7 @@ function platformRepository(initial: Platform[] = [{ id: STEAM, name: 'Steam', p
     rename: async () => undefined,
     countGameLinks: async () => 0,
     remove: async () => false,
+    listSummaries: async () => [],
   };
 }
 
