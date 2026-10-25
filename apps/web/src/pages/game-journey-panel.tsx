@@ -30,19 +30,23 @@ function AchievementList({ data }: { data: ExternalAchievementsResponse }) {
   if (data.total === 0) {
     return <p className="session-empty">A fonte não informa conquistas para este jogo.</p>;
   }
+  const pct = Math.round((data.unlockedCount / data.total) * 100);
   return <div className="achievement-panel">
-    <p className="session-journal-entry">
-      {data.unlockedCount} de {data.total} desbloqueadas
-      {data.points > 0 && ` · ${data.points} pontos`}
-      {data.refreshedAt === null && ' · fonte indisponível, mostrando o último dado guardado'}
-    </p>
-    <ul className="session-list">{data.achievements.map((achievement) => <li key={achievement.id}>
-      <div>
-        <strong>{achievement.unlocked ? '★' : '☆'} {achievement.name}</strong>
-        <span>{achievement.rarityPercent === null ? '' : `${achievement.rarityPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</span>
+    <div className="achievement-summary">
+      <span className="achievement-count">{data.unlockedCount}<small>/{data.total}</small></span>
+      <div className="achievement-progress-wrap"><div className="achievement-progress-bar" style={{ width: `${pct}%` }} /></div>
+      <span className="achievement-pct">{pct}%</span>
+      {data.points > 0 && <span className="achievement-points">{data.points} pts</span>}
+    </div>
+    {data.refreshedAt === null && <p className="session-feedback">Fonte indisponível — exibindo o último dado guardado.</p>}
+    <ul className="achievement-list">{data.achievements.map((achievement) => <li key={achievement.id} className={achievement.unlocked ? 'achievement-unlocked' : 'achievement-locked'}>
+      <span className="achievement-icon" aria-hidden="true">{achievement.unlocked ? '★' : '○'}</span>
+      <div className="achievement-body">
+        <strong>{achievement.name}</strong>
+        {achievement.description && <p>{achievement.description}</p>}
+        {achievement.unlockedAt && <small>Desbloqueada em {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(achievement.unlockedAt))}</small>}
       </div>
-      {achievement.description && <p>{achievement.description}</p>}
-      {achievement.unlockedAt && <p>Desbloqueada em {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(achievement.unlockedAt))}</p>}
+      {achievement.rarityPercent !== null && <span className="achievement-rarity">{achievement.rarityPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}
     </li>)}</ul>
   </div>;
 }

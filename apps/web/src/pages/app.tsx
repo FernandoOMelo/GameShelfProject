@@ -1079,12 +1079,29 @@ export function App() {
             <div className="details-badges"><span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
             {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
             {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
-            <section className="details-section"><h2>Minha jornada</h2><p>Plataforma: {(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); return p ? <><PlatformIcon iconKey={p.iconKey} /> {p.name}</> : 'Não selecionada'; })()}</p><p>{selectedGame.owned ? 'Possuo este jogo' : 'Não possuo este jogo'} · {statusLabels[selectedGame.status]}</p>{selectedGame.startedAt && <p>Início: {formatDateOnly(selectedGame.startedAt)}</p>}{selectedGame.completedAt && <p>Conclusão: {formatDateOnly(selectedGame.completedAt)}</p>}{selectedGame.gameType && <p>Tipo: {selectedGame.gameType}</p>}{selectedGame.completionCondition && <p>Condição de zeramento: {selectedGame.completionCondition}</p>}<p className="genre-summary">Gêneros: {selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || 'Não informados'}</p></section>
-            <section className="details-section"><h2>Estimativas de duração</h2><dl className="estimate-list">
-              <div><dt>História principal</dt><dd>{formatHours(selectedGame.estimatedMainHours)}</dd></div>
-              <div><dt>Completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}</dd></div>
-              <div><dt>Pessoal</dt><dd>{formatHours(selectedGame.personalEstimatedHours)}</dd></div>
+            <section className="details-section"><h2>Minha jornada</h2><dl className="journey-meta-grid">
+              <div><dt>Plataforma</dt><dd>{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); return p ? <><PlatformIcon iconKey={p.iconKey} /> {p.name}</> : <span className="meta-empty">Não selecionada</span>; })()}</dd></div>
+              <div><dt>Posse</dt><dd>{selectedGame.owned ? 'Possuo' : 'Não possuo'}</dd></div>
+              {selectedGame.startedAt && <div><dt>Início</dt><dd>{formatDateOnly(selectedGame.startedAt)}</dd></div>}
+              {selectedGame.completedAt && <div><dt>Conclusão</dt><dd>{formatDateOnly(selectedGame.completedAt)}</dd></div>}
+              {selectedGame.gameType && <div><dt>Tipo</dt><dd>{selectedGame.gameType}</dd></div>}
+              {selectedGame.completionCondition && <div><dt>Condição de zeramento</dt><dd>{selectedGame.completionCondition}</dd></div>}
+              <div className="journey-meta-wide"><dt>Gêneros</dt><dd>{selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || <span className="meta-empty">Não informados</span>}</dd></div>
             </dl></section>
+            {(() => {
+              const playedMinutes = sessions.reduce((total, s) => total + (s.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60);
+              const playedHours = playedMinutes / 60;
+              const makeBar = (estimateHours: number | null) => {
+                if (!estimateHours || playedHours === 0) return null;
+                const pct = Math.min(100, Math.round((playedHours / estimateHours) * 100));
+                return <div className="estimate-progress" title={`${pct}% da estimativa`}><div className="estimate-progress-fill" style={{ width: `${pct}%` }} /><span>{pct}%</span></div>;
+              };
+              return <section className="details-section"><h2>Estimativas de duração</h2><dl className="estimate-list">
+                <div><dt>História principal</dt><dd>{formatHours(selectedGame.estimatedMainHours)}{makeBar(selectedGame.estimatedMainHours)}</dd></div>
+                <div><dt>Completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}{makeBar(selectedGame.estimatedCompletionistHours)}</dd></div>
+                <div><dt>Pessoal</dt><dd>{formatHours(selectedGame.personalEstimatedHours)}{makeBar(selectedGame.personalEstimatedHours)}</dd></div>
+              </dl></section>;
+            })()}
             <Suspense fallback={<section className="details-section"><p className="session-empty">Carregando plataformas e jornadas…</p></section>}>
               <GameJourneyPanel
                 gameId={selectedGame.id}
