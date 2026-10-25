@@ -3,6 +3,7 @@ import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListS
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
+import { PlatformIcon } from './platform-icons';
 import { readRoute, routePath, type AppView } from '../router';
 import { DashboardView, type LibraryFilter } from './dashboard-view';
 import { enqueueFailureMessage, OfflineBanner, useOfflineSessions } from './offline-banner';
@@ -20,16 +21,29 @@ const SettingsView = lazy(async () => ({ default: (await import('./settings-view
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
 const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente' };
-function platformBadge(name: string): { label: string; icon: string; className: string } {
-  const normalized = name.toLocaleLowerCase('pt-BR');
-  if (normalized.includes('playstation') || normalized.includes('ps4') || normalized.includes('ps5') || normalized === 'ps vita') {
-    const generation = normalized.includes('5') ? 'PS5' : normalized.includes('4') ? 'PS4' : normalized.includes('vita') ? 'Vita' : 'PS';
-    return { label: generation, icon: '♧', className: 'platform-playstation' };
+function platformBadge(platform: Platform): { label: string; className: string } {
+  const iconKey = platform.iconKey ?? null;
+  const name = platform.name;
+  if (iconKey === 'playstation') {
+    const n = name.toLocaleLowerCase('pt-BR');
+    const label = n.includes('5') ? 'PS5' : n.includes('4') ? 'PS4' : n.includes('3') ? 'PS3' : n.includes('2') ? 'PS2' : n.includes('vita') ? 'Vita' : 'PS';
+    return { label, className: 'platform-playstation' };
   }
-  if (normalized.includes('steam')) return { label: 'Steam', icon: '◉', className: 'platform-steam' };
-  if (normalized.includes('xbox')) return { label: name.replace(/^microsoft\s+/i, ''), icon: '⊗', className: 'platform-xbox' };
-  if (normalized.includes('nintendo') || normalized.includes('switch')) return { label: name.replace(/^nintendo\s+/i, ''), icon: '◇', className: 'platform-nintendo' };
-  return { label: name, icon: '▣', className: 'platform-generic' };
+  if (iconKey === 'xbox') return { label: name.replace(/^microsoft\s+/i, ''), className: 'platform-xbox' };
+  if (iconKey === 'nintendo') return { label: name.replace(/^nintendo\s+/i, ''), className: 'platform-nintendo' };
+  if (iconKey === 'steam') return { label: 'Steam', className: 'platform-steam' };
+  if (iconKey === 'pc') return { label: 'PC', className: 'platform-pc' };
+  if (iconKey === 'epic') return { label: 'Epic', className: 'platform-epic' };
+  if (iconKey === 'gog') return { label: 'GOG', className: 'platform-gog' };
+  if (iconKey === 'retro') return { label: 'Retro', className: 'platform-retro' };
+  if (iconKey === 'mobile') return { label: 'Mobile', className: 'platform-mobile' };
+  // Fallback por nome (plataformas sem iconKey)
+  const normalized = name.toLocaleLowerCase('pt-BR');
+  if (normalized.includes('playstation') || normalized.includes('ps vita')) return { label: name, className: 'platform-playstation' };
+  if (normalized.includes('steam')) return { label: name, className: 'platform-steam' };
+  if (normalized.includes('xbox')) return { label: name, className: 'platform-xbox' };
+  if (normalized.includes('nintendo') || normalized.includes('switch')) return { label: name, className: 'platform-nintendo' };
+  return { label: name, className: 'platform-generic' };
 }
 function compareDateDesc(left: string | null, right: string | null) {
   if (left === right) return 0;
@@ -1065,7 +1079,7 @@ export function App() {
             <div className="details-badges"><span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
             {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
             {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
-            <section className="details-section"><h2>Minha jornada</h2><p>Plataforma: {platforms.find((platform) => platform.id === selectedGame.platformId)?.name ?? 'Não selecionada'}</p><p>{selectedGame.owned ? 'Possuo este jogo' : 'Não possuo este jogo'} · {statusLabels[selectedGame.status]}</p>{selectedGame.startedAt && <p>Início: {formatDateOnly(selectedGame.startedAt)}</p>}{selectedGame.completedAt && <p>Conclusão: {formatDateOnly(selectedGame.completedAt)}</p>}{selectedGame.gameType && <p>Tipo: {selectedGame.gameType}</p>}{selectedGame.completionCondition && <p>Condição de zeramento: {selectedGame.completionCondition}</p>}<p className="genre-summary">Gêneros: {selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || 'Não informados'}</p></section>
+            <section className="details-section"><h2>Minha jornada</h2><p>Plataforma: {(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); return p ? <><PlatformIcon iconKey={p.iconKey} /> {p.name}</> : 'Não selecionada'; })()}</p><p>{selectedGame.owned ? 'Possuo este jogo' : 'Não possuo este jogo'} · {statusLabels[selectedGame.status]}</p>{selectedGame.startedAt && <p>Início: {formatDateOnly(selectedGame.startedAt)}</p>}{selectedGame.completedAt && <p>Conclusão: {formatDateOnly(selectedGame.completedAt)}</p>}{selectedGame.gameType && <p>Tipo: {selectedGame.gameType}</p>}{selectedGame.completionCondition && <p>Condição de zeramento: {selectedGame.completionCondition}</p>}<p className="genre-summary">Gêneros: {selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || 'Não informados'}</p></section>
             <section className="details-section"><h2>Estimativas de duração</h2><dl className="estimate-list">
               <div><dt>História principal</dt><dd>{formatHours(selectedGame.estimatedMainHours)}</dd></div>
               <div><dt>Completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}</dd></div>
@@ -1152,7 +1166,7 @@ export function App() {
         <section className={`game-grid density-${density}`} aria-label="Jogos da biblioteca">{visibleGames.map((game) => <div className="game-card-wrap" key={game.id}><button className="game-card" type="button" onClick={() => showDetails(game)} aria-label={`Ver detalhes de ${game.title}`}>
           <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span></span>
           <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
-          {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform.name); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name}><span aria-hidden="true">{badge.icon}</span>{badge.label}</span>; })}</span>}
+          {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name}><PlatformIcon iconKey={platform.iconKey} />{badge.label}</span>; })}</span>}
         </button><button type="button" className="game-card-quick" aria-label={`Editar ${game.title}`} onClick={() => openEditor(game)}><span aria-hidden="true">✎</span></button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
       )}
       </>}
