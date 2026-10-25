@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import React, { useEffect, useState, type FormEvent } from 'react';
 import type { DashboardResponse, Game, GameListSummary, MainChallenge, QueueItem, Session } from '@gameshelf/contracts';
 import { Button, Panel, StatCard } from '@gameshelf/ui';
 import { GoalsCard } from './goals-card';
@@ -84,7 +84,11 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
       <section className="playing-now"><div className="section-heading playing-now-heading"><div><p className="eyebrow">SUA BIBLIOTECA</p><h2>Jogando agora</h2></div><span className="playing-count">{playingGames.length} {playingGames.length === 1 ? 'jogo ativo' : 'jogos ativos'}</span></div>
         {playingGames.length ? <div className="playing-grid">{playingGames.map((entry) => {
           const percent = entry.progress ?? (entry.estimatedHours ? Math.min(100, Math.round((entry.playedHours / entry.estimatedHours) * 100)) : null);
-          return <article className="current-game-panel" key={entry.game.id}>
+          return <article
+            className={`current-game-panel${entry.game.backgroundUrl ? ' has-art' : ''}`}
+            key={entry.game.id}
+            style={entry.game.backgroundUrl ? { '--card-art': `url(${entry.game.backgroundUrl})` } as React.CSSProperties : undefined}
+          >
             {entry.game.coverUrl ? <img className="current-game-cover" src={entry.game.coverUrl} alt={`Capa de ${entry.game.title}`} /> : <span className="current-game-cover current-game-placeholder" aria-hidden="true">▧</span>}
             <div className="current-game-body">
               <span className={`status-pill status-${entry.game.status.toLowerCase()}`}>{entry.game.status === 'PLAYING' ? 'Jogando' : entry.game.status === 'PAUSED' ? 'Pausado' : entry.game.status === 'COMPLETED' ? 'Zerado' : entry.game.status === 'ABANDONED' ? 'Abandonado' : entry.game.status === 'DESIRED' ? 'Desejado' : 'Na biblioteca'}</span>

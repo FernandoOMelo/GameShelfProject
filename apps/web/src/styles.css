@@ -280,3 +280,13 @@ summary:focus-visible,
 .platform-summary-achiev-bar{height:3px;border-radius:2px;background:var(--gs-accent);opacity:.7;flex-shrink:0}
 .platform-summary-progress{height:2px;border-radius:2px;background:var(--gs-line-1c);margin-top:2px;overflow:hidden}
 .platform-summary-progress-bar{height:100%;border-radius:2px;background:color-mix(in srgb,var(--gs-accent) 60%,transparent)}
+
+/* Arte de fundo nos cards "Jogando agora" quando o jogo tem backgroundUrl */
+.playing-now .current-game-panel.has-art::before{content:'';position:absolute;inset:0;z-index:0;background-image:var(--card-art);background-size:cover;background-position:center 20%;opacity:.1;filter:saturate(1.6);transition:opacity .3s ease}
+.playing-now .current-game-panel.has-art:hover::before{opacity:.15}
+.playing-now .current-game-panel.has-art>*{position:relative;z-index:1}
+
+/* Badges nos cards da biblioteca: favorito e jogo do ano */
+.cover-badge{position:absolute;top:7px;left:7px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#111318cc;backdrop-filter:blur(6px);font-size:11px;line-height:1}
+.cover-goty{color:#d9b984;border:1px solid #d9b98466;box-shadow:0 0 8px #d9b98433}
+.cover-fav{color:#e88fa8;border:1px solid #e88fa844}
