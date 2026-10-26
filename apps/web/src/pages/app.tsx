@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState } from '@gameshelf/ui';
 
-import { apiUrl, difficultyLabels, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
+import { apiUrl, difficultyLabels, formatCompactHours, formatDateTime, formatElapsed, formatHours, formatDuration } from './shared';
 import { PlatformIcon } from './platform-icons';
 import { ProfileHeader, ProfileTabs } from './profile-nav';
 import { readRoute, routePath, type AppView } from '../router';
@@ -1128,14 +1128,25 @@ export function App() {
       {selectedGame ? <section className="details-page" aria-labelledby="details-title">
         <button className="back-link" type="button" onClick={closeDetails}>← Voltar</button>
         <div className="details-navigation"><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) <= 0} onClick={() => navigateDetails(-1)}>← Jogo anterior</Button><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) < 0 || visibleGames.findIndex((game) => game.id === selectedGame.id) >= visibleGames.length - 1} onClick={() => navigateDetails(1)}>Próximo jogo →</Button></div>
-        <div className={`details-layout${selectedGame.backgroundUrl ? ' has-hero' : ''}`}>
-          {selectedGame.backgroundUrl && <div className="details-hero" style={{ backgroundImage: `url("${selectedGame.backgroundUrl}")` }} aria-hidden="true" />}
-          <div className="details-cover">{selectedGame.coverUrl ? <img src={selectedGame.coverUrl} alt={`Capa de ${selectedGame.title}`} /> : <span aria-hidden="true">▧</span>}</div>
-          <div className="details-content">
-            <p className="eyebrow">DETALHES DO JOGO</p>
-            <h1 id="details-title">{selectedGame.title}</h1>
-            <p className="details-byline">{[selectedGame.releaseYear, selectedGame.developer, selectedGame.publisher, franchises.find((franchise) => franchise.id === selectedGame.franchiseId)?.name].filter(Boolean).join(' · ') || 'Metadata ainda não informada'}</p>
-            <div className="details-badges"><span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
+        <header className="game-detail-hero" style={selectedGame.backgroundUrl ? { backgroundImage: `url("${selectedGame.backgroundUrl}")` } : undefined}>
+          <div className="game-detail-hero-content">
+            <div className="details-cover">{selectedGame.coverUrl ? <img src={selectedGame.coverUrl} alt={`Capa de ${selectedGame.title}`} /> : <span aria-hidden="true">▧</span>}</div>
+            <div className="game-detail-title">
+              <p className="eyebrow">BIBLIOTECA · DETALHES DO JOGO</p>
+              <h1 id="details-title">{selectedGame.title}</h1>
+              <p className="details-byline">{[selectedGame.releaseYear, selectedGame.developer, selectedGame.publisher, franchises.find((franchise) => franchise.id === selectedGame.franchiseId)?.name].filter(Boolean).join(' · ') || 'Metadata ainda não informada'}</p>
+              <div className="details-badges"><span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
+            </div>
+            <dl className="game-detail-metrics" aria-label="Resumo do jogo">
+              <div><dt>Tempo de jogo</dt><dd>{formatCompactHours((sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)) / 60)}</dd></div>
+              <div><dt>Sessões</dt><dd>{sessions.length}</dd></div>
+              <div><dt>Meta completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}</dd></div>
+              <div><dt>Última jogada</dt><dd>{sessions[0] ? formatDateTime(sessions[0].startedAt) : '—'}</dd></div>
+            </dl>
+          </div>
+        </header>
+        <div className="details-layout">
+          <div className="details-content details-main">
             {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
             {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
             <section className="details-section"><h2>Minha jornada</h2><dl className="journey-meta-grid">
