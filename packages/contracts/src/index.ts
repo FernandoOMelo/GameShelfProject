@@ -337,6 +337,14 @@ export const externalAchievementsResponseSchema = z.object({
 export type ExternalAchievement = z.infer<typeof externalAchievementSchema>;
 export type ExternalAchievementsResponse = z.infer<typeof externalAchievementsResponseSchema>;
 
+// RAWG cataloga conquistas do jogo; desbloqueios pessoais continuam no Achievist.
+export const rawgAchievementCandidateSchema = z.object({ id: z.number().int().positive(), slug: z.string().min(1), name: z.string().min(1), released: z.string().nullable(), backgroundImage: z.string().nullable() }).strict();
+export const rawgAchievementSchema = z.object({ id: z.string().uuid(), rawgId: z.number().int().positive(), name: z.string(), description: z.string().nullable(), imageUrl: z.string().nullable(), percent: z.number().min(0).max(100).nullable() }).strict();
+export const rawgAchievementsResponseSchema = z.object({ linkedGame: rawgAchievementCandidateSchema.nullable(), achievements: z.array(rawgAchievementSchema), refreshedAt: z.string().datetime().nullable() }).strict();
+export type RawgAchievementCandidate = z.infer<typeof rawgAchievementCandidateSchema>;
+export type RawgAchievement = z.infer<typeof rawgAchievementSchema>;
+export type RawgAchievementsResponse = z.infer<typeof rawgAchievementsResponseSchema>;
+
 // ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────
 export const playthroughStatusSchema = z.enum(['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);
 export type PlaythroughStatus = z.infer<typeof playthroughStatusSchema>;

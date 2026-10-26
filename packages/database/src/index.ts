@@ -9,5 +9,5 @@ export function createDatabase(databaseUrl: string) {
 }
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;
-export { games, franchises, platforms, genres, gameGenres, sessions, queueEntries, gameLists, gameListEntries, planningSettings, mainChallenge, challengeCompletions, savedFilters, goals, sessionScreenshots, gamePlatforms, playthroughs, externalGameMatches, externalAchievements, externalPlaytimeImports } from './schema/index.js';
+export { games, franchises, platforms, genres, gameGenres, sessions, queueEntries, gameLists, gameListEntries, planningSettings, mainChallenge, challengeCompletions, savedFilters, goals, sessionScreenshots, gamePlatforms, playthroughs, externalGameMatches, externalAchievements, externalPlaytimeImports, rawgGameLinks, rawgAchievements } from './schema/index.js';
 export { and, asc, desc, eq, inArray, isNull, sql };

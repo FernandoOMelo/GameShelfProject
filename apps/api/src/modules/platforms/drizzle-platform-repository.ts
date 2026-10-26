@@ -60,17 +60,17 @@ export class DrizzlePlatformRepository implements PlatformRepository {
             gp.platform_id,
             count(DISTINCT gp.game_id)::int                              AS game_count,
             count(DISTINCT CASE WHEN g.status = 'COMPLETED' THEN g.id END)::int AS completed_count,
-            coalesce(sum(s.duration_minutes) FILTER (WHERE s.duration_minutes IS NOT NULL), 0)::int AS local_minutes,
-            coalesce(sum(gp.external_playtime_minutes) FILTER (WHERE gp.counts_toward_total), 0)::int AS ext_minutes
+            coalesce(sum(gp.external_playtime_minutes), 0)::int AS ext_minutes
           FROM game_platforms gp
           JOIN games g ON g.id = gp.game_id
-          LEFT JOIN (
-            SELECT game_id, platform_id,
-                   extract(epoch FROM (ended_at - started_at)) / 60 AS duration_minutes
-            FROM sessions
-            WHERE ended_at IS NOT NULL
-          ) s ON s.game_id = gp.game_id AND s.platform_id = gp.platform_id
           GROUP BY gp.platform_id
+        ),
+        local_stats AS (
+          SELECT platform_id,
+                 coalesce(sum(extract(epoch FROM (ended_at - started_at)) / 60), 0)::int AS local_minutes
+          FROM sessions
+          WHERE ended_at IS NOT NULL AND platform_id IS NOT NULL
+          GROUP BY platform_id
         ),
         ach_stats AS (
           SELECT
@@ -107,13 +107,14 @@ export class DrizzlePlatformRepository implements PlatformRepository {
         coalesce(gs.game_count, 0)       AS game_count,
         coalesce(gs.completed_count, 0)  AS completed_count,
         coalesce(d.dominated_count, 0)   AS dominated_count,
-        coalesce(gs.local_minutes, 0)    AS local_played_minutes,
+        coalesce(ls.local_minutes, 0)    AS local_played_minutes,
         coalesce(gs.ext_minutes, 0)      AS external_played_minutes,
         coalesce(ac.unlocked, 0)         AS achievements_unlocked,
         coalesce(ac.total, 0)            AS achievements_total,
         coalesce(rc.covers[1:4], '{}')   AS recent_game_covers
       FROM platforms p
       LEFT JOIN gp_stats gs ON gs.platform_id = p.id
+      LEFT JOIN local_stats ls ON ls.platform_id = p.id
       LEFT JOIN ach_stats ac ON ac.platform_id = p.id
       LEFT JOIN dominated d ON d.platform_id = p.id
       LEFT JOIN recent_covers rc ON rc.platform_id = p.id

@@ -276,6 +276,34 @@ export const externalAchievements = pgTable('external_achievements', {
   check('external_achievements_unlocked_at_requires_unlock', sql`${table.unlockedAt} IS NULL OR ${table.unlocked}`),
 ]);
 
+// RAWG cataloga o que existe para conquistar no jogo. O estado desbloqueado é
+// de conta/plataforma e permanece no espelho do Achievist acima.
+export const rawgGameLinks = pgTable('rawg_game_links', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gameId: uuid('game_id').notNull().unique().references(() => games.id, { onDelete: 'cascade' }),
+  rawgId: integer('rawg_id').notNull().unique(),
+  slug: text('slug').notNull(),
+  name: text('name').notNull(),
+  released: date('released'),
+  backgroundImage: text('background_image'),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [check('rawg_game_links_slug_not_blank', sql`length(trim(${table.slug})) > 0`)]);
+
+export const rawgAchievements = pgTable('rawg_achievements', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  rawgGameLinkId: uuid('rawg_game_link_id').notNull().references(() => rawgGameLinks.id, { onDelete: 'cascade' }),
+  rawgId: integer('rawg_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  imageUrl: text('image_url'),
+  percent: numeric('percent', { precision: 6, scale: 3 }),
+}, (table) => [
+  uniqueIndex('rawg_achievements_link_rawg_unique').on(table.rawgGameLinkId, table.rawgId),
+  index('rawg_achievements_link_idx').on(table.rawgGameLinkId),
+  check('rawg_achievements_name_not_blank', sql`length(trim(${table.name})) > 0`),
+  check('rawg_achievements_percent_range', sql`${table.percent} IS NULL OR (${table.percent} >= 0 AND ${table.percent} <= 100)`),
+]);
+
 // Histórico dos lançamentos de tempo externo como horas retroativas (ADR-030).
 // O tempo em si continua em `games.retroactive_played_hours`; esta tabela existe
 // para a linha do tempo poder mostrar quando cada lançamento aconteceu e qual

@@ -169,6 +169,20 @@
             "when": 1761321600000,
             "tag": "0024_platform_catalog_keys",
             "breakpoints": true
+        },
+        {
+            "idx": 24,
+            "version": "7",
+            "when": 1792890000000,
+            "tag": "0025_seed_platform_catalog",
+            "breakpoints": true
+        },
+        {
+            "idx": 25,
+            "version": "7",
+            "when": 1792900000000,
+            "tag": "0026_rawg_achievement_catalog",
+            "breakpoints": true
         }
     ]
 }

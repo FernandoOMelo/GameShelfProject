@@ -10,6 +10,7 @@ const envSchema = z.object({
   MEDIA_STORAGE_PATH: z.string().min(1).default('.gameshelf/media'),
   IGDB_CLIENT_ID: optionalSecret,
   IGDB_CLIENT_SECRET: optionalSecret,
+  RAWG_API_KEY: optionalSecret,
   // Achievist (ADR-024): única fonte externa de dados de plataforma. Sem as
   // três variáveis a integração fica desligada e o resto da API segue normal.
   // A senha só existe no servidor: nunca vai ao frontend nem para o log.

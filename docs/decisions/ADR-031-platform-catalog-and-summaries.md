@@ -32,7 +32,8 @@ A função `platformPresentation(name)` em
 plataforma via `POST /platforms`.
 
 A migration `0024_platform_catalog_keys.sql` popula as linhas existentes via
-`UPDATE … CASE`.
+`UPDATE … CASE`. A migration `0025_seed_platform_catalog.sql` inclui, de forma
+idempotente, as famílias e lojas mais comuns sem modificar dados existentes.
 
 ### 2. Ícones SVG na UI
 
@@ -64,7 +65,10 @@ um jogo:
 }
 ```
 
-O cálculo usa uma única query com CTEs para eficiência. "Dominado" significa
+O tempo informado considera todas as associações que a fonte reporta: o selo
+`countsTowardTotal` só controla o total consolidado e não esconde esse dado da
+tela. O cálculo usa CTEs independentes para não repetir horas da associação
+para cada sessão. "Dominado" significa
 todos os troféus desbloqueados (`total > 0 AND unlocked === total`).
 
 ## Consequências

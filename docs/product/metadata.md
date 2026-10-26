@@ -28,6 +28,19 @@ IGDB.
 - plataformas;
 - franquia.
 
+## Catálogo de conquistas (RAWG)
+
+Com `RAWG_API_KEY` configurada, o detalhe do jogo permite buscar candidatos pelo
+título e confirmar qual referência RAWG corresponde ao cadastro canônico. A
+confirmação busca e persiste nome, descrição, imagem e percentual global das
+conquistas. A seleção é explícita para não confundir DLCs, remasters ou nomes
+parecidos.
+
+A RAWG é o catálogo do que existe para conquistar, não uma fonte de conta: ela
+não informa quais itens o usuário desbloqueou. Esses desbloqueios continuam
+vindo do Achievist e são mostrados por plataforma, sem associação automática
+por nome entre as duas fontes.
+
 ## Princípios
 
 A integração externa não deve ser requisito para consultar a biblioteca já cadastrada.
@@ -49,10 +62,14 @@ Game Module
     +-- Time Estimate Provider Interface
              |
              +-- HowLongToBeat Adapter
+    |
+    +-- Achievement Catalog Provider Interface
+             |
+             +-- RAWG Adapter
 ```
 
-A regra de negócio não deve depender diretamente da API da IGDB nem do site do
-HowLongToBeat.
+A regra de negócio não deve depender diretamente da API da IGDB, da RAWG nem do
+site do HowLongToBeat.
 
 ## Busca IGDB
 
