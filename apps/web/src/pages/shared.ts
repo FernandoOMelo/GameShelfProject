@@ -1,10 +1,21 @@
 export const apiUrl = import.meta.env.VITE_API_URL ?? '/api';
 
-// Horas são sempre exibidas no formato compacto ("51,8 h"); sessões e tempos com
-// precisão de minutos usam formatDuration ("1 hora e 30 minutos").
+// Estimativas de horas (campo do formulário) são exibidas em "Xh Ymin" para
+// ficar legível com os quartos de hora que o campo aceita (ex.: 1h 45min);
+// tabelas densas usam o formato compacto ("51,8 h") e sessões usam formatDuration
+// ("1 hora e 30 minutos").
 export function formatHours(value: number | null): string {
   if (value === null) return 'Não informada';
-  return formatCompactHours(value);
+  return formatHoursMinutes(value);
+}
+
+export function formatHoursMinutes(value: number): string {
+  const totalMinutes = Math.round(value * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}min`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}min`;
 }
 
 export function formatDateTime(value: string): string {

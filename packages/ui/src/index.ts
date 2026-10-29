@@ -4,3 +4,4 @@ export { ConfirmDialog } from './dialog';
 export { ErrorBoundary } from './error-boundary';
 export { Panel } from './panel';
 export { EmptyState, ErrorState, LoadingState, StatCard } from './states';
+export { Switch } from './switch';

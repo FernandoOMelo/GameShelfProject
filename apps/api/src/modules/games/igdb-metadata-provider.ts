@@ -10,6 +10,7 @@ const igdbGameSchema = z.object({
   cover: z.object({ image_id: z.string() }).optional(),
   artworks: z.array(z.object({ image_id: z.string() })).optional(),
   franchise: z.object({ name: z.string() }).optional(),
+  franchises: z.array(z.object({ name: z.string() })).optional(),
   involved_companies: z.array(z.object({
     developer: z.boolean().optional(),
     publisher: z.boolean().optional(),
@@ -52,7 +53,7 @@ export class IgdbMetadataProvider implements GameMetadataProvider {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
-      body: `search "${escapedQuery}"; fields id,name,summary,game_localizations,first_release_date,cover.image_id,artworks.image_id,franchise.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name,genres.name,platforms.name; where version_parent = null; limit 10;`,
+      body: `search "${escapedQuery}"; fields id,name,summary,game_localizations,first_release_date,cover.image_id,artworks.image_id,franchise.name,franchises.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name,genres.name,platforms.name; where version_parent = null; limit 10;`,
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`IGDB search failed with HTTP ${response.status}.`);
@@ -117,7 +118,7 @@ function mapIgdbGame(game: z.infer<typeof igdbGameSchema>, localizedTitle?: stri
     ...(companies.find((company) => company.publisher)?.company.name && {
       publisher: companies.find((company) => company.publisher)!.company.name,
     }),
-    ...(game.franchise && { franchise: game.franchise.name }),
+    ...((game.franchise?.name ?? game.franchises?.[0]?.name) && { franchise: game.franchise?.name ?? game.franchises![0]!.name }),
     ...(game.genres && { genres: game.genres.map(({ name }) => name) }),
     ...(game.platforms && { platforms: game.platforms.map(({ name }) => name) }),
   };

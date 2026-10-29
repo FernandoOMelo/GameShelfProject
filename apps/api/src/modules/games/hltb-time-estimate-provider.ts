@@ -195,7 +195,8 @@ function mapHltbEntry(entry: HltbEntry): GameTimeEstimate {
   };
 }
 
+/** Arredonda para o quarto de hora mais próximo (0,25h) para já chegar válido no formulário, que só aceita esse incremento. */
 function hoursFromSeconds(seconds: number | undefined): number | undefined {
   if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return undefined;
-  return Math.round((seconds / 3600) * 100) / 100;
+  return Math.round(seconds / 3600 / 0.25) * 0.25;
 }
