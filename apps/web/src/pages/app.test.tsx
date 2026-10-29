@@ -312,9 +312,9 @@ describe('library page', () => {
     const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
     fireEvent.click(within(timeResults).getByRole('button', { name: /Hades/ }));
 
-    expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
-    expect(screen.getByLabelText('Estimativa pessoal (h)')).toHaveValue(40);
-    expect(screen.getByLabelText('Estimativa completista (h)')).toHaveValue(80);
+    expect(screen.getByLabelText('Principal (h)')).toHaveValue(20);
+    expect(screen.getByLabelText('Pessoal (h)')).toHaveValue(40);
+    expect(screen.getByLabelText('Completista (h)')).toHaveValue(80);
     expect(screen.getByRole('status')).toHaveTextContent('pessoal (principal + extras)');
   });
 
@@ -331,7 +331,7 @@ describe('library page', () => {
     const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
     fireEvent.click(within(timeResults).getByRole('button', { name: /Hades/ }));
 
-    expect(screen.getByLabelText('Estimativa pessoal (h)')).toHaveValue(40);
+    expect(screen.getByLabelText('Pessoal (h)')).toHaveValue(40);
   });
 
   it('queries HowLongToBeat when opening a game without estimates', async () => {
@@ -346,7 +346,7 @@ describe('library page', () => {
 
     const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
     fireEvent.click(within(timeResults).getByRole('button', { name: /Hades/ }));
-    expect(screen.getByLabelText('Estimativa principal (h)')).toHaveValue(20);
+    expect(screen.getByLabelText('Principal (h)')).toHaveValue(20);
   });
 
   it('closes the search results and then the dialog with Escape', async () => {
@@ -409,8 +409,8 @@ describe('library page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
     expect(screen.getByRole('heading', { name: 'Hades' })).toBeInTheDocument();
     expect(screen.getByText('Escape from the Underworld.')).toBeInTheDocument();
-    expect(screen.getByText('30 h')).toBeInTheDocument();
-    expect(screen.getByText('22 h')).toBeInTheDocument();
+    expect(screen.getByText('30h')).toBeInTheDocument();
+    expect(screen.getByText('22h')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Editar jogo' })).toBeInTheDocument();
   });
 
@@ -426,6 +426,7 @@ describe('library page', () => {
     expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '← Jogo anterior' }));
     expect(await screen.findByRole('heading', { name: 'Hades' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas retroativas' }), { target: { value: '3.5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lançar horas' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${first.id}`, expect.objectContaining({ method: 'PATCH' })));
@@ -538,6 +539,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
     await screen.findByRole('heading', { name: 'Horas Jogadas' });
 
     // Lançar soma ao total existente.
@@ -591,6 +593,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
     await screen.findByText('Nenhuma sessão registrada.');
     fireEvent.click(screen.getByRole('button', { name: 'Continuar jogando' }));
     await screen.findByText('SESSÃO EM ANDAMENTO');
@@ -617,6 +620,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
     await screen.findByText('Nenhuma sessão registrada.');
     fireEvent.click(screen.getByRole('button', { name: 'Continuar jogando' }));
     await screen.findByText('SESSÃO EM ANDAMENTO');
@@ -658,6 +662,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir sessão' }));
     const dialog = await screen.findByRole('dialog', { name: 'Excluir sessão' });
     expect(within(dialog).getByText('Excluir esta sessão? Esta ação não pode ser desfeita.')).toBeInTheDocument();
@@ -832,6 +837,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
     await screen.findByRole('button', { name: 'Imagens' });
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/screenshots'))).toBe(false);
 
@@ -964,6 +970,7 @@ describe('offline session registration', () => {
   async function openDetails() {
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
   }
 
   it('starts a session offline, finishes it offline and sends one complete session when the connection returns', async () => {

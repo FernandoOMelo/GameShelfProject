@@ -1,10 +1,24 @@
 import type { FastifyInstance } from 'fastify';
-import { rawgAchievementCandidateSchema, rawgAchievementsResponseSchema } from '@gameshelf/contracts';
+import { gameAchievementsResponseSchema, rawgAchievementCandidateSchema, rawgAchievementsResponseSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { RawgAchievementProvider, RawgAchievementRepository } from './rawg-achievements.js';
+import type { GamePlatformRepository } from './repository.js';
+import type { ExternalAchievementRepository } from './achievement-repository.js';
+import { buildAchievementsResponse } from './achievement-merge.js';
 
 const validId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-export function registerRawgAchievementRoutes(app: FastifyInstance, games: GameRepository, store: RawgAchievementRepository, provider?: RawgAchievementProvider) {
+export function registerRawgAchievementRoutes(app: FastifyInstance, games: GameRepository, store: RawgAchievementRepository, provider?: RawgAchievementProvider, merge?: { gamePlatforms: GamePlatformRepository; externalAchievements: ExternalAchievementRepository }) {
+  app.get<{ Params: { gameId: string } }>('/games/:gameId/achievements', async (request, reply) => {
+    if (!validId(request.params.gameId)) return reply.code(400).send({ error: 'ID inválido.' });
+    if (!await games.find(request.params.gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
+    const { linkedGame, achievements } = await store.get(request.params.gameId);
+    const external = merge ? (await Promise.all((await merge.gamePlatforms.listForGame(request.params.gameId)).map((link) => merge.externalAchievements.listForGamePlatform(link.id)))).flat() : [];
+    return reply.send(gameAchievementsResponseSchema.parse(buildAchievementsResponse(linkedGame, achievements, external.map((item) => ({
+      id: item.id, externalId: item.externalId, name: item.name, description: item.description, iconUrl: item.iconUrl,
+      points: item.points, rarityPercent: item.rarityPercent === null ? null : Number(item.rarityPercent), unlocked: item.unlocked,
+      unlockedAt: item.unlockedAt ? item.unlockedAt.toISOString() : null, syncedAt: item.syncedAt.toISOString(),
+    })))));
+  });
   app.get<{ Params: { gameId: string } }>('/games/:gameId/rawg-achievements', async (request, reply) => {
     if (!validId(request.params.gameId)) return reply.code(400).send({ error: 'ID inválido.' });
     if (!await games.find(request.params.gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });

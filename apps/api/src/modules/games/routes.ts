@@ -8,10 +8,33 @@ import type { GameListRepository } from '../game-lists/repository.js';
 import type { ChallengeCompletionRepository, MainChallengeRepository } from '../challenge/repository.js';
 import { detectChallengeCompletion } from '../challenge/service.js';
 import type { GamePlatformRepository } from '../game-platforms/repository.js';
+import type { RawgAchievementProvider, RawgAchievementRepository } from '../game-platforms/rawg-achievements.js';
 
 type ChallengeTracking = { lists: GameListRepository; challenge: MainChallengeRepository; completions: ChallengeCompletionRepository };
+type RawgAutoLink = { store: RawgAchievementRepository; provider: RawgAchievementProvider };
 
-export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking, gamePlatforms?: GamePlatformRepository) {
+export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking, gamePlatforms?: GamePlatformRepository, rawg?: RawgAutoLink) {
+  const normalizeTitle = (value: string) => value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+  // Melhor esforço: ao cadastrar um jogo, já tenta vincular o catálogo de
+  // conquistas da RAWG por título (e ano, quando ajuda a desempatar). Nunca
+  // atrasa nem derruba a criação do jogo — falhas aqui só significam que o
+  // vínculo continua disponível para o usuário fazer manualmente depois.
+  function autoLinkRawgCatalog(gameId: string, title: string, releaseYear: number | null) {
+    if (!rawg) return;
+    void (async () => {
+      try {
+        const candidates = await rawg.provider.search(title);
+        if (candidates.length === 0) return;
+        const target = normalizeTitle(title);
+        const candidate = candidates.find((item) => normalizeTitle(item.name) === target)
+          ?? (releaseYear ? candidates.find((item) => item.released?.slice(0, 4) === String(releaseYear)) : undefined)
+          ?? candidates[0]!;
+        const achievements = await rawg.provider.achievements(candidate.id);
+        await rawg.store.replace(gameId, candidate, achievements);
+      } catch { /* melhor esforço — o usuário ainda pode vincular manualmente */ }
+    })();
+  }
   async function recordChallengeCompletion(updated: { id: string; status: string; completedAt: string | null }) {
     if (!tracking) return;
     const challenge = await tracking.challenge.get();
@@ -73,6 +96,7 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
       throw error;
     }
     if (localized.input.platformId !== undefined) await syncPrimaryPlatform(game.id, game.platformId, game.owned);
+    autoLinkRawgCatalog(game.id, game.title, game.releaseYear ?? null);
     return reply.code(201).send(gameSchema.parse(toResponse({ ...game, platformIds: game.platformId ? [game.platformId] : [] })));
   });
 

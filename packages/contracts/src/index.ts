@@ -345,6 +345,36 @@ export type RawgAchievementCandidate = z.infer<typeof rawgAchievementCandidateSc
 export type RawgAchievement = z.infer<typeof rawgAchievementSchema>;
 export type RawgAchievementsResponse = z.infer<typeof rawgAchievementsResponseSchema>;
 
+// Conquista mesclada: catálogo RAWG (ícone, descrição, raridade) cruzado por
+// nome com os desbloqueios pessoais do Achievist. Sem correspondência e ainda
+// bloqueada, tratamos como secreta (nome e descrição ficam ocultos).
+export const achievementRarityTierSchema = z.enum(['COMMON', 'UNCOMMON', 'RARE', 'ULTRA_RARE']);
+export const mergedAchievementSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  description: z.string().nullable(),
+  iconUrl: z.string().nullable(),
+  rarityPercent: z.number().min(0).max(100).nullable(),
+  rarityTier: achievementRarityTierSchema,
+  unlocked: z.boolean(),
+  unlockedAt: z.string().datetime().nullable(),
+  secret: z.boolean(),
+  isCompletionTrophy: z.boolean(),
+}).strict();
+export const gameAchievementsResponseSchema = z.object({
+  catalogAvailable: z.boolean(),
+  linkedGame: rawgAchievementCandidateSchema.nullable(),
+  total: z.number().int().nonnegative(),
+  unlockedCount: z.number().int().nonnegative(),
+  percent: z.number().min(0).max(100),
+  achievements: z.array(mergedAchievementSchema),
+  completionTrophyId: z.string().nullable(),
+  rarityBreakdown: z.object({ common: z.number().int().nonnegative(), uncommon: z.number().int().nonnegative(), rare: z.number().int().nonnegative(), ultraRare: z.number().int().nonnegative() }),
+}).strict();
+export type AchievementRarityTier = z.infer<typeof achievementRarityTierSchema>;
+export type MergedAchievement = z.infer<typeof mergedAchievementSchema>;
+export type GameAchievementsResponse = z.infer<typeof gameAchievementsResponseSchema>;
+
 // ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────
 export const playthroughStatusSchema = z.enum(['PLANNED', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED']);
 export type PlaythroughStatus = z.infer<typeof playthroughStatusSchema>;

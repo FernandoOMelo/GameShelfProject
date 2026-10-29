@@ -1,5 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { DashboardResponse, Franchise, Game, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import { GameAchievementsPanel } from './game-achievements-panel';
+
+type DetailTab = 'resumo' | 'conquistas' | 'sessoes';
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState, Switch } from '@gameshelf/ui';
 
 import { apiUrl, difficultyLabels, formatCompactHours, formatDateTime, formatElapsed, formatHours, formatHoursMinutes, formatDuration } from './shared';
@@ -174,6 +177,8 @@ export function App() {
   const [editing, setEditing] = useState<Game | null>(null);
   const [formStatus, setFormStatus] = useState<Game['status']>('BACKLOG');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('resumo');
+  const [achievementsSummary, setAchievementsSummary] = useState<GameAchievementsResponse | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [playthroughs, setPlaythroughs] = useState<Playthrough[]>([]);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
@@ -1028,6 +1033,8 @@ export function App() {
   /** Abre o detalhe do jogo empilhando `/jogos/:id`. */
   function openGame(game: Game) {
     setSelectedGame(game);
+    setActiveDetailTab('resumo');
+    setAchievementsSummary(null);
     setPendingGameId(game.id);
     const path = routePath({ view: activeView, gameId: game.id });
     if (window.location.pathname !== path) window.history.pushState({ details: true }, '', path);
@@ -1135,7 +1142,7 @@ export function App() {
               <p className="eyebrow">BIBLIOTECA · DETALHES DO JOGO</p>
               <h1 id="details-title">{selectedGame.title}</h1>
               <p className="details-byline">{[selectedGame.releaseYear, selectedGame.developer, selectedGame.publisher, franchises.find((franchise) => franchise.id === selectedGame.franchiseId)?.name].filter(Boolean).join(' · ') || 'Metadata ainda não informada'}</p>
-              <div className="details-badges"><span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
+              <div className="details-badges">{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return null; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}<span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
             </div>
             <dl className="game-detail-metrics" aria-label="Resumo do jogo">
               <div><dt>Tempo de jogo</dt><dd>{formatCompactHours((sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)) / 60)}</dd></div>
@@ -1145,46 +1152,59 @@ export function App() {
             </dl>
           </div>
         </header>
+        <div className="details-tabs" role="tablist" aria-label="Seções do jogo">
+          <button type="button" role="tab" aria-selected={activeDetailTab === 'resumo'} className={activeDetailTab === 'resumo' ? 'is-active' : ''} onClick={() => setActiveDetailTab('resumo')}>Resumo</button>
+          <button type="button" role="tab" aria-selected={activeDetailTab === 'conquistas'} className={activeDetailTab === 'conquistas' ? 'is-active' : ''} onClick={() => setActiveDetailTab('conquistas')}>Conquistas{achievementsSummary && achievementsSummary.total > 0 && <span className="details-tab-count">{achievementsSummary.unlockedCount}/{achievementsSummary.total}</span>}</button>
+          <button type="button" role="tab" aria-selected={activeDetailTab === 'sessoes'} className={activeDetailTab === 'sessoes' ? 'is-active' : ''} onClick={() => setActiveDetailTab('sessoes')}>Sessões</button>
+        </div>
         <div className="details-layout">
           <div className="details-content details-main">
-            {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
-            {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
-            <section className="details-section"><h2>Minha jornada</h2><dl className="journey-meta-grid">
-              <div><dt>Plataforma</dt><dd>{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); return p ? <><PlatformIcon iconKey={p.iconKey} /> {p.name}</> : <span className="meta-empty">Não selecionada</span>; })()}</dd></div>
-              <div><dt>Posse</dt><dd>{selectedGame.owned ? 'Possuo' : 'Não possuo'}</dd></div>
-              {selectedGame.startedAt && <div><dt>Início</dt><dd>{formatDateOnly(selectedGame.startedAt)}</dd></div>}
-              {selectedGame.completedAt && <div><dt>Conclusão</dt><dd>{formatDateOnly(selectedGame.completedAt)}</dd></div>}
-              {selectedGame.gameType && <div><dt>Tipo</dt><dd>{selectedGame.gameType}</dd></div>}
-              {selectedGame.completionCondition && <div><dt>Condição de zeramento</dt><dd>{selectedGame.completionCondition}</dd></div>}
-              <div className="journey-meta-wide"><dt>Gêneros</dt><dd>{selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || <span className="meta-empty">Não informados</span>}</dd></div>
-            </dl></section>
-            {(() => {
-              const playedMinutes = sessions.reduce((total, s) => total + (s.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60);
-              const playedHours = playedMinutes / 60;
-              const makeBar = (estimateHours: number | null) => {
-                if (!estimateHours || playedHours === 0) return null;
-                const pct = Math.min(100, Math.round((playedHours / estimateHours) * 100));
-                return <div className="estimate-progress" title={`${pct}% da estimativa`}><div className="estimate-progress-fill" style={{ width: `${pct}%` }} /><span>{pct}%</span></div>;
-              };
-              return <section className="details-section"><h2>Estimativas de duração</h2><dl className="estimate-list">
-                <div><dt>História principal</dt><dd>{formatHours(selectedGame.estimatedMainHours)}{makeBar(selectedGame.estimatedMainHours)}</dd></div>
-                <div><dt>Completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}{makeBar(selectedGame.estimatedCompletionistHours)}</dd></div>
-                <div><dt>Pessoal</dt><dd>{formatHours(selectedGame.personalEstimatedHours)}{makeBar(selectedGame.personalEstimatedHours)}</dd></div>
-              </dl></section>;
-            })()}
-            <Suspense fallback={<section className="details-section"><p className="session-empty">Carregando plataformas e jornadas…</p></section>}>
-              <GameJourneyPanel
-                gameId={selectedGame.id}
-                platforms={platforms}
-                localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)}
-                retroactiveHours={selectedGame.retroactivePlayedHours ?? 0}
-                sessionsWithoutPlatform={sessions.filter((session) => session.endedAt !== null && session.platformId === null).length}
-                onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
-                onGameChanged={() => { void reloadSelectedGame(); }}
-              />
-            </Suspense>
-            <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Horas retroativas<input aria-label="Horas retroativas" type="number" min="0" step="0.01" value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /><small>Lançar soma ao total; corrigir substitui pelo valor informado.</small></label><div className="form-wide session-actions"><Button type="submit">Lançar horas</Button><button type="button" className="session-edit" onClick={() => void changeRetroactiveHours('set')}>Corrigir total</button><button type="button" className="session-delete" disabled={(selectedGame.retroactivePlayedHours ?? 0) === 0} onClick={() => void changeRetroactiveHours('clear')}>Zerar</button></div></form><h3>Sessões</h3>
-              {sessions.find((session) => session.endedAt === null) ? <div className="session-timer"><div><p className="eyebrow">SESSÃO EM ANDAMENTO</p><strong>{formatElapsed(sessions.find((session) => session.endedAt === null)!.startedAt, clockNow)}</strong></div><Button type="button" disabled={savingSession} onClick={() => void finishActiveSession()}>{savingSession ? 'Encerrando…' : 'Encerrar sessão'}</Button></div> : <div className="session-timer"><div><p className="eyebrow">PRÓXIMA SESSÃO</p><strong>Pronto para jogar?</strong></div><Button type="button" disabled={savingSession} onClick={() => void startOrContinueSession()}>{savingSession ? 'Iniciando…' : 'Continuar jogando'}</Button></div>}
+            {activeDetailTab === 'resumo' && <>
+              {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
+              {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
+              <section className="details-section"><h2>Minha jornada</h2><dl className="journey-meta-grid">
+                <div><dt>Plataforma</dt><dd>{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return <span className="meta-empty">Não selecionada</span>; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}</dd></div>
+                <div><dt>Posse</dt><dd>{selectedGame.owned ? 'Possuo' : 'Não possuo'}</dd></div>
+                {selectedGame.startedAt && <div><dt>Início</dt><dd>{formatDateOnly(selectedGame.startedAt)}</dd></div>}
+                {selectedGame.completedAt && <div><dt>Conclusão</dt><dd>{formatDateOnly(selectedGame.completedAt)}</dd></div>}
+                {selectedGame.gameType && <div><dt>Tipo</dt><dd>{selectedGame.gameType}</dd></div>}
+                {selectedGame.completionCondition && <div><dt>Condição de zeramento</dt><dd>{selectedGame.completionCondition}</dd></div>}
+                <div className="journey-meta-wide"><dt>Gêneros</dt><dd>{selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || <span className="meta-empty">Não informados</span>}</dd></div>
+              </dl></section>
+              {(() => {
+                const playedMinutes = sessions.reduce((total, s) => total + (s.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60);
+                const playedHours = playedMinutes / 60;
+                const makeBar = (estimateHours: number | null) => {
+                  if (!estimateHours || playedHours === 0) return null;
+                  const pct = Math.min(100, Math.round((playedHours / estimateHours) * 100));
+                  return <div className="estimate-progress" title={`${pct}% da estimativa`}><div className="estimate-progress-fill" style={{ width: `${pct}%` }} /><span>{pct}%</span></div>;
+                };
+                return <section className="details-section"><h2>Estimativas de duração</h2><dl className="estimate-list">
+                  <div><dt>História principal</dt><dd>{formatHours(selectedGame.estimatedMainHours)}{makeBar(selectedGame.estimatedMainHours)}</dd></div>
+                  <div><dt>Completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}{makeBar(selectedGame.estimatedCompletionistHours)}</dd></div>
+                  <div><dt>Pessoal</dt><dd>{formatHours(selectedGame.personalEstimatedHours)}{makeBar(selectedGame.personalEstimatedHours)}</dd></div>
+                </dl></section>;
+              })()}
+              <Suspense fallback={<section className="details-section"><p className="session-empty">Carregando plataformas e jornadas…</p></section>}>
+                <GameJourneyPanel
+                  gameId={selectedGame.id}
+                  platforms={platforms}
+                  localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)}
+                  retroactiveHours={selectedGame.retroactivePlayedHours ?? 0}
+                  sessionsWithoutPlatform={sessions.filter((session) => session.endedAt !== null && session.platformId === null).length}
+                  onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
+                  onGameChanged={() => { void reloadSelectedGame(); }}
+                />
+              </Suspense>
+              {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
+            </>}
+            {activeDetailTab === 'conquistas' && <section className="details-section achievements-section" aria-labelledby="achievements-title">
+              <h2 id="achievements-title">Conquistas</h2>
+              <GameAchievementsPanel gameId={selectedGame.id} onDataChange={setAchievementsSummary} />
+            </section>}
+            {activeDetailTab === 'sessoes' && <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Horas retroativas<input aria-label="Horas retroativas" type="number" min="0" step="0.01" value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /><small>Lançar soma ao total; corrigir substitui pelo valor informado.</small></label><div className="form-wide session-actions"><Button type="submit">Lançar horas</Button><button type="button" className="session-edit" onClick={() => void changeRetroactiveHours('set')}>Corrigir total</button><button type="button" className="session-delete" disabled={(selectedGame.retroactivePlayedHours ?? 0) === 0} onClick={() => void changeRetroactiveHours('clear')}>Zerar</button></div></form>
+              {sessions.find((session) => session.endedAt === null) ? <div className="session-timer session-timer-focus"><div><p className="eyebrow">SESSÃO EM ANDAMENTO</p><strong>{formatElapsed(sessions.find((session) => session.endedAt === null)!.startedAt, clockNow)}</strong></div><Button type="button" disabled={savingSession} onClick={() => void finishActiveSession()}>{savingSession ? 'Encerrando…' : 'Encerrar sessão'}</Button></div> : <div className="session-timer session-timer-focus"><div><p className="eyebrow">PRÓXIMA SESSÃO</p><strong>Pronto para jogar?</strong></div><Button type="button" disabled={savingSession} onClick={() => void startOrContinueSession()}>{savingSession ? 'Iniciando…' : 'Continuar jogando'}</Button></div>}
+              <h3>Sessões</h3>
               {editingSession !== null && <form key={editingSession.id} className="session-form" onSubmit={submitSession}>
                 <label className="form-field">Início<input name="startedAt" type="datetime-local" required defaultValue={toDateTimeLocal(editingSession ? new Date(editingSession.startedAt) : new Date(Date.now() - 60 * 60_000))} /></label>
                 <label className="form-field">Término<input name="endedAt" type="datetime-local" defaultValue={editingSession?.endedAt ? toDateTimeLocal(new Date(editingSession.endedAt)) : editingSession ? '' : toDateTimeLocal(new Date())} /><small>Deixe vazio para manter a sessão em andamento.</small></label>
@@ -1205,10 +1225,29 @@ export function App() {
                 <div className="session-item-actions"><button type="button" className="session-edit" onClick={() => setEditingSession(session)}>Editar sessão</button><button type="button" className="session-delete" onClick={() => void deleteSession(session)}>Excluir sessão</button></div>
                 <SessionScreenshots gameId={session.gameId} sessionId={session.id} />
               </li>)}</ol>}
-            </section>
-            {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
+            </section>}
           </div>
-          <aside className="details-rail" aria-label="Ações do jogo"><p className="eyebrow">AÇÕES</p><div className="game-detail-actions"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-edit" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div></aside>
+          <aside className="details-rail" aria-label="Ações e resumo do jogo">
+            {achievementsSummary?.completionTrophyId && (() => {
+              const trophy = achievementsSummary.achievements.find((item) => item.id === achievementsSummary.completionTrophyId);
+              if (!trophy) return null;
+              return <div className="rail-card completion-trophy-card"><span className="completion-badge">{trophy.unlocked ? 'Terminado' : 'Conquista de conclusão'}</span><div className="completion-trophy-row">{trophy.iconUrl ? <img src={trophy.iconUrl} alt="" /> : <span className="achievement-icon" aria-hidden="true">★</span>}<div><strong>{trophy.name ?? 'Conquista secreta'}</strong><span>Detectada pela descrição da conquista</span></div></div></div>;
+            })()}
+            <div className="rail-card">
+              <p className="eyebrow">AÇÕES</p>
+              <div className="game-detail-actions-row"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
+              <button type="button" className="session-edit rail-link" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button>
+            </div>
+            {achievementsSummary && achievementsSummary.total > 0 && <div className="rail-card">
+              <p className="eyebrow">CONQUISTAS POR RARIDADE</p>
+              <dl className="rarity-breakdown-list">
+                <div><dt>Comum</dt><dd>{achievementsSummary.rarityBreakdown.common}</dd></div>
+                <div><dt>Incomum</dt><dd>{achievementsSummary.rarityBreakdown.uncommon}</dd></div>
+                <div><dt>Raro</dt><dd>{achievementsSummary.rarityBreakdown.rare}</dd></div>
+                <div><dt>Ultra raro</dt><dd>{achievementsSummary.rarityBreakdown.ultraRare}</dd></div>
+              </dl>
+            </div>}
+          </aside>
         </div>
       </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onPlatformsChanged={() => void reloadPlatforms()} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : activeView === 'platforms' ? <ErrorBoundary title="Não foi possível abrir as plataformas"><Suspense fallback={<LoadingState>Carregando plataformas…</LoadingState>}><PlatformsView platforms={platforms} summaries={platformSummaries} games={games} onGoToSettings={() => goTo('settings')} /></Suspense></ErrorBoundary> : <>
       <section className="library-tools" aria-label="Ferramentas da biblioteca">

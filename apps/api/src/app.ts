@@ -74,7 +74,9 @@ export function buildApp(options: { rawgAchievementRepository?: RawgAchievementR
 
   if (options.gameRepository) app.register((instance) => registerGameRoutes(instance, options.gameRepository!, options.imageStorage, options.backlogRepository, options.screenshotRepository, options.gameListRepository && options.mainChallengeRepository && options.challengeCompletionRepository
     ? { lists: options.gameListRepository, challenge: options.mainChallengeRepository, completions: options.challengeCompletionRepository }
-    : undefined, options.gamePlatformRepository));
+    : undefined, options.gamePlatformRepository, options.rawgAchievementRepository && options.rawgAchievementProvider
+    ? { store: options.rawgAchievementRepository, provider: options.rawgAchievementProvider }
+    : undefined));
   if (options.gameRepository && options.platformRepository && options.gamePlatformRepository) {
     app.register((instance) => registerGamePlatformRoutes(instance, options.gameRepository!, options.platformRepository!, options.gamePlatformRepository!,
       options.externalAchievementRepository
@@ -82,7 +84,7 @@ export function buildApp(options: { rawgAchievementRepository?: RawgAchievementR
         : undefined,
       options.sessionRepository));
   }
-  if (options.gameRepository && options.rawgAchievementRepository) app.register((instance) => registerRawgAchievementRoutes(instance, options.gameRepository!, options.rawgAchievementRepository!, options.rawgAchievementProvider));
+  if (options.gameRepository && options.rawgAchievementRepository) app.register((instance) => registerRawgAchievementRoutes(instance, options.gameRepository!, options.rawgAchievementRepository!, options.rawgAchievementProvider, options.gamePlatformRepository && options.externalAchievementRepository ? { gamePlatforms: options.gamePlatformRepository, externalAchievements: options.externalAchievementRepository } : undefined));
   if (options.gameRepository && options.platformRepository && options.playthroughRepository) {
     app.register((instance) => registerPlaythroughRoutes(instance, options.gameRepository!, options.platformRepository!, options.playthroughRepository!, options.sessionRepository));
   }

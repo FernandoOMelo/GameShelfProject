@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import type { ExternalAchievementsResponse, GamePlatform, GamePlatformFormat, Platform, Playthrough, PlaythroughMetrics, PlaythroughStatus, RawgAchievementCandidate, RawgAchievementsResponse } from '@gameshelf/contracts';
+import type { GamePlatform, GamePlatformFormat, Platform, Playthrough, PlaythroughMetrics, PlaythroughStatus } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 import { apiUrl, formatCompactHours } from './shared';
 
@@ -24,32 +24,6 @@ const todayLocal = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
-
-/** Conquistas de uma associação: resumo e lista, com as desbloqueadas antes. */
-function AchievementList({ data }: { data: ExternalAchievementsResponse }) {
-  if (data.total === 0) {
-    return <p className="session-empty">A fonte não informa conquistas para este jogo.</p>;
-  }
-  const pct = Math.round((data.unlockedCount / data.total) * 100);
-  return <div className="achievement-panel">
-    <div className="achievement-summary">
-      <span className="achievement-count">{data.unlockedCount}<small>/{data.total}</small></span>
-      <div className="achievement-progress-wrap"><div className="achievement-progress-bar" style={{ width: `${pct}%` }} /></div>
-      <span className="achievement-pct">{pct}%</span>
-      {data.points > 0 && <span className="achievement-points">{data.points} pts</span>}
-    </div>
-    {data.refreshedAt === null && <p className="session-feedback">Fonte indisponível — exibindo o último dado guardado.</p>}
-    <ul className="achievement-list">{data.achievements.map((achievement) => <li key={achievement.id} className={achievement.unlocked ? 'achievement-unlocked' : 'achievement-locked'}>
-      <span className="achievement-icon" aria-hidden="true">{achievement.unlocked ? '★' : '○'}</span>
-      <div className="achievement-body">
-        <strong>{achievement.name}</strong>
-        {achievement.description && <p>{achievement.description}</p>}
-        {achievement.unlockedAt && <small>Desbloqueada em {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(achievement.unlockedAt))}</small>}
-      </div>
-      {achievement.rarityPercent !== null && <span className="achievement-rarity">{achievement.rarityPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}
-    </li>)}</ul>
-  </div>;
-}
 
 const formatDateOnly = (value: string) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`));
 
@@ -80,12 +54,7 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [addingPlatform, setAddingPlatform] = useState(false);
-  // Conquistas são carregadas por associação, só quando o usuário abre: cada
-  // abertura é uma requisição à fonte (ADR-028).
-  const [achievements, setAchievements] = useState<Record<string, ExternalAchievementsResponse | 'loading' | 'failed'>>({});
   const [addingPlaythrough, setAddingPlaythrough] = useState(false);
-  const [rawg, setRawg] = useState<RawgAchievementsResponse | 'loading' | 'failed' | null>(null);
-  const [rawgCandidates, setRawgCandidates] = useState<RawgAchievementCandidate[] | 'loading' | 'failed' | null>(null);
 
   const platformName = (id: string | null) => platforms.find((platform) => platform.id === id)?.name ?? 'Plataforma removida';
 
@@ -138,50 +107,6 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
     if (await send(`${apiUrl}/games/${gameId}/platforms/${link.id}/import-playtime`, 'POST')) onGameChanged?.();
   }
 
-  async function toggleAchievements(link: GamePlatform) {
-    if (achievements[link.id]) {
-      setAchievements((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== link.id)));
-      return;
-    }
-    setAchievements((current) => ({ ...current, [link.id]: 'loading' }));
-    try {
-      const response = await fetch(`${apiUrl}/games/${gameId}/platforms/${link.id}/achievements`);
-      if (!response.ok) throw new Error('falhou');
-      const data = await response.json() as ExternalAchievementsResponse;
-      setAchievements((current) => ({ ...current, [link.id]: data }));
-    } catch {
-      setAchievements((current) => ({ ...current, [link.id]: 'failed' }));
-    }
-  }
-
-  async function loadRawgCandidates() {
-    setRawgCandidates('loading');
-    try {
-      const response = await fetch(`${apiUrl}/games/${gameId}/rawg-achievements/candidates`);
-      if (!response.ok) throw new Error('falhou');
-      setRawgCandidates(await response.json() as RawgAchievementCandidate[]);
-    } catch { setRawgCandidates('failed'); }
-  }
-
-  async function linkRawg(candidate: RawgAchievementCandidate) {
-    setRawg('loading');
-    try {
-      const response = await fetch(`${apiUrl}/games/${gameId}/rawg-achievements`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(candidate) });
-      if (!response.ok) throw new Error('falhou');
-      setRawg(await response.json() as RawgAchievementsResponse); setRawgCandidates(null);
-    } catch { setRawg('failed'); }
-  }
-
-  async function toggleRawg() {
-    if (rawg) { setRawg(null); return; }
-    setRawg('loading');
-    try {
-      const response = await fetch(`${apiUrl}/games/${gameId}/rawg-achievements`);
-      if (!response.ok) throw new Error('falhou');
-      setRawg(await response.json() as RawgAchievementsResponse);
-    } catch { setRawg('failed'); }
-  }
-
   async function addPlatform(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -230,18 +155,6 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
   return <section className="details-section" aria-labelledby="journey-title">
     <h2 id="journey-title">Plataformas e jornadas</h2>
 
-    <section className="rawg-achievement-catalog" aria-labelledby="rawg-achievements-title">
-      <div className="section-heading"><h3 id="rawg-achievements-title">Catálogo de conquistas</h3><button type="button" className="session-edit" onClick={() => void toggleRawg()}>{rawg ? 'Ocultar catálogo' : 'Ver catálogo RAWG'}</button></div>
-      {rawg === 'loading' && <p className="session-empty">Carregando catálogo RAWG…</p>}
-      {rawg === 'failed' && <p role="alert" className="session-feedback">Não foi possível carregar o catálogo RAWG.</p>}
-      {typeof rawg === 'object' && rawg !== null && (rawg.linkedGame
-        ? <><p className="session-empty">Fonte: <a href="https://rawg.io/" target="_blank" rel="noreferrer">RAWG</a> · {rawg.linkedGame.name}. Desbloqueios pessoais continuam nas conquistas de cada plataforma.</p>{rawg.achievements.length === 0 ? <p className="session-empty">A RAWG não informa conquistas para este jogo.</p> : <ul className="achievement-list">{rawg.achievements.map((achievement) => <li key={achievement.id}><span className="achievement-icon" aria-hidden="true">○</span><div className="achievement-body"><strong>{achievement.name}</strong>{achievement.description && <p>{achievement.description}</p>}</div>{achievement.percent !== null && <span className="achievement-rarity">{achievement.percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}</li>)}</ul>}</>
-        : <><p className="session-empty">Escolha a referência correta antes de importar o catálogo. Isso evita associar remasters, DLCs ou jogos com nomes parecidos por engano.</p><button type="button" className="session-edit" onClick={() => void loadRawgCandidates()}>Buscar na RAWG</button></>) }
-      {rawgCandidates === 'loading' && <p className="session-empty">Buscando opções…</p>}
-      {rawgCandidates === 'failed' && <p role="alert" className="session-feedback">Não foi possível buscar opções na RAWG. Confira RAWG_API_KEY.</p>}
-      {Array.isArray(rawgCandidates) && <ul className="session-list">{rawgCandidates.length === 0 ? <li>Nenhum resultado encontrado.</li> : rawgCandidates.map((candidate) => <li key={candidate.id}><div><strong>{candidate.name}</strong><span>{candidate.released?.slice(0, 4) ?? 'Ano não informado'}</span></div><button type="button" className="session-edit" onClick={() => void linkRawg(candidate)}>Usar este jogo</button></li>)}</ul>}
-    </section>
-
     <h3>Plataformas</h3>
     {links === null ? <p className="session-empty">Carregando…</p> : links.length === 0
       ? <p className="session-empty">Nenhuma plataforma associada.</p>
@@ -267,14 +180,8 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
             type="button" className="session-edit" disabled={busy}
             onClick={() => void importPlaytime(link)}
           >Lançar como horas retroativas</button>}
-          {link.externalSource && <button type="button" className="session-edit" aria-expanded={Boolean(achievements[link.id])} onClick={() => void toggleAchievements(link)}>
-            {achievements[link.id] ? 'Ocultar conquistas' : 'Conquistas'}
-          </button>}
           <button type="button" className="session-delete" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'DELETE')}>Desassociar</button>
         </div>
-        {achievements[link.id] === 'loading' && <p className="session-empty">Carregando conquistas…</p>}
-        {achievements[link.id] === 'failed' && <p role="alert" className="session-feedback">Não foi possível carregar as conquistas.</p>}
-        {typeof achievements[link.id] === 'object' && <AchievementList data={achievements[link.id] as ExternalAchievementsResponse} />}
       </li>)}</ul>}
 
     {addingPlatform ? <form className="session-form" onSubmit={(event) => void addPlatform(event)}>
