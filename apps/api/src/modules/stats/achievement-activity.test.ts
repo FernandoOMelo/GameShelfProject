@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Game, Session } from '@gameshelf/contracts';
 import { achievementDays, achievementTimelineEvents, assignUnlocksToSessions } from './achievement-activity.js';
 import { buildActivity } from './activity.js';
+import { buildReplay } from './replay.js';
 import { buildTimeline } from './timeline.js';
 
 const gameId = '00000000-0000-4000-8000-000000000001';
@@ -33,7 +34,8 @@ describe('atividade de conquistas', () => {
 
     const activity = buildActivity({ sessions: [] as Session[], year: 2026, today: '2026-03-20', unlocks });
     expect(activity.achievementDays).toEqual([{ date: '2026-03-10', count: 2 }, { date: '2026-03-12', count: 2 }]);
-    expect(activity.activeDays).toBe(0);
+    // Conquista conta como dia jogado, mas não vira horas.
+    expect(activity.activeDays).toBe(2);
     expect(activity.totalMinutes).toBe(0);
   });
 
@@ -65,5 +67,22 @@ describe('atividade de conquistas', () => {
     const both = assignUnlocksToSessions([unlock], [early, late], 0);
     expect(both.bySession.size).toBe(0);
     expect(both.loose).toHaveLength(1);
+  });
+
+  it('conta um dia com sessão e conquista uma vez só, e dias só com conquista também', () => {
+    const played = session('00000000-0000-4000-8000-0000000000b1', '2026-03-10T20:00:00.000Z', '2026-03-10T21:00:00.000Z');
+    const activity = buildActivity({
+      sessions: [played], year: 2026, today: '2026-03-20',
+      unlocks: [{ gameId, unlockedAt: new Date('2026-03-10T20:30:00.000Z') }, { gameId, unlockedAt: new Date('2026-03-15T10:00:00.000Z') }, { gameId, unlockedAt: new Date('2025-12-31T10:00:00.000Z') }],
+    });
+    expect(activity.activeDays).toBe(2); // 10/03 (sessão + conquista) e 15/03 (só conquista); 2025 fica de fora
+    expect(activity.totalMinutes).toBe(60);
+  });
+
+  it('o replay do ano também conta o dia com conquista como dia jogado', () => {
+    const replay = buildReplay({ games: [game], sessions: [], genres: [], year: 2026, unlocks });
+    expect(replay.activeDays).toBe(2);
+    expect(replay.sessionCount).toBe(0);
+    expect(replay.totalMinutes).toBe(0);
   });
 });

@@ -59,9 +59,9 @@ export async function registerStatsRoutes(app: FastifyInstance, games: GameRepos
     if (!parsed.success) return reply.code(400).send({ message: 'Parâmetros do replay inválidos.', issues: parsed.error.issues });
     const { timezoneOffsetMinutes } = parsed.data;
     const year = parsed.data.year ?? new Date(Date.now() - timezoneOffsetMinutes * 60_000).getUTCFullYear();
-    const [gameRecords, sessionRecords, genreItems] = await Promise.all([games.list(), sessions.listAll(), genres.list()]);
+    const [gameRecords, sessionRecords, genreItems, unlocks] = await Promise.all([games.list(), sessions.listAll(), genres.list(), achievements?.listUnlocks() ?? Promise.resolve([])]);
     return reply.send(replayResponseSchema.parse(buildReplay({
-      games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), genres: genreItems, year, timezoneOffsetMinutes,
+      games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), genres: genreItems, year, timezoneOffsetMinutes, unlocks,
     })));
   });
 

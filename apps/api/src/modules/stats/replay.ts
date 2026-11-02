@@ -1,11 +1,12 @@
 import type { Game, ReplayResponse, Session } from '@gameshelf/contracts';
+import { achievementDays, type Unlock } from './achievement-activity.js';
 
 type Catalog = { id: string; name: string };
-type Input = { games: Game[]; sessions: Session[]; genres: Catalog[]; year: number; timezoneOffsetMinutes?: number };
+type Input = { games: Game[]; sessions: Session[]; genres: Catalog[]; year: number; timezoneOffsetMinutes?: number; unlocks?: Unlock[] };
 
 // Resumo de um ano: só sessões encerradas com início no ano (dia local) entram nas horas.
 // "Jogo do ano" e zerados seguem a data de conclusão do jogo.
-export function buildReplay({ games, sessions, genres, year, timezoneOffsetMinutes = 0 }: Input): ReplayResponse {
+export function buildReplay({ games, sessions, genres, year, timezoneOffsetMinutes = 0, unlocks = [] }: Input): ReplayResponse {
   const gamesById = new Map(games.map((game) => [game.id, game]));
   const genreNames = new Map(genres.map((genre) => [genre.id, genre.name]));
   const minutesByGame = new Map<string, number>();
@@ -32,6 +33,10 @@ export function buildReplay({ games, sessions, genres, year, timezoneOffsetMinut
     minutesByMonth.set(month, (minutesByMonth.get(month) ?? 0) + minutes);
     if (!longest || minutes > longest.minutes) longest = { gameId: game.id, date, minutes };
   }
+
+  // Dia jogado também é o dia com conquista desbloqueada (de um jogo da biblioteca).
+  const libraryUnlocks = unlocks.filter((unlock) => gamesById.has(unlock.gameId));
+  for (const day of achievementDays(libraryUnlocks, timezoneOffsetMinutes)) if (day.date.startsWith(`${year}-`)) days.add(day.date);
 
   const topGame = best(minutesByGame, (id) => gamesById.get(id)!.title);
   const topGenre = best(minutesByGenre, (id) => genreNames.get(id)!);

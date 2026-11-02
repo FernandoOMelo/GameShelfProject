@@ -19,6 +19,7 @@ export function buildActivity({ sessions, year, today, timezoneOffsetMinutes = 0
   const days = [...minutesByDay].filter(([date]) => date.startsWith(`${year}-`))
     .map(([date, minutes]) => ({ date, minutes })).sort((a, b) => a.date.localeCompare(b.date));
 
+  const achievementDaysOfYear = achievementDays(unlocks, timezoneOffsetMinutes).filter((day) => day.date.startsWith(`${year}-`));
   const activeDates = [...minutesByDay.keys()].sort();
   let longestStreak = 0;
   let run = 0;
@@ -34,11 +35,12 @@ export function buildActivity({ sessions, year, today, timezoneOffsetMinutes = 0
 
   return {
     year, days,
-    activeDays: days.length,
+    // Dia jogado: teve sessão ou teve conquista (se desbloqueou, o jogo foi jogado).
+    activeDays: new Set([...days.map((day) => day.date), ...achievementDaysOfYear.map((day) => day.date)]).size,
     totalMinutes: days.reduce((sum, day) => sum + day.minutes, 0),
     maxDayMinutes: days.reduce((max, day) => Math.max(max, day.minutes), 0),
     currentStreak, longestStreak,
-    achievementDays: achievementDays(unlocks, timezoneOffsetMinutes).filter((day) => day.date.startsWith(`${year}-`)),
+    achievementDays: achievementDaysOfYear,
   };
 }
 

@@ -22,7 +22,7 @@ export function ReplayPanel({ refreshKey, onOpenGame, suggestedYear }: { refresh
     return () => { active = false; };
   }, [year, refreshKey]);
 
-  const empty = replay !== null && replay.sessionCount === 0 && replay.completedCount === 0;
+  const empty = replay !== null && replay.sessionCount === 0 && replay.completedCount === 0 && replay.activeDays === 0;
 
   return <section className="panel" aria-labelledby="replay-title">
     <div className="activity-header">
