@@ -427,7 +427,8 @@ describe('library page', () => {
     fireEvent.click(screen.getByRole('button', { name: '← Jogo anterior' }));
     expect(await screen.findByRole('heading', { name: 'Hades' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('tab', { name: 'Sessões' }));
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas retroativas' }), { target: { value: '3.5' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas' }), { target: { value: '3' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos' }), { target: { value: '30' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lançar horas' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${first.id}`, expect.objectContaining({ method: 'PATCH' })));
     const update = fetchMock.mock.calls.find(([url, init]) => url === `/api/games/${first.id}` && init?.method === 'PATCH');
@@ -519,14 +520,14 @@ describe('library page', () => {
     expect(await screen.findByText('Você ainda não criou listas.')).toBeInTheDocument();
   });
 
-  it('puts one platform inside another as a group from the settings page', async () => {
+  it('puts one platform inside another as a group from the platforms page', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'PLAYING')]);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Configurações' }));
-    await screen.findByRole('heading', { name: 'Plataformas' });
-
-    const select = await screen.findByRole('combobox', { name: 'Grupo de Steam' });
-    fireEvent.change(select, { target: { value: '00000000-0000-4000-8000-000000000020' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Plataformas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais ações de Steam' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }));
+    fireEvent.change(await screen.findByLabelText('Grupo da plataforma'), { target: { value: '00000000-0000-4000-8000-000000000020' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/platforms/00000000-0000-4000-8000-000000000022', expect.objectContaining({ method: 'PATCH' })));
     const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/platforms/00000000-0000-4000-8000-000000000022' && init?.method === 'PATCH');
@@ -543,16 +544,18 @@ describe('library page', () => {
     await screen.findByRole('heading', { name: 'Horas Jogadas' });
 
     // Lançar soma ao total existente.
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas retroativas' }), { target: { value: '5' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas' }), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lançar horas' }));
     await waitFor(() => expect(bodyOf(`/api/games/${game.id}`)).toMatchObject({ retroactivePlayedHours: 15 }));
 
     // Corrigir grava o valor informado, sem somar.
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas retroativas' }), { target: { value: '3' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Horas' }), { target: { value: '3' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos' }), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: 'Corrigir total' }));
     await waitFor(() => expect(bodyOf(`/api/games/${game.id}`)).toMatchObject({ retroactivePlayedHours: 3 }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Zerar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zerar horas lançadas' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Zerar horas retroativas' })).getByRole('button', { name: 'Zerar' }));
     await waitFor(() => expect(bodyOf(`/api/games/${game.id}`)).toMatchObject({ retroactivePlayedHours: 0 }));
   });
 
@@ -565,7 +568,7 @@ describe('library page', () => {
     await screen.findByRole('heading', { name: 'Plataformas e jornadas' });
     expect(screen.getByText('Nenhuma plataforma associada.')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adicionar plataforma' }));
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar plataforma/ }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Plataforma' }), { target: { value: '00000000-0000-4000-8000-000000000020' } });
     fireEvent.click(screen.getByRole('button', { name: 'Associar plataforma' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/platforms`, expect.objectContaining({ method: 'POST' })));
@@ -579,6 +582,23 @@ describe('library page', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/playthroughs`, expect.objectContaining({ method: 'POST' })));
     const playthroughRequest = fetchMock.mock.calls.find(([url, init]) => url === `/api/games/${game.id}/playthroughs` && init?.method === 'POST');
     expect(JSON.parse(String(playthroughRequest?.[1]?.body))).toMatchObject({ label: 'Primeira vez', status: 'PLAYING' });
+  });
+
+  it('launches a retroactive journey that already ended', async () => {
+    const game = makeGame('00000000-0000-4000-8000-000000000001', 'The Witcher 3', 'PLAYING');
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de The Witcher 3' }));
+    await screen.findByRole('heading', { name: 'Plataformas e jornadas' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar jornada' }));
+    fireEvent.change(screen.getByLabelText(/^Início/), { target: { value: '2024-01-10' } });
+    fireEvent.change(screen.getByLabelText(/^Encerramento/), { target: { value: '2024-02-20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar jornada' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/games/${game.id}/playthroughs`, expect.objectContaining({ method: 'POST' })));
+    const request = fetchMock.mock.calls.find(([url, init]) => url === `/api/games/${game.id}/playthroughs` && init?.method === 'POST');
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ status: 'COMPLETED', startedAt: '2024-01-10', completedAt: '2024-02-20' });
   });
 
   it('registers a session from a game detail page and displays its duration', async () => {
@@ -1097,6 +1117,15 @@ describe('next game suggestion', () => {
 });
 
 describe('statistics and classification', () => {
+  it('limits the completed-game statistics to the chosen year', async () => {
+    mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'COMPLETED')]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Estatísticas' }));
+    const period = await screen.findByRole('group', { name: 'Período dos jogos zerados' });
+    fireEvent.click(within(period).getByRole('button', { name: '2025' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/stats?year=2025')).toBe(true));
+  });
+
   it('shows statistics tables and the main challenge progress', async () => {
     mockApi([makeGame('00000000-0000-4000-8000-000000000001', 'Hades', 'COMPLETED')]);
     render(<App />);
@@ -1106,7 +1135,8 @@ describe('statistics and classification', () => {
     expect(await screen.findByRole('heading', { name: 'Estatísticas' })).toBeInTheDocument();
     expect(await screen.findByText('Linha do tempo anual')).toBeInTheDocument();
     expect(screen.getByText('Top 10 jogos favoritos')).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'RPG' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Por gênero' })).toHaveTextContent('RPG');
+    expect(screen.getByText('Ainda sem dados')).toBeInTheDocument();
     expect(screen.getByText('Jogo do ano')).toBeInTheDocument();
     expect(await screen.findByRole('img', { name: /dias jogados/ })).toBeInTheDocument();
     expect(screen.getByText('Maior sequência').nextSibling).toHaveTextContent('3 dias');

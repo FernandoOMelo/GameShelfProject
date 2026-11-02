@@ -1,9 +1,20 @@
-import { asc, desc, eq, externalAchievements, type Database } from '@gameshelf/database';
+import { and, asc, desc, eq, externalAchievements, gamePlatforms, type Database } from '@gameshelf/database';
 import type { ExternalAchievementEntry } from '../integrations/external-library.js';
-import type { ExternalAchievementRecord, ExternalAchievementRepository } from './achievement-repository.js';
+import type { AchievementUnlock, ExternalAchievementRecord, ExternalAchievementRepository } from './achievement-repository.js';
 
 export class DrizzleExternalAchievementRepository implements ExternalAchievementRepository {
   constructor(private readonly db: Database) {}
+
+  async listUnlocks(): Promise<AchievementUnlock[]> {
+    const rows = await this.db.select({
+      gameId: gamePlatforms.gameId, platformId: gamePlatforms.platformId, unlockedAt: externalAchievements.unlockedAt,
+      name: externalAchievements.name, description: externalAchievements.description, iconUrl: externalAchievements.iconUrl,
+    })
+      .from(externalAchievements)
+      .innerJoin(gamePlatforms, eq(gamePlatforms.id, externalAchievements.gamePlatformId))
+      .where(and(eq(externalAchievements.unlocked, true)));
+    return rows.flatMap((row) => row.unlockedAt ? [{ ...row, unlockedAt: row.unlockedAt }] : []);
+  }
 
   async listForGamePlatform(gamePlatformId: string): Promise<ExternalAchievementRecord[]> {
     return this.db.select().from(externalAchievements)

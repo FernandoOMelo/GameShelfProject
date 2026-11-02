@@ -14,7 +14,18 @@ export type ExternalAchievementRecord = {
   syncedAt: Date;
 };
 
+export type AchievementUnlock = {
+  gameId: string;
+  platformId: string;
+  unlockedAt: Date;
+  name: string;
+  description: string | null;
+  iconUrl: string | null;
+};
+
 export interface ExternalAchievementRepository {
+  /** Todos os desbloqueios com data, de todos os jogos, para linha do tempo e gráficos. */
+  listUnlocks(): Promise<AchievementUnlock[]>;
   listForGamePlatform(gamePlatformId: string): Promise<ExternalAchievementRecord[]>;
   /**
    * Substitui o espelho local das conquistas daquela associação.

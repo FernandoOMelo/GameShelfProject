@@ -56,6 +56,7 @@ describe('rotas do catálogo RAWG', () => {
     };
     const gamePlatforms = { listForGame: async () => [{ id: 'link-1' }] } as unknown as GamePlatformRepository;
     const externalAchievements: ExternalAchievementRepository = {
+      listUnlocks: async () => [],
       listForGamePlatform: async () => [{
         id: '00000000-0000-4000-8000-000000000009', gamePlatformId: 'link-1', externalId: '40', name: 'primeira vitória', description: null, iconUrl: null,
         points: null, rarityPercent: null, unlocked: true, unlockedAt: new Date('2026-10-09T12:21:00.000Z'), syncedAt: new Date('2026-10-28T00:00:00.000Z'),
@@ -68,6 +69,6 @@ describe('rotas do catálogo RAWG', () => {
 
     const response = await app.inject(`/games/${gameId}/achievements`);
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ total: 1, unlockedCount: 1, achievements: [{ name: 'Primeira vitória', unlocked: true }] });
+    expect(response.json()).toMatchObject({ total: 1, unlockedCount: 1, achievements: [{ name: 'primeira vitória', description: 'Vença uma corrida.', unlocked: true }] });
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { GamePlatform, GamePlatformFormat, Platform, Playthrough, PlaythroughMetrics, PlaythroughStatus } from '@gameshelf/contracts';
-import { Button } from '@gameshelf/ui';
+import { Button, ConfirmDialog, Switch } from '@gameshelf/ui';
+import { PlatformLogo, platformStyle } from './platform-icons';
 import { apiUrl, formatCompactHours } from './shared';
 
 const statusLabels: Record<PlaythroughStatus, string> = {
@@ -27,8 +28,18 @@ const todayLocal = () => {
 
 const formatDateOnly = (value: string) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`));
 
+/** Data local (YYYY-MM-DD) de um instante ISO. */
+const localDate = (iso: string) => {
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
 type Props = {
   gameId: string;
+  /** Datas do jogo, para sugerir início e fim só quando estiverem vazios. */
+  gameDates?: { status: string; startedAt: string | null; completedAt: string | null };
+  /** Grava uma data sugerida no jogo; só roda quando o usuário clica. */
+  onApplyDate?: (field: 'startedAt' | 'completedAt', value: string) => void | Promise<void>;
   /** Horas retroativas já lançadas no jogo, para mostrar o efeito do lançamento. */
   retroactiveHours?: number;
   /** Sessões encerradas sem plataforma informada: não dá para descontá-las. */
@@ -47,7 +58,7 @@ type Props = {
  * tempo informado pela plataforma aparecem separados, e nunca somados: são
  * medidas diferentes da mesma biblioteca.
  */
-export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveHours = 0, sessionsWithoutPlatform = 0, onPlaythroughsChanged, onGameChanged }: Props) {
+export function GameJourneyPanel({ gameId, gameDates, onApplyDate, platforms, localMinutes, retroactiveHours = 0, sessionsWithoutPlatform = 0, onPlaythroughsChanged, onGameChanged }: Props) {
   const [links, setLinks] = useState<GamePlatform[] | null>(null);
   const [playthroughs, setPlaythroughs] = useState<Playthrough[] | null>(null);
   const [metrics, setMetrics] = useState<PlaythroughMetrics | null>(null);
@@ -130,12 +141,17 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
     const startedAt = String(form.get('startedAt') ?? '').trim();
     const label = String(form.get('label') ?? '').trim();
     const primaryPlatformId = String(form.get('primaryPlatformId') ?? '');
+    const completedAt = String(form.get('completedAt') ?? '').trim();
+    if (completedAt && startedAt && completedAt < startedAt) { setMessage('A data de encerramento não pode ser anterior ao início.'); return; }
+    const endStatus = String(form.get('endStatus') ?? 'COMPLETED') as PlaythroughStatus;
+    // Com data de encerramento a jornada nasce já finalizada (lançamento retroativo).
     // Uma jornada só é criada como "em andamento" quando tem data de início;
     // sem data ela fica planejada e não conta como iniciada.
     const ok = await send(`${apiUrl}/games/${gameId}/playthroughs`, 'POST', {
       label: label || null,
-      status: startedAt ? 'PLAYING' : 'PLANNED',
+      status: completedAt ? endStatus : startedAt ? 'PLAYING' : 'PLANNED',
       startedAt: startedAt || null,
+      ...(completedAt ? { completedAt } : {}),
       primaryPlatformId: primaryPlatformId || null,
     });
     if (ok) { setAddingPlaythrough(false); onPlaythroughsChanged?.(); }
@@ -152,39 +168,79 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
   const started = metrics?.started ?? 0;
   const nextLabel = (playthroughs?.length ?? 0) === 0 ? 'Iniciar jornada' : 'Iniciar replay';
 
-  return <section className="details-section" aria-labelledby="journey-title">
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<{ title: string; description: string; action: () => void } | null>(null);
+  const [formEnd, setFormEnd] = useState('');
+
+  // Janela de atividade pelas conquistas do Achievist: a primeira e a última
+  // data viram sugestão de início e de zerado, aplicadas só com o clique do usuário.
+  const starts = (links ?? []).flatMap((link) => link.externalActivityStartedAt ? [localDate(link.externalActivityStartedAt)] : []).sort();
+  const ends = (links ?? []).flatMap((link) => link.externalActivityEndedAt ? [localDate(link.externalActivityEndedAt)] : []).sort();
+  const suggestedStart = starts[0] ?? null;
+  const suggestedEnd = ends.at(-1) ?? null;
+  const activityDays = (links ?? []).reduce((total, link) => total + link.externalActivityDays, 0);
+  const canSuggestStart = Boolean(onApplyDate && gameDates && !gameDates.startedAt && suggestedStart);
+  const canSuggestEnd = Boolean(onApplyDate && gameDates && gameDates.status === 'COMPLETED' && !gameDates.completedAt && suggestedEnd);
+
+  const statusChip = (status: PlaythroughStatus) => <span className={`status-pill status-${status.toLowerCase()}`}>{statusLabels[status]}</span>;
+
+  return <section className="details-section jp" aria-labelledby="journey-title">
     <h2 id="journey-title">Plataformas e jornadas</h2>
 
-    <h3>Plataformas</h3>
-    {links === null ? <p className="session-empty">Carregando…</p> : links.length === 0
-      ? <p className="session-empty">Nenhuma plataforma associada.</p>
-      : <ul className="session-list">{links.map((link) => <li key={link.id}>
-        <div>
-          <strong>{platformName(link.platformId)}</strong>
-          <span>{[link.edition, link.format ? formatLabels[link.format] : null, link.owned ? 'Possuo' : 'Não possuo', link.isPrimary ? 'Principal' : null].filter(Boolean).join(' · ')}</span>
-        </div>
-        {link.externalPlaytimeMinutes !== null && <p className="session-journal-entry">
-          Tempo informado pela plataforma: {formatCompactHours(link.externalPlaytimeMinutes / 60)}
-          {link.externalSource ? ` · via ${link.externalSource}` : ''}
-          {link.externalPlaytimeImportedMinutes > 0 && ` · ${formatCompactHours(link.externalPlaytimeImportedMinutes / 60)} já lançadas como retroativas`}
-          {link.countsTowardTotal && ' · conta no total consolidado'}
-        </p>}
-        <div className="session-item-actions">
-          <button type="button" className="session-edit" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { owned: !link.owned })}>{link.owned ? 'Marcar como não possuído' : 'Marcar como possuído'}</button>
-          {!link.isPrimary && <button type="button" className="session-edit" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { isPrimary: true })}>Tornar principal</button>}
-          {link.externalPlaytimeMinutes !== null && <button
-            type="button" className="session-edit" disabled={busy} aria-pressed={link.countsTowardTotal}
-            onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { countsTowardTotal: !link.countsTowardTotal })}
-          >{link.countsTowardTotal ? 'Não contar no total' : 'Contar no total'}</button>}
-          {link.externalPlaytimeMinutes !== null && link.externalPlaytimeMinutes > link.externalPlaytimeImportedMinutes && <button
-            type="button" className="session-edit" disabled={busy}
-            onClick={() => void importPlaytime(link)}
-          >Lançar como horas retroativas</button>}
-          <button type="button" className="session-delete" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'DELETE')}>Desassociar</button>
-        </div>
-      </li>)}</ul>}
+    {(canSuggestStart || canSuggestEnd) && <div className="jp-suggest" role="status">
+      <div>
+        <strong>Datas sugeridas pelo Achievist</strong>
+        <p>Suas conquistas neste jogo vão de {formatDateOnly(suggestedStart!)} a {formatDateOnly(suggestedEnd ?? suggestedStart!)}{activityDays > 0 ? `, em ${activityDays} ${activityDays === 1 ? 'dia' : 'dias'}` : ''}. É uma sugestão: nada é gravado sem o seu clique.</p>
+      </div>
+      <div className="jp-suggest-actions">
+        {canSuggestStart && <button type="button" className="button-secondary" onClick={() => void onApplyDate!('startedAt', suggestedStart!)}>Usar {formatDateOnly(suggestedStart!)} como início</button>}
+        {canSuggestEnd && <button type="button" className="button-secondary" onClick={() => void onApplyDate!('completedAt', suggestedEnd!)}>Usar {formatDateOnly(suggestedEnd!)} como data de zerado</button>}
+      </div>
+    </div>}
 
-    {addingPlatform ? <form className="session-form" onSubmit={(event) => void addPlatform(event)}>
+    <header className="jp-head">
+      <h3>Plataformas</h3>
+      {!addingPlatform && <button type="button" className="button-secondary jp-add" onClick={() => { setAddingPlatform(true); setMessage(''); }}>+ Adicionar plataforma</button>}
+    </header>
+    {links === null ? <p className="session-empty">Carregando…</p> : links.length === 0
+      ? <div className="sess-empty"><p className="session-empty">Nenhuma plataforma associada.</p></div>
+      : <ul className="jp-platforms">{links.map((link) => {
+        const name = platformName(link.platformId);
+        const hasExternal = link.externalPlaytimeMinutes !== null;
+        return <li key={link.id} className="jp-platform" style={platformStyle(platforms.find((item) => item.id === link.platformId) ?? {})}>
+          <div className="jp-platform-top">
+            <PlatformLogo platform={platforms.find((item) => item.id === link.platformId) ?? {}} />
+            <div className="jp-platform-title">
+              <strong>{name}</strong>
+              <div className="jp-chips">
+                {link.isPrimary && <span className="jp-chip jp-chip-primary">Principal</span>}
+                <span className={`jp-chip ${link.owned ? 'jp-chip-ok' : ''}`}>{link.owned ? 'Possuo' : 'Não possuo'}</span>
+                {link.edition && <span className="jp-chip">{link.edition}</span>}
+                {link.format && <span className="jp-chip">{formatLabels[link.format]}</span>}
+              </div>
+            </div>
+            {hasExternal && (link.externalPlaytimeMinutes ?? 0) > 0 && <div className="jp-playtime">
+              <strong>{formatCompactHours((link.externalPlaytimeMinutes ?? 0) / 60)}</strong>
+              <span>na plataforma{link.externalSource ? ` · via ${link.externalSource}` : ''}</span>
+            </div>}
+            <div className="jp-menu">
+              <button type="button" className="jp-menu-btn" aria-label={`Mais ações de ${name}`} aria-expanded={menuFor === link.id} onClick={() => setMenuFor(menuFor === link.id ? null : link.id)}>⋯</button>
+              {menuFor === link.id && <div className="jp-menu-list" role="menu">
+                {!link.isPrimary && <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenuFor(null); void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { isPrimary: true }); }}>Tornar principal</button>}
+                {hasExternal && (link.externalPlaytimeMinutes ?? 0) > link.externalPlaytimeImportedMinutes && <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenuFor(null); void importPlaytime(link); }}>Lançar como horas retroativas</button>}
+                <button type="button" role="menuitem" className="jp-danger" disabled={busy} onClick={() => { setMenuFor(null); setPendingRemoval({ title: 'Desassociar plataforma', description: `Remover ${name} deste jogo?`, action: () => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'DELETE') }); }}>Desassociar</button>
+              </div>}
+            </div>
+          </div>
+          <div className="jp-toggles">
+            <label className="jp-toggle"><Switch aria-label={`Possuo em ${name}`} checked={link.owned} disabled={busy} onChange={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { owned: !link.owned })} /><span>Possuo</span></label>
+            {hasExternal && <label className="jp-toggle"><Switch aria-label={`Contar ${name} no total`} checked={link.countsTowardTotal} disabled={busy} onChange={() => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { countsTowardTotal: !link.countsTowardTotal })} /><span>Contar no total</span></label>}
+            {link.externalPlaytimeImportedMinutes > 0 && <small>{formatCompactHours(link.externalPlaytimeImportedMinutes / 60)} já lançadas como retroativas</small>}
+          </div>
+        </li>;
+      })}</ul>}
+
+    {addingPlatform && <form className="session-form jp-form" onSubmit={(event) => void addPlatform(event)}>
       <label className="form-field">Plataforma<select name="platformId" required defaultValue="">
         <option value="">Selecione</option>
         {platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}
@@ -194,31 +250,35 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
         <option value="">Não informado</option>
         {Object.entries(formatLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
-      <label className="form-field checkbox-field"><input type="checkbox" name="owned" defaultChecked />Possuo nesta plataforma</label>
-      <label className="form-field checkbox-field"><input type="checkbox" name="isPrimary" />Plataforma principal</label>
+      <label className="form-field checkbox-field"><span>Possuo nesta plataforma</span><Switch name="owned" defaultChecked /></label>
+      <label className="form-field checkbox-field"><span>Plataforma principal</span><Switch name="isPrimary" /></label>
       <div className="form-wide session-actions">
         <Button type="submit" disabled={busy}>Associar plataforma</Button>
         <button type="button" className="cancel-button" onClick={() => setAddingPlatform(false)}>Cancelar</button>
       </div>
-    </form> : <Button type="button" onClick={() => { setAddingPlatform(true); setMessage(''); }}>Adicionar plataforma</Button>}
+    </form>}
 
-    <h3>Jornadas</h3>
-    <dl className="details-estimates">
+    <header className="jp-head jp-head-journeys">
+      <h3>Jornadas</h3>
+      {!addingPlaythrough && <button type="button" className="gameshelf-button jp-add" onClick={() => { setAddingPlaythrough(true); setFormEnd(''); setMessage(''); }}>{nextLabel}</button>}
+    </header>
+    <dl className="sess-stats">
       <div><dt>Jornadas iniciadas</dt><dd>{started}</dd></div>
       <div><dt>Jornadas concluídas</dt><dd>{metrics?.completed ?? 0}</dd></div>
       <div><dt>Replays iniciados</dt><dd>{metrics?.replaysStarted ?? 0}</dd></div>
     </dl>
 
     {playthroughs === null ? <p className="session-empty">Carregando…</p> : playthroughs.length === 0
-      ? <p className="session-empty">Nenhuma jornada registrada. O histórico de sessões continua valendo mesmo sem jornada.</p>
-      : <ol className="session-list">{[...playthroughs].reverse().map((playthrough) => <li key={playthrough.id}>
-        <div>
+      ? <div className="sess-empty"><p className="session-empty">Nenhuma jornada registrada. O histórico de sessões continua valendo mesmo sem jornada.</p></div>
+      : <ol className="jp-journeys">{[...playthroughs].reverse().map((playthrough) => <li key={playthrough.id} className="jp-journey">
+        <div className="jp-journey-top">
           <strong>{playthrough.label ?? (playthrough.isReplay ? `Replay ${playthrough.sequence - 1}` : 'Primeira jornada')}</strong>
-          <span className={`status-pill status-${playthrough.status.toLowerCase()}`}>{statusLabels[playthrough.status]}</span>
+          {statusChip(playthrough.status)}
+          {playthrough.isReplay && <span className="jp-chip">Replay</span>}
         </div>
-        <p>{[
+        <p className="jp-journey-meta">{[
           playthrough.startedAt ? `Início: ${formatDateOnly(playthrough.startedAt)}` : 'Início não informado',
-          playthrough.completedAt ? `Conclusão: ${formatDateOnly(playthrough.completedAt)}` : null,
+          playthrough.completedAt ? `Encerramento: ${formatDateOnly(playthrough.completedAt)}` : null,
           playthrough.primaryPlatformId ? `Plataforma: ${platformName(playthrough.primaryPlatformId)}` : null,
         ].filter(Boolean).join(' · ')}</p>
         {playthrough.notes && <p className="session-journal-entry">{playthrough.notes}</p>}
@@ -227,22 +287,27 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
             key={transition.status + transition.label} type="button" className="session-edit" disabled={busy}
             onClick={() => void changeStatus(playthrough, transition.status, transition.needsDate)}
           >{transition.label}</button>)}
-          <button type="button" className="session-delete" disabled={busy} onClick={() => void send(`${apiUrl}/games/${gameId}/playthroughs/${playthrough.id}`, 'DELETE')}>Excluir jornada</button>
+          <button type="button" className="session-delete" disabled={busy} onClick={() => setPendingRemoval({ title: 'Excluir jornada', description: 'Excluir esta jornada? Esta ação não pode ser desfeita.', action: () => void send(`${apiUrl}/games/${gameId}/playthroughs/${playthrough.id}`, 'DELETE').then((ok) => { if (ok) onPlaythroughsChanged?.(); }) })}>Excluir jornada</button>
         </div>
       </li>)}</ol>}
 
-    {addingPlaythrough ? <form className="session-form" onSubmit={(event) => void addPlaythrough(event)}>
+    {addingPlaythrough && <form className="session-form jp-form" onSubmit={(event) => void addPlaythrough(event)}>
       <label className="form-field">Identificação<input name="label" maxLength={120} placeholder="Ex.: Replay no PlayStation 5" /></label>
-      <label className="form-field">Início<input name="startedAt" type="date" defaultValue={todayLocal()} /><small>Deixe vazio para deixar a jornada apenas planejada.</small></label>
       <label className="form-field">Plataforma principal<select name="primaryPlatformId" defaultValue="">
         <option value="">Não informada</option>
         {platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}
-      </select><small>Resumo de exibição: as sessões podem usar outras plataformas.</small></label>
+      </select></label>
+      <label className="form-field">Início<input name="startedAt" type="date" defaultValue={todayLocal()} /><small>Deixe vazio para deixar a jornada apenas planejada.</small></label>
+      <label className="form-field">Encerramento<input name="completedAt" type="date" value={formEnd} onChange={(event) => setFormEnd(event.target.value)} /><small>Preencha para lançar uma jornada que já terminou.</small></label>
+      {formEnd && <label className="form-field">Resultado<select name="endStatus" defaultValue="COMPLETED">
+        <option value="COMPLETED">Concluída</option>
+        <option value="ABANDONED">Abandonada</option>
+      </select></label>}
       <div className="form-wide session-actions">
         <Button type="submit" disabled={busy}>Criar jornada</Button>
         <button type="button" className="cancel-button" onClick={() => setAddingPlaythrough(false)}>Cancelar</button>
       </div>
-    </form> : <Button type="button" onClick={() => { setAddingPlaythrough(true); setMessage(''); }}>{nextLabel}</Button>}
+    </form>}
 
     {/* O desconto automático depende da plataforma da sessão; sem ela o sistema
         não sabe de qual plataforma descontar e o total pode ficar inflado. */}
@@ -252,12 +317,11 @@ export function GameJourneyPanel({ gameId, platforms, localMinutes, retroactiveH
         : `${sessionsWithoutPlatform} sessões deste jogo não têm plataforma informada e não entram no desconto do total consolidado.`}
       {' '}Informe a plataforma nelas para o tempo da fonte não ser contado duas vezes.
     </p>}
-    <p className="session-empty">
-      Tempo registrado localmente: {formatCompactHours(localMinutes / 60)}
-      {retroactiveHours ? `, incluindo ${formatCompactHours(retroactiveHours)} lançadas sem sessão` : ''}.
-      O tempo informado pelas plataformas aparece em cada associação e não é somado a este total — lançá-lo como
-      horas retroativas é uma decisão sua, por plataforma.
+    <p className="jp-note" title="O tempo informado pelas plataformas aparece em cada associação e não é somado a este total — lançá-lo como horas retroativas é uma decisão sua, por plataforma.">
+      <span aria-hidden="true">ⓘ</span> Tempo registrado localmente: {formatCompactHours(localMinutes / 60)}
+      {retroactiveHours ? `, incluindo ${formatCompactHours(retroactiveHours)} lançadas sem sessão` : ''}. O tempo das plataformas não é somado aqui.
     </p>
     {message && <p role="alert" className="session-feedback">{message}</p>}
+    <ConfirmDialog open={pendingRemoval !== null} title={pendingRemoval?.title ?? ''} description={pendingRemoval?.description} confirmLabel="Remover" tone="danger" onCancel={() => setPendingRemoval(null)} onConfirm={() => { pendingRemoval?.action(); setPendingRemoval(null); }} />
   </section>;
 }

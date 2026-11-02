@@ -1,12 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { GameAchievementsPanel } from './game-achievements-panel';
+import { DlcPanel } from './dlc-panel';
+import { FranchisePanel } from './franchise-panel';
 
-type DetailTab = 'resumo' | 'conquistas' | 'sessoes';
+type DetailTab = 'resumo' | 'conquistas' | 'sessoes' | 'dlc-franquia';
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState, Switch } from '@gameshelf/ui';
 
-import { apiUrl, difficultyLabels, formatCompactHours, formatDateTime, formatElapsed, formatHours, formatHoursMinutes, formatDuration } from './shared';
-import { PlatformIcon } from './platform-icons';
+import { apiUrl, difficultyLabels, formatCompactHours, formatDateTime, formatElapsed, formatHours, formatHoursMinutes, formatDuration, statusLabels } from './shared';
+import { PlatformIcon, platformStyle } from './platform-icons';
 import { ProfileHeader, ProfileTabs } from './profile-nav';
 import { readRoute, routePath, type AppView } from '../router';
 import { DashboardView, type LibraryFilter } from './dashboard-view';
@@ -120,10 +122,6 @@ function initialCustomPeriod() {
   } catch { /* Keep the current month when storage is unavailable or invalid. */ }
   return { from: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`, to: todayLocal() };
 }
-const statusLabels: Record<Game['status'], string> = {
-  DESIRED: 'Desejado', BACKLOG: 'Na biblioteca', PLAYING: 'Jogando', PAUSED: 'Pausado', COMPLETED: 'Zerado', ABANDONED: 'Abandonado',
-};
-
 export function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [franchises, setFranchises] = useState<Franchise[]>([]);
@@ -150,6 +148,7 @@ export function App() {
   const [creatingList, setCreatingList] = useState(false);
   const [listFeedback, setListFeedback] = useState('');
   const [retroactiveHours, setRetroactiveHours] = useState('');
+  const [retroactiveMinutes, setRetroactiveMinutes] = useState('');
   // A URL é a fonte da verdade da navegação (ADR-021); o estado é a projeção dela.
   const [initialRoute] = useState(() => readRoute(window.location.pathname));
   const [activeView, setActiveView] = useState<AppView>(initialRoute.view);
@@ -203,6 +202,7 @@ export function App() {
   const metadataTokenRef = useRef(0);
   const timesTokenRef = useRef(0);
   const searchedTitleRef = useRef('');
+  const appliedFranchiseIgdbIdRef = useRef<number | null>(null);
 
   const searching = searchingMetadata || searchingTimeEstimates;
   const resultCount = metadataCandidates.length + timeEstimateCandidates.length;
@@ -219,6 +219,17 @@ export function App() {
     const timer = setTimeout(() => void searchWhileTyping(query), 450);
     return () => clearTimeout(timer);
   }, [formTitle, dialogOpen]);
+
+  /** Resumo de conquistas carregado ao abrir o jogo, para a lateral e o contador da aba aparecerem em qualquer aba. */
+  useEffect(() => {
+    if (!selectedGame) return;
+    let active = true;
+    fetch(`${apiUrl}/games/${selectedGame.id}/achievements`)
+      .then((response) => response.ok ? response.json() as Promise<GameAchievementsResponse> : null)
+      .then((body) => { if (active && body) setAchievementsSummary(body); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [selectedGame?.id]);
 
   async function loadGames() {
     setLoading(true);
@@ -257,6 +268,13 @@ export function App() {
       .catch(() => { if (active) setPlatformSummaries([]); });
     return () => { active = false; };
   }, []);
+
+  async function reloadPlatformSummaries() {
+    try {
+      const response = await fetch(`${apiUrl}/platforms/summaries`);
+      if (response.ok) setPlatformSummaries(await response.json() as PlatformSummary[]);
+    } catch { /* o resumo anterior continua válido até a próxima tentativa */ }
+  }
   useEffect(() => {
     if (listFilter === 'ALL') { setListGameIds(null); return; }
     void fetch(`${apiUrl}/lists/${listFilter}`).then(async (response) => {
@@ -486,6 +504,7 @@ export function App() {
       const response = await fetch(`${apiUrl}/platforms`);
       if (response.ok) setPlatforms(await response.json() as Platform[]);
     } catch { /* o catálogo em memória continua válido até a próxima tentativa */ }
+    await reloadPlatformSummaries();
   }
 
   async function refreshPlanningViews() {
@@ -576,9 +595,20 @@ export function App() {
         const existing = franchises.find((franchise) => franchise.name.toLocaleLowerCase() === franchiseName.toLocaleLowerCase());
         if (existing) {
           franchiseId = existing.id;
+          // Franquia já existia sem id do IGDB: se a busca trouxe um agora,
+          // completa o vínculo pra aba de franquia funcionar sem recadastrar.
+          if (!existing.igdbFranchiseId && appliedFranchiseIgdbIdRef.current) {
+            const response = await fetch(`${apiUrl}/franchises/${existing.id}/igdb-link`, {
+              method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ igdbFranchiseId: appliedFranchiseIgdbIdRef.current }),
+            });
+            if (response.ok) {
+              const franchise = await response.json() as Franchise;
+              setFranchises((items) => items.map((item) => item.id === franchise.id ? franchise : item));
+            }
+          }
         } else {
           const response = await fetch(`${apiUrl}/franchises`, {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: franchiseName }),
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: franchiseName, igdbFranchiseId: appliedFranchiseIgdbIdRef.current }),
           });
           if (!response.ok) {
             const body = await response.json() as { error?: string };
@@ -730,6 +760,7 @@ export function App() {
     setGameFormField('developer', candidate.developer);
     setGameFormField('publisher', candidate.publisher);
     setGameFormField('franchiseName', candidate.franchise);
+    appliedFranchiseIgdbIdRef.current = candidate.franchiseIgdbId ?? null;
     setGameFormField('genreNames', candidate.genres?.join(', '));
     searchedTitleRef.current = candidate.title.trim();
     setMetadataCandidates([]);
@@ -900,6 +931,7 @@ export function App() {
 
   function openEditor(game: Game | null = null) {
     const title = game?.title ?? '';
+    appliedFranchiseIgdbIdRef.current = null;
     setEditing(game);
     setFormStatus(game?.status ?? 'BACKLOG');
     setFormTitle(title);
@@ -939,17 +971,25 @@ export function App() {
       if (current === 0) return;
       await updateGame(selectedGame, { retroactivePlayedHours: 0 });
       setRetroactiveHours('');
+      setRetroactiveMinutes('');
       setSessionFeedback('Horas retroativas zeradas.');
       return;
     }
-    const amount = Number(retroactiveHours);
-    if (!Number.isFinite(amount) || amount < 0 || (mode === 'add' && amount <= 0)) {
-      setSessionFeedback('Informe um número de horas válido.');
+    const hours = Number(retroactiveHours || 0);
+    const minutes = Number(retroactiveMinutes || 0);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || minutes < 0 || minutes > 59) {
+      setSessionFeedback('Informe horas inteiras e minutos de 0 a 59.');
+      return;
+    }
+    const amount = hours + minutes / 60;
+    if (mode === 'add' && amount <= 0) {
+      setSessionFeedback('Informe um tempo maior que zero.');
       return;
     }
     const next = mode === 'add' ? current + amount : amount;
     await updateGame(selectedGame, { retroactivePlayedHours: Number(next.toFixed(2)) });
     setRetroactiveHours('');
+    setRetroactiveMinutes('');
     setSessionFeedback(mode === 'add' ? 'Horas retroativas adicionadas.' : 'Horas retroativas corrigidas.');
   }
 
@@ -1142,28 +1182,36 @@ export function App() {
               <p className="eyebrow">BIBLIOTECA · DETALHES DO JOGO</p>
               <h1 id="details-title">{selectedGame.title}</h1>
               <p className="details-byline">{[selectedGame.releaseYear, selectedGame.developer, selectedGame.publisher, franchises.find((franchise) => franchise.id === selectedGame.franchiseId)?.name].filter(Boolean).join(' · ') || 'Metadata ainda não informada'}</p>
-              <div className="details-badges">{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return null; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}<span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
+              <div className="details-badges">{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return null; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`} style={platformStyle(p)}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}<span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
             </div>
             <dl className="game-detail-metrics" aria-label="Resumo do jogo">
+              {achievementsSummary && achievementsSummary.total > 0 && <div><dt>Conquistas</dt><dd>{achievementsSummary.unlockedCount} / {achievementsSummary.total}</dd></div>}
               <div><dt>Tempo de jogo</dt><dd>{formatCompactHours((sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)) / 60)}</dd></div>
               <div><dt>Sessões</dt><dd>{sessions.length}</dd></div>
               <div><dt>Meta completista</dt><dd>{formatHours(selectedGame.estimatedCompletionistHours)}</dd></div>
               <div><dt>Última jogada</dt><dd>{sessions[0] ? formatDateTime(sessions[0].startedAt) : '—'}</dd></div>
             </dl>
+            <div className="gd-hero-actions">
+              <Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button>
+              <button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button>
+              <button type="button" className="button-secondary" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button>
+              <button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button>
+            </div>
           </div>
         </header>
         <div className="details-tabs" role="tablist" aria-label="Seções do jogo">
           <button type="button" role="tab" aria-selected={activeDetailTab === 'resumo'} className={activeDetailTab === 'resumo' ? 'is-active' : ''} onClick={() => setActiveDetailTab('resumo')}>Resumo</button>
           <button type="button" role="tab" aria-selected={activeDetailTab === 'conquistas'} className={activeDetailTab === 'conquistas' ? 'is-active' : ''} onClick={() => setActiveDetailTab('conquistas')}>Conquistas{achievementsSummary && achievementsSummary.total > 0 && <span className="details-tab-count">{achievementsSummary.unlockedCount}/{achievementsSummary.total}</span>}</button>
           <button type="button" role="tab" aria-selected={activeDetailTab === 'sessoes'} className={activeDetailTab === 'sessoes' ? 'is-active' : ''} onClick={() => setActiveDetailTab('sessoes')}>Sessões</button>
+          <button type="button" role="tab" aria-selected={activeDetailTab === 'dlc-franquia'} className={activeDetailTab === 'dlc-franquia' ? 'is-active' : ''} onClick={() => setActiveDetailTab('dlc-franquia')}>DLC e franquia</button>
         </div>
-        <div className="details-layout">
-          <div className="details-content details-main">
-            {activeDetailTab === 'resumo' && <>
-              {journal.length > 0 && <section className="details-section session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
-              {selectedGame.description && <section className="details-section"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
+        <div className={`gd-layout${achievementsSummary && achievementsSummary.total > 0 ? '' : ' gd-no-rail'}`}>
+          <div className="gd-main">
+            {activeDetailTab === 'resumo' && <div className="gd-grid">
+              {journal.length > 0 && <section className="details-section gd-wide session-journal"><h2>Onde parei</h2><dl className="journal-list">{journal.map((entry) => <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}<small>registrado na sessão de {formatDateTime(entry.at)}</small></dd></div>)}</dl></section>}
+              {selectedGame.description && <section className="details-section gd-wide"><h2>Descrição</h2><p>{selectedGame.description}</p></section>}
               <section className="details-section"><h2>Minha jornada</h2><dl className="journey-meta-grid">
-                <div><dt>Plataforma</dt><dd>{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return <span className="meta-empty">Não selecionada</span>; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}</dd></div>
+                <div><dt>Plataforma</dt><dd>{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return <span className="meta-empty">Não selecionada</span>; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`} style={platformStyle(p)}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}</dd></div>
                 <div><dt>Posse</dt><dd>{selectedGame.owned ? 'Possuo' : 'Não possuo'}</dd></div>
                 {selectedGame.startedAt && <div><dt>Início</dt><dd>{formatDateOnly(selectedGame.startedAt)}</dd></div>}
                 {selectedGame.completedAt && <div><dt>Conclusão</dt><dd>{formatDateOnly(selectedGame.completedAt)}</dd></div>}
@@ -1185,9 +1233,11 @@ export function App() {
                   <div><dt>Pessoal</dt><dd>{formatHours(selectedGame.personalEstimatedHours)}{makeBar(selectedGame.personalEstimatedHours)}</dd></div>
                 </dl></section>;
               })()}
-              <Suspense fallback={<section className="details-section"><p className="session-empty">Carregando plataformas e jornadas…</p></section>}>
+              <div className="gd-wide"><Suspense fallback={<section className="details-section"><p className="session-empty">Carregando plataformas e jornadas…</p></section>}>
                 <GameJourneyPanel
                   gameId={selectedGame.id}
+                  gameDates={{ status: selectedGame.status, startedAt: selectedGame.startedAt ?? null, completedAt: selectedGame.completedAt ?? null }}
+                  onApplyDate={(field, value) => updateGame(selectedGame, { [field]: value })}
                   platforms={platforms}
                   localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)}
                   retroactiveHours={selectedGame.retroactivePlayedHours ?? 0}
@@ -1195,15 +1245,34 @@ export function App() {
                   onPlaythroughsChanged={() => { void loadPlaythroughs(); }}
                   onGameChanged={() => { void reloadSelectedGame(); }}
                 />
-              </Suspense>
-              {selectedGame.notes && <section className="details-section"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
-            </>}
+              </Suspense></div>
+              {selectedGame.notes && <section className="details-section gd-wide"><h2>Notas pessoais</h2><p>{selectedGame.notes}</p></section>}
+            </div>}
             {activeDetailTab === 'conquistas' && <section className="details-section achievements-section" aria-labelledby="achievements-title">
               <h2 id="achievements-title">Conquistas</h2>
               <GameAchievementsPanel gameId={selectedGame.id} onDataChange={setAchievementsSummary} />
             </section>}
-            {activeDetailTab === 'sessoes' && <section className="details-section session-section"><h2>Horas Jogadas</h2><p>{formatDuration(sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60))} no total</p><p>{formatHours(selectedGame.retroactivePlayedHours ?? 0)} lançadas sem sessão</p><form className="session-form" onSubmit={(event) => void addRetroactiveHours(event)}><label className="form-field">Horas retroativas<input aria-label="Horas retroativas" type="number" min="0" step="0.01" value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /><small>Lançar soma ao total; corrigir substitui pelo valor informado.</small></label><div className="form-wide session-actions"><Button type="submit">Lançar horas</Button><button type="button" className="session-edit" onClick={() => void changeRetroactiveHours('set')}>Corrigir total</button><button type="button" className="session-delete" disabled={(selectedGame.retroactivePlayedHours ?? 0) === 0} onClick={() => void changeRetroactiveHours('clear')}>Zerar</button></div></form>
+            {activeDetailTab === 'sessoes' && <section className="details-section session-section"><h2>Horas Jogadas</h2>
+              {(() => {
+                const sessionMinutes = sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0);
+                const retroMinutes = Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60);
+                return <dl className="sess-stats">
+                  <div><dt>Total registrado</dt><dd>{formatHoursMinutes((sessionMinutes + retroMinutes) / 60)}</dd></div>
+                  <div><dt>Lançadas sem sessão</dt><dd>{formatHoursMinutes(retroMinutes / 60)}</dd></div>
+                  <div><dt>Sessões</dt><dd>{sessions.length}</dd></div>
+                </dl>;
+              })()}
               {sessions.find((session) => session.endedAt === null) ? <div className="session-timer session-timer-focus"><div><p className="eyebrow">SESSÃO EM ANDAMENTO</p><strong>{formatElapsed(sessions.find((session) => session.endedAt === null)!.startedAt, clockNow)}</strong></div><Button type="button" disabled={savingSession} onClick={() => void finishActiveSession()}>{savingSession ? 'Encerrando…' : 'Encerrar sessão'}</Button></div> : <div className="session-timer session-timer-focus"><div><p className="eyebrow">PRÓXIMA SESSÃO</p><strong>Pronto para jogar?</strong></div><Button type="button" disabled={savingSession} onClick={() => void startOrContinueSession()}>{savingSession ? 'Iniciando…' : 'Continuar jogando'}</Button></div>}
+              <form className="sess-retro" onSubmit={(event) => void addRetroactiveHours(event)}>
+                <h3>Lançar horas retroativas</h3>
+                <div className="sess-retro-fields">
+                  <label className="form-field">Horas<span className="sess-input-unit"><input aria-label="Horas" type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={retroactiveHours} onChange={(event) => setRetroactiveHours(event.target.value)} /><em>h</em></span></label>
+                  <label className="form-field">Minutos<span className="sess-input-unit"><input aria-label="Minutos" type="number" min="0" max="59" step="1" inputMode="numeric" placeholder="0" value={retroactiveMinutes} onChange={(event) => setRetroactiveMinutes(event.target.value)} /><em>min</em></span></label>
+                  <div className="sess-retro-actions"><Button type="submit">Lançar horas</Button><button type="button" className="button-secondary" onClick={() => void changeRetroactiveHours('set')}>Corrigir total</button></div>
+                </div>
+                <small>Lançar soma ao total; corrigir substitui o total lançado pelo tempo informado.</small>
+                <button type="button" className="session-edit sess-reset" disabled={(selectedGame.retroactivePlayedHours ?? 0) === 0} onClick={() => setPendingDelete({ title: 'Zerar horas retroativas', description: 'Remover todas as horas lançadas sem sessão deste jogo? Esta ação não pode ser desfeita.', confirmLabel: 'Zerar', action: () => changeRetroactiveHours('clear') })}>Zerar horas lançadas</button>
+              </form>
               <h3>Sessões</h3>
               {editingSession !== null && <form key={editingSession.id} className="session-form" onSubmit={submitSession}>
                 <label className="form-field">Início<input name="startedAt" type="datetime-local" required defaultValue={toDateTimeLocal(editingSession ? new Date(editingSession.startedAt) : new Date(Date.now() - 60 * 60_000))} /></label>
@@ -1218,7 +1287,7 @@ export function App() {
                 <div className="form-wide session-actions"><Button type="submit" disabled={savingSession}>{savingSession ? 'Salvando…' : editingSession ? 'Salvar sessão' : 'Registrar sessão'}</Button>{editingSession && <button type="button" className="cancel-button" onClick={() => setEditingSession(null)}>Cancelar edição</button>}</div>
               </form>}
               {sessionFeedback && <p role="status" className="session-feedback">{sessionFeedback}</p>}
-              {sessions.length === 0 ? <p className="session-empty">Nenhuma sessão registrada.</p> : <ol className="session-list">{sessions.map((session) => <li key={session.id}>
+              {sessions.length === 0 ? <div className="sess-empty"><p className="session-empty">Nenhuma sessão registrada.</p></div> : <ol className="session-list">{sessions.map((session) => <li key={session.id}>
                 <div><strong>{formatDateTime(session.startedAt)}</strong><span>{session.endedAt ? formatDuration(session.durationMinutes) : 'Em andamento'}</span>{!session.endedAt && <small className="session-live-duration">{formatElapsed(session.startedAt, clockNow)}</small>}</div>
                 <p>{[session.location, session.progress === null ? null : `${session.progress}%`, platforms.find((platform) => platform.id === session.platformId)?.name, playthroughs.find((playthrough) => playthrough.id === session.playthroughId)?.label].filter(Boolean).join(' · ') || 'Sem progresso informado'}</p>
                 {journalEntries(session, recapFields).map((entry) => <p key={entry.label} className="session-journal-entry"><strong>{entry.label}</strong>{entry.value}</p>)}
@@ -1226,18 +1295,17 @@ export function App() {
                 <SessionScreenshots gameId={session.gameId} sessionId={session.id} />
               </li>)}</ol>}
             </section>}
+            {activeDetailTab === 'dlc-franquia' && <div className="dlc-franchise-grid">
+              <section className="details-section"><h2>DLC deste jogo</h2><DlcPanel gameId={selectedGame.id} /></section>
+              <section className="details-section"><h2>Franquia{franchises.find((franchise) => franchise.id === selectedGame.franchiseId) ? ` · ${franchises.find((franchise) => franchise.id === selectedGame.franchiseId)!.name}` : ''}</h2><FranchisePanel franchiseId={selectedGame.franchiseId} onAddGame={(title) => { openEditor(); setFormTitle(title); }} /></section>
+            </div>}
           </div>
-          <aside className="details-rail" aria-label="Ações e resumo do jogo">
+          {achievementsSummary && achievementsSummary.total > 0 && <aside className="gd-rail" aria-label="Resumo das conquistas">
             {achievementsSummary?.completionTrophyId && (() => {
               const trophy = achievementsSummary.achievements.find((item) => item.id === achievementsSummary.completionTrophyId);
               if (!trophy) return null;
               return <div className="rail-card completion-trophy-card"><span className="completion-badge">{trophy.unlocked ? 'Terminado' : 'Conquista de conclusão'}</span><div className="completion-trophy-row">{trophy.iconUrl ? <img src={trophy.iconUrl} alt="" /> : <span className="achievement-icon" aria-hidden="true">★</span>}<div><strong>{trophy.name ?? 'Conquista secreta'}</strong><span>Detectada pela descrição da conquista</span></div></div></div>;
             })()}
-            <div className="rail-card">
-              <p className="eyebrow">AÇÕES</p>
-              <div className="game-detail-actions-row"><Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button><button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button><button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button></div>
-              <button type="button" className="session-edit rail-link" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button>
-            </div>
             {achievementsSummary && achievementsSummary.total > 0 && <div className="rail-card">
               <p className="eyebrow">CONQUISTAS POR RARIDADE</p>
               <dl className="rarity-breakdown-list">
@@ -1247,9 +1315,9 @@ export function App() {
                 <div><dt>Ultra raro</dt><dd>{achievementsSummary.rarityBreakdown.ultraRare}</dd></div>
               </dl>
             </div>}
-          </aside>
+          </aside>}
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onPlatformsChanged={() => void reloadPlatforms()} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : activeView === 'platforms' ? <ErrorBoundary title="Não foi possível abrir as plataformas"><Suspense fallback={<LoadingState>Carregando plataformas…</LoadingState>}><PlatformsView platforms={platforms} summaries={platformSummaries} games={games} onGoToSettings={() => goTo('settings')} /></Suspense></ErrorBoundary> : <>
+      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} platforms={platforms} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : activeView === 'platforms' ? <ErrorBoundary title="Não foi possível abrir as plataformas"><Suspense fallback={<LoadingState>Carregando plataformas…</LoadingState>}><PlatformsView platforms={platforms} summaries={platformSummaries} games={games} onChanged={() => void reloadPlatforms()} /></Suspense></ErrorBoundary> : <>
       <section className="library-tools" aria-label="Ferramentas da biblioteca">
         <label className="filter-field">Status<select aria-label="Filtrar por status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Game['status'] | 'ALL')}><option value="ALL">Todos</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label>
         <label className="filter-field">Prioridade<select aria-label="Filtrar por prioridade" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Game['priority'] | 'ALL')}><option value="ALL">Todas</option>{priorities.map((priority) => <option key={priority} value={priority}>{priority === 'LOW' ? 'Baixa' : priority === 'HIGH' ? 'Alta' : 'Normal'}</option>)}</select></label>
@@ -1283,7 +1351,7 @@ export function App() {
           <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span>{game.gameOfYear && <span className="cover-badge cover-goty" aria-label="Jogo do ano" title="Jogo do ano">★</span>}{game.favorite && !game.gameOfYear && <span className="cover-badge cover-fav" aria-label="Favorito" title="Favorito">♥</span>}</span>
           <span className="game-card-body">
             <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
-            {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name}><PlatformIcon iconKey={platform.iconKey} />{badge.label}</span>; })}</span>}
+            {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name} style={platformStyle(platform)}><PlatformIcon iconKey={platform.iconKey} />{badge.label}</span>; })}</span>}
             {(() => { const progress = cardProgress(game); if (progress === null) return null; return <span className="game-card-progress"><span className="game-card-progress-track" aria-hidden="true"><span className="game-card-progress-fill" style={{ width: `${progress}%` }} /></span><span className="game-card-progress-value">{progress}%</span></span>; })()}
           </span>
         </button><button type="button" className="game-card-quick" aria-label={`Editar ${game.title}`} onClick={() => openEditor(game)}><span aria-hidden="true">✎</span></button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>

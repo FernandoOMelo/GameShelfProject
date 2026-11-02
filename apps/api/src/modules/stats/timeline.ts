@@ -1,4 +1,5 @@
 import type { Game, Session, TimelineEvent, TimelineResponse } from '@gameshelf/contracts';
+import { achievementTimelineEvents, assignUnlocksToSessions, sessionAchievements, type Unlock } from './achievement-activity.js';
 
 type Completion = { title: string; gamesCount: number; completedAt: string };
 
@@ -20,20 +21,23 @@ type Input = {
   sessions: Session[];
   completions: Completion[];
   playtimeImports?: PlaytimeImport[];
+  unlocks?: Unlock[];
   limit: number;
   before?: string;
   timezoneOffsetMinutes?: number;
 };
 
 export function buildTimeline({
-  games, sessions, completions, playtimeImports = [], limit, before, timezoneOffsetMinutes = 0,
+  games, sessions, completions, playtimeImports = [], unlocks = [], limit, before, timezoneOffsetMinutes = 0,
 }: Input): TimelineResponse {
   const gamesById = new Map(games.map((game) => [game.id, game]));
+  const { bySession, loose } = assignUnlocksToSessions(unlocks, sessions, timezoneOffsetMinutes);
   const events = [
     ...games.flatMap((game) => gameEvents(game)),
-    ...sessions.flatMap((session) => sessionEvents(session, gamesById.get(session.gameId), timezoneOffsetMinutes)),
+    ...sessions.flatMap((session) => sessionEvents(session, gamesById.get(session.gameId), timezoneOffsetMinutes, bySession.get(session.id))),
     ...playtimeImports.flatMap((entry) => playtimeImportEvents(entry, gamesById.get(entry.gameId), timezoneOffsetMinutes)),
     ...completions.map((completion) => challengeEvent(completion, timezoneOffsetMinutes)),
+    ...achievementTimelineEvents(loose, games, timezoneOffsetMinutes),
   ];
 
   const ordered = events.sort((a, b) => b.at.localeCompare(a.at) || eventKey(a).localeCompare(eventKey(b)));
@@ -51,7 +55,7 @@ function gameEvents(game: Game): TimelineEvent[] {
   return events;
 }
 
-function sessionEvents(session: Session, game: Game | undefined, offsetMinutes: number): TimelineEvent[] {
+function sessionEvents(session: Session, game: Game | undefined, offsetMinutes: number, unlocks?: Unlock[]): TimelineEvent[] {
   if (!game || session.endedAt === null) return [];
   return [{
     type: 'SESSION',
@@ -61,6 +65,8 @@ function sessionEvents(session: Session, game: Game | undefined, offsetMinutes: 
     gameTitle: game.title,
     coverUrl: game.coverUrl,
     sessionId: session.id,
+    platformId: session.platformId,
+    achievements: sessionAchievements(unlocks),
     durationMinutes: session.durationMinutes,
     progress: session.progress,
     location: session.location,
@@ -115,5 +121,6 @@ function localDay(instant: string, offsetMinutes: number): string {
 function eventKey(event: TimelineEvent): string {
   if (event.type === 'CHALLENGE_COMPLETED') return `${event.type}:${event.title}`;
   if (event.type === 'EXTERNAL_PLAYTIME_IMPORTED') return `${event.type}:${event.importId}`;
+  if (event.type === 'ACHIEVEMENTS_UNLOCKED') return `${event.type}:${event.gameId}:${event.date}`;
   return `${event.type}:${event.gameId}`;
 }

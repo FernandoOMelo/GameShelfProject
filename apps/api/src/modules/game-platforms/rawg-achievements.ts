@@ -18,11 +18,18 @@ export class RawgClient implements RawgAchievementProvider {
     return (body.results ?? []).filter((item) => Number.isInteger(item.id) && item.id > 0 && item.slug && item.name).map((item) => ({ id: item.id, slug: item.slug, name: item.name, released: item.released ?? null, backgroundImage: item.background_image ?? null }));
   }
   async achievements(id: number) {
-    const url = new URL(`https://api.rawg.io/api/games/${id}/achievements`); url.searchParams.set('key', this.key);
-    const response = await this.fetcher(url, { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error(`RAWG achievements failed with HTTP ${response.status}.`);
-    const body = await response.json() as { results?: Array<{ id: number; name: string; description?: string | null; image?: string | null; percent?: string | number | null }> };
-    return (body.results ?? []).filter((item) => Number.isInteger(item.id) && item.id > 0 && item.name?.trim()).map((item) => ({ id: crypto.randomUUID(), rawgId: item.id, name: item.name.trim(), description: item.description?.trim() || null, imageUrl: item.image ?? null, percent: item.percent == null || !Number.isFinite(Number(item.percent)) ? null : Number(item.percent) }));
+    // A RAWG pagina as conquistas (10 por página por padrão): segue `next` até o fim.
+    type Item = { id: number; name: string; description?: string | null; image?: string | null; percent?: string | number | null };
+    const items: Item[] = [];
+    let next: string | null = (() => { const url = new URL(`https://api.rawg.io/api/games/${id}/achievements`); url.searchParams.set('key', this.key); url.searchParams.set('page_size', '40'); return url.toString(); })();
+    for (let page = 0; next && page < 10; page += 1) {
+      const response = await this.fetcher(next, { signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error(`RAWG achievements failed with HTTP ${response.status}.`);
+      const body = await response.json() as { next?: string | null; results?: Item[] };
+      items.push(...(body.results ?? []));
+      next = body.next ?? null;
+    }
+    return items.filter((item) => Number.isInteger(item.id) && item.id > 0 && item.name?.trim()).map((item) => ({ id: crypto.randomUUID(), rawgId: item.id, name: item.name.trim(), description: item.description?.trim() || null, imageUrl: item.image ?? null, percent: item.percent == null || !Number.isFinite(Number(item.percent)) ? null : Number(item.percent) }));
   }
 }
 

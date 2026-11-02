@@ -27,6 +27,18 @@ describe('stats', () => {
     expect(totals.shortestGame).toMatchObject({ title: 'Jogo 1', hours: 12 });
   });
 
+  it('limits completed-game numbers to one year but keeps the yearly timeline whole', () => {
+    const games = [
+      make(1, { completedAt: '2024-06-01', retroactivePlayedHours: 10, genreIds: [rpg.id] }),
+      make(2, { completedAt: '2025-03-01', retroactivePlayedHours: 30, genreIds: [rpg.id] }),
+    ];
+    const stats = buildStats({ games, sessions: [], platforms: [], genres: [rpg], year: 2025 });
+    expect(stats.totals).toMatchObject({ completedCount: 1, completedHours: 30 });
+    expect(stats.byGenre[0]).toMatchObject({ completedCount: 1 });
+    expect(stats.byYear.map((entry) => entry.year)).toEqual([2025, 2024]);
+    expect(stats.totals.completionRate).toBe(100);
+  });
+
   it('has no duration highlights without played time', () => {
     const { totals } = buildStats({ games: [make(1, {})], sessions: [], platforms: [], genres: [] });
     expect(totals).toMatchObject({ longestGame: null, shortestGame: null, averageCompletedHours: null });

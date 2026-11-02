@@ -7,6 +7,7 @@ const returning = {
   name: platforms.name,
   catalogKey: platforms.catalogKey,
   iconKey: platforms.iconKey,
+  color: platforms.color,
   parentId: platforms.parentId,
 } as const;
 
@@ -20,7 +21,7 @@ export class DrizzlePlatformRepository implements PlatformRepository {
   async create(
     name: string,
     parentId: string | null = null,
-    presentation: { catalogKey: string | null; iconKey: string | null } = { catalogKey: null, iconKey: null },
+    presentation: { catalogKey: string | null; iconKey: string | null; color?: string | null } = { catalogKey: null, iconKey: null },
   ) {
     const [platform] = await this.db.insert(platforms)
       .values({ name, parentId, ...presentation })
@@ -36,6 +37,12 @@ export class DrizzlePlatformRepository implements PlatformRepository {
 
   async setParent(id: string, parentId: string | null) {
     const [platform] = await this.db.update(platforms).set({ parentId }).where(eq(platforms.id, id))
+      .returning(returning);
+    return platform;
+  }
+
+  async setPresentation(id: string, presentation: { iconKey?: string | null; color?: string | null }) {
+    const [platform] = await this.db.update(platforms).set(presentation).where(eq(platforms.id, id))
       .returning(returning);
     return platform;
   }
@@ -103,7 +110,7 @@ export class DrizzlePlatformRepository implements PlatformRepository {
           GROUP BY gp.platform_id
         )
       SELECT
-        p.id, p.name, p.catalog_key, p.icon_key, p.parent_id,
+        p.id, p.name, p.catalog_key, p.icon_key, p.color, p.parent_id,
         coalesce(gs.game_count, 0)       AS game_count,
         coalesce(gs.completed_count, 0)  AS completed_count,
         coalesce(d.dominated_count, 0)   AS dominated_count,
@@ -127,6 +134,7 @@ export class DrizzlePlatformRepository implements PlatformRepository {
         name: row['name'] as string,
         catalogKey: (row['catalog_key'] as string | null) ?? null,
         iconKey: (row['icon_key'] as string | null) ?? null,
+        color: (row['color'] as string | null) ?? null,
         parentId: (row['parent_id'] as string | null) ?? null,
       },
       gameCount: (row['game_count'] as number) ?? 0,

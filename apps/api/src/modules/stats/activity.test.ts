@@ -38,6 +38,6 @@ describe('activity', () => {
   });
 
   it('is empty without sessions', () => {
-    expect(buildActivity({ sessions: [], year: 2026, today: '2026-01-10' })).toEqual({ year: 2026, days: [], activeDays: 0, totalMinutes: 0, maxDayMinutes: 0, currentStreak: 0, longestStreak: 0 });
+    expect(buildActivity({ sessions: [], year: 2026, today: '2026-01-10' })).toEqual({ year: 2026, days: [], activeDays: 0, totalMinutes: 0, maxDayMinutes: 0, currentStreak: 0, longestStreak: 0, achievementDays: [] });
   });
 });

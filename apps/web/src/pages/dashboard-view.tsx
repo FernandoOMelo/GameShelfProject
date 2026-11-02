@@ -93,11 +93,11 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
             <div className="current-game-body">
               <span className={`status-pill status-${entry.game.status.toLowerCase()}`}>{entry.game.status === 'PLAYING' ? 'Jogando' : entry.game.status === 'PAUSED' ? 'Pausado' : entry.game.status === 'COMPLETED' ? 'Zerado' : entry.game.status === 'ABANDONED' ? 'Abandonado' : entry.game.status === 'DESIRED' ? 'Desejado' : 'Na biblioteca'}</span>
               <button className="dashboard-game-title" type="button" onClick={() => onSelectGame(entry.game)}><h3>{entry.game.title}</h3></button>
-              <p>{entry.playedHours} h jogadas{entry.progress === null ? '' : ` · ${entry.progress}%`}</p>
+              <p>{formatCompactHours(entry.playedHours)} jogadas{entry.progress === null ? '' : ` · ${entry.progress}%`}</p>
               {percent !== null && <div className="progress-track" role="img" aria-label={`Progresso ${percent}%`}><span style={{ width: `${percent}%` }} /></div>}
               {entry.activeSession ? <p className="session-live-duration">Sessão ativa · {formatElapsed(entry.activeSession.startedAt, now)}</p> : entry.lastSession && <p>Última sessão: {formatDateTime(entry.lastSession.startedAt)}</p>}
               {entry.lastSession?.location && <p>Parou em: {entry.lastSession.location}</p>}
-              {entry.remainingHours !== null && <p>{entry.remainingHours} h estimadas restantes</p>}
+              {entry.remainingHours !== null && <p>{formatCompactHours(entry.remainingHours)} estimadas restantes</p>}
               <div className="dashboard-game-actions"><Button type="button" onClick={() => entry.activeSession ? void onFinishSession(entry.game, entry.activeSession) : void onStartSession(entry.game)}>{entry.activeSession ? 'Encerrar sessão' : 'Continuar jogando'}</Button><button type="button" className="session-edit" onClick={() => onPauseGame(entry.game)}>Pausar</button><button type="button" className="session-edit" onClick={() => onPrepareStatus(entry.game, 'COMPLETED')}>Marcar zerado</button><button type="button" className="session-edit" onClick={() => onPrepareStatus(entry.game, 'ABANDONED')}>Abandonar</button><button type="button" className="session-edit" onClick={() => onSelectGame(entry.game)}>Abrir detalhes</button></div>
             </div>
           </article>;

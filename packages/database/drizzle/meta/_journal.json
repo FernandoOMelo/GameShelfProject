@@ -183,6 +183,20 @@
             "when": 1792900000000,
             "tag": "0026_rawg_achievement_catalog",
             "breakpoints": true
+        },
+        {
+            "idx": 26,
+            "version": "7",
+            "when": 1793243213126,
+            "tag": "0027_dlc_and_franchise_igdb_id",
+            "breakpoints": true
+        },
+        {
+            "idx": 27,
+            "version": "7",
+            "when": 1793300000000,
+            "tag": "0028_platform_brand_color",
+            "breakpoints": true
         }
     ]
 }

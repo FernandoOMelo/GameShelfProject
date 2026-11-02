@@ -4,7 +4,7 @@ import { apiUrl, formatCompactHours } from './shared';
 
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
-export function ReplayPanel({ refreshKey, onOpenGame }: { refreshKey: unknown; onOpenGame: (gameId: string) => void }) {
+export function ReplayPanel({ refreshKey, onOpenGame, suggestedYear }: { refreshKey: unknown; onOpenGame: (gameId: string) => void; /** Último ano com jogos zerados, oferecido quando o ano atual está vazio. */ suggestedYear?: number }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [replay, setReplay] = useState<ReplayResponse | null>(null);
@@ -33,7 +33,7 @@ export function ReplayPanel({ refreshKey, onOpenGame }: { refreshKey: unknown; o
         <button type="button" aria-label="Replay do próximo ano" disabled={year >= currentYear} onClick={() => setYear(year + 1)}>›</button>
       </div>
     </div>
-    {failed ? <p className="dashboard-empty" role="alert">Não foi possível carregar o replay.</p> : !replay ? <p role="status">Carregando replay…</p> : empty ? <p className="dashboard-empty">Nada registrado em {year}.</p> : <>
+    {failed ? <p className="dashboard-empty" role="alert">Não foi possível carregar o replay.</p> : !replay ? <p role="status">Carregando replay…</p> : empty ? <p className="dashboard-empty">Nada registrado em {year}.{suggestedYear && suggestedYear !== year && <> <button type="button" className="session-edit" onClick={() => setYear(suggestedYear)}>Ver {suggestedYear}</button></>}</p> : <>
       <dl className="activity-summary">
         <div><dt>Horas jogadas</dt><dd>{formatCompactHours(replay.totalMinutes / 60)}</dd></div>
         <div><dt>Sessões</dt><dd>{replay.sessionCount}</dd></div>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { FranchiseGameCandidate } from '@gameshelf/contracts';
 import type { GameMetadataCandidate, GameMetadataProvider } from './metadata-provider.js';
 
 const tokenResponseSchema = z.object({ access_token: z.string().min(1), expires_in: z.number().positive() });
@@ -9,8 +10,8 @@ const igdbGameSchema = z.object({
   first_release_date: z.number().optional(),
   cover: z.object({ image_id: z.string() }).optional(),
   artworks: z.array(z.object({ image_id: z.string() })).optional(),
-  franchise: z.object({ name: z.string() }).optional(),
-  franchises: z.array(z.object({ name: z.string() })).optional(),
+  franchise: z.object({ id: z.number().int().positive(), name: z.string() }).optional(),
+  franchises: z.array(z.object({ id: z.number().int().positive(), name: z.string() })).optional(),
   involved_companies: z.array(z.object({
     developer: z.boolean().optional(),
     publisher: z.boolean().optional(),
@@ -25,6 +26,13 @@ const igdbLocalizationsSchema = z.array(z.object({
   name: z.string().min(1),
   region: z.number().int(),
 }));
+const igdbFranchiseGameSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().min(1),
+  first_release_date: z.number().optional(),
+  cover: z.object({ image_id: z.string() }).optional(),
+});
+const igdbFranchiseGamesSchema = z.array(igdbFranchiseGameSchema).max(50);
 const BRAZIL_REGION = 11;
 
 type Fetcher = typeof fetch;
@@ -61,6 +69,30 @@ export class IgdbMetadataProvider implements GameMetadataProvider {
     const games = igdbGamesSchema.parse(await response.json());
     const localizedNames = await this.getBrazilianNames(games.map(({ id }) => id), accessToken);
     return games.map((game) => mapIgdbGame(game, localizedNames.get(game.id)));
+  }
+
+  /** Outros jogos da mesma franquia no IGDB, para a aba de franquia da ficha do jogo. */
+  async franchiseGames(igdbFranchiseId: number): Promise<Array<Pick<FranchiseGameCandidate, 'igdbId' | 'title' | 'releaseYear' | 'coverUrl'>>> {
+    const accessToken = await this.getAccessToken();
+    const response = await this.fetcher('https://api.igdb.com/v4/games', {
+      method: 'POST',
+      headers: {
+        'Client-ID': this.clientId,
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+      body: `fields id,name,first_release_date,cover.image_id; where (franchise = ${igdbFranchiseId} | franchises = (${igdbFranchiseId})) & version_parent = null; limit 50;`,
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`IGDB franchise games failed with HTTP ${response.status}.`);
+
+    const games = igdbFranchiseGamesSchema.parse(await response.json());
+    return games.map((game) => ({
+      igdbId: game.id,
+      title: game.name,
+      releaseYear: game.first_release_date === undefined ? null : new Date(game.first_release_date * 1000).getUTCFullYear(),
+      coverUrl: game.cover ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${encodeURIComponent(game.cover.image_id)}.jpg` : null,
+    }));
   }
 
   private async getBrazilianNames(gameIds: number[], accessToken: string): Promise<Map<number, string>> {
@@ -119,6 +151,7 @@ function mapIgdbGame(game: z.infer<typeof igdbGameSchema>, localizedTitle?: stri
       publisher: companies.find((company) => company.publisher)!.company.name,
     }),
     ...((game.franchise?.name ?? game.franchises?.[0]?.name) && { franchise: game.franchise?.name ?? game.franchises![0]!.name }),
+    ...((game.franchise?.id ?? game.franchises?.[0]?.id) && { franchiseIgdbId: game.franchise?.id ?? game.franchises![0]!.id }),
     ...(game.genres && { genres: game.genres.map(({ name }) => name) }),
     ...(game.platforms && { platforms: game.platforms.map(({ name }) => name) }),
   };

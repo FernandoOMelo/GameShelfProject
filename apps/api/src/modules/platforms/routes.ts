@@ -1,15 +1,18 @@
 import type { FastifyInstance } from 'fastify';
-import { platformInputSchema, platformSchema, platformSummariesSchema, platformUpdateSchema } from '@gameshelf/contracts';
+import { platformCatalogEntrySchema, platformInputSchema, platformSchema, platformSummariesSchema, platformUpdateSchema } from '@gameshelf/contracts';
 import type { PlatformRepository } from './repository.js';
 import { parseId } from '../shared/parse-id.js';
 import { checkParent, checkRemovable } from './service.js';
-import { platformPresentation } from './catalog.js';
+import { defaultColorForIcon, platformCatalog, platformPresentation } from './catalog.js';
 
 export async function registerPlatformRoutes(app: FastifyInstance, repository: PlatformRepository) {
   app.get('/platforms', async (_request, reply) => {
     const platforms = await repository.list();
     return reply.send(platforms.map((platform) => platformSchema.parse(platform)));
   });
+
+  // Catálogo padrão com logo e cor oficiais, para o cadastro escolher em vez de digitar.
+  app.get('/platforms/catalog', async (_request, reply) => reply.send(platformCatalog().map((entry) => platformCatalogEntrySchema.parse(entry))));
 
   app.get('/platforms/summaries', async (_request, reply) => {
     const summaries = await repository.listSummaries();
@@ -26,7 +29,11 @@ export async function registerPlatformRoutes(app: FastifyInstance, repository: P
         if (!parent) return reply.code(400).send({ error: 'Grupo não encontrado.' });
         if (parent.parentId !== null) return reply.code(400).send({ error: 'O grupo escolhido já pertence a outro grupo: o catálogo tem apenas dois níveis.' });
       }
-      return reply.code(201).send(platformSchema.parse(await repository.create(parsed.data.name, parsed.data.parentId ?? null, platformPresentation(parsed.data.name))));
+      const known = platformPresentation(parsed.data.name);
+      // O que o usuário escolher vence o catálogo; sem escolha, vale o reconhecimento pelo nome.
+      const iconKey = parsed.data.iconKey ?? known.iconKey;
+      const color = parsed.data.color ?? (parsed.data.iconKey ? defaultColorForIcon(parsed.data.iconKey) : known.color);
+      return reply.code(201).send(platformSchema.parse(await repository.create(parsed.data.name, parsed.data.parentId ?? null, { catalogKey: known.catalogKey, iconKey, color })));
     } catch (error) {
       if (isUniqueViolation(error)) return reply.code(409).send({ error: 'Já existe uma plataforma com esse nome.' });
       throw error;
@@ -41,8 +48,8 @@ export async function registerPlatformRoutes(app: FastifyInstance, repository: P
     if (!id) return reply.code(400).send({ error: 'ID inválido.' });
     const parsed = platformUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Dados inválidos.', issues: parsed.error.issues });
-    if (parsed.data.name === undefined && parsed.data.parentId === undefined) {
-      return reply.code(400).send({ error: 'Informe o nome ou o grupo da plataforma.' });
+    if (Object.keys(parsed.data).length === 0) {
+      return reply.code(400).send({ error: 'Informe o que alterar na plataforma.' });
     }
     const catalog = await repository.list();
     const platform = catalog.find((item) => item.id === id);
@@ -55,6 +62,14 @@ export async function registerPlatformRoutes(app: FastifyInstance, repository: P
       let updated = platform;
       if (parsed.data.name !== undefined) updated = await repository.rename(id, parsed.data.name) ?? updated;
       if (parsed.data.parentId !== undefined) updated = await repository.setParent(id, parsed.data.parentId) ?? updated;
+      if (parsed.data.iconKey !== undefined || parsed.data.color !== undefined) {
+        // Trocar só o ícone adota a cor padrão dele, a menos que uma cor tenha sido enviada.
+        const color = parsed.data.color !== undefined ? parsed.data.color : parsed.data.iconKey ? defaultColorForIcon(parsed.data.iconKey) : undefined;
+        updated = await repository.setPresentation(id, {
+          ...(parsed.data.iconKey !== undefined ? { iconKey: parsed.data.iconKey } : {}),
+          ...(color !== undefined ? { color } : {}),
+        }) ?? updated;
+      }
       return reply.send(platformSchema.parse(updated));
     } catch (error) {
       if (isUniqueViolation(error)) return reply.code(409).send({ error: 'Já existe uma plataforma com esse nome.' });

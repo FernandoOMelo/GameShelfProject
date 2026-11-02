@@ -10,7 +10,7 @@ import type { PlaythroughRecord } from '../playthroughs/repository.js';
 import { toGame, toGamePlatform, toPlaythrough } from '../shared/serialize.js';
 
 export type BackupSources = {
-  franchises: Array<{ id: string; name: string }>;
+  franchises: Array<{ id: string; name: string; igdbFranchiseId: number | null }>;
   platforms: Array<{ id: string; name: string; parentId: string | null }>;
   genres: Array<{ id: string; name: string }>;
   games: GameRecord[];

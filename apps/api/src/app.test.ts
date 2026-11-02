@@ -44,12 +44,21 @@ function createRepository(): GameRepository {
 }
 
 function createFranchiseRepository(): FranchiseRepository {
-  const franchises = [{ id: '00000000-0000-4000-8000-000000000010', name: 'The Legend of Zelda' }];
+  const franchises: Array<{ id: string; name: string; igdbFranchiseId: number | null }> = [{ id: '00000000-0000-4000-8000-000000000010', name: 'The Legend of Zelda', igdbFranchiseId: null }];
   return {
     list: async () => franchises,
-    create: async (name) => {
+    find: async (id) => franchises.find((franchise) => franchise.id === id),
+    create: async (name, igdbFranchiseId = null) => {
       if (franchises.some((franchise) => franchise.name === name)) throw { code: '23505' };
-      return { id: '00000000-0000-4000-8000-000000000011', name };
+      const franchise = { id: '00000000-0000-4000-8000-000000000011', name, igdbFranchiseId };
+      franchises.push(franchise);
+      return franchise;
+    },
+    setIgdbFranchiseId: async (id, igdbFranchiseId) => {
+      const franchise = franchises.find((item) => item.id === id);
+      if (!franchise) return undefined;
+      franchise.igdbFranchiseId = igdbFranchiseId;
+      return franchise;
     },
   };
 }
@@ -84,6 +93,7 @@ function createPlatformRepository(options: { gameLinks?: Record<string, number> 
       catalog.splice(index, 1);
       return true;
     },
+    setPresentation: async () => undefined,
     listSummaries: async () => [],
   };
 }
@@ -880,7 +890,7 @@ describe('classification, stats and challenge API', () => {
     apps.push(app);
     const response = await app.inject({ method: 'GET', url: '/stats/activity?year=2026&timezoneOffsetMinutes=180' });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ year: 2026, days: [], activeDays: 0, totalMinutes: 0, maxDayMinutes: 0, currentStreak: 0, longestStreak: 0 });
+    expect(response.json()).toEqual({ year: 2026, days: [], activeDays: 0, totalMinutes: 0, maxDayMinutes: 0, currentStreak: 0, longestStreak: 0, achievementDays: [] });
     expect((await app.inject({ method: 'GET', url: '/stats/activity?year=abc' })).statusCode).toBe(400);
     const replay = await app.inject({ method: 'GET', url: '/stats/replay?year=2026' });
     expect(replay.statusCode).toBe(200);

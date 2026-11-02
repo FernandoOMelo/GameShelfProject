@@ -5,6 +5,8 @@ type PlatformCatalog = Catalog & { parentId?: string | null };
 type Input = {
   games: Game[]; sessions: Session[]; platforms: PlatformCatalog[]; genres: Catalog[]; today?: string;
   gamePlatforms?: GamePlatform[]; playthroughs?: Playthrough[];
+  /** Restringe os números dos jogos zerados aos concluídos neste ano; a biblioteca e a linha do tempo seguem completas. */
+  year?: number;
 };
 type Key = [key: string, name: string];
 
@@ -12,7 +14,7 @@ const DIFFICULTIES = ['AAA', 'AA', 'A', 'B', 'C'] as const;
 
 // Estatísticas históricas: consideram jogos zerados (inclusive arquivados) e atribuem as horas
 // de cada jogo ao ano da sua conclusão.
-export function buildStats({ games, sessions, platforms, genres, gamePlatforms = [], playthroughs = [], today = new Date().toISOString().slice(0, 10) }: Input): StatsResponse {
+export function buildStats({ games, sessions, platforms, genres, gamePlatforms = [], playthroughs = [], year: onlyYear, today = new Date().toISOString().slice(0, 10) }: Input): StatsResponse {
   const minutesByGame = new Map<string, number>();
   // Minutos de sessão atribuídos a uma plataforma específica. É o que permite
   // descontar do tempo informado pela fonte aquilo que o usuário já registrou
@@ -29,7 +31,8 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
   const hoursOf = (game: Game) => round((minutesByGame.get(game.id) ?? 0) / 60 + game.retroactivePlayedHours);
   const ref = (game: Game) => ({ id: game.id, title: game.title, coverUrl: game.coverUrl, hours: hoursOf(game) });
 
-  const completed = games.filter((game) => game.status === 'COMPLETED');
+  const completedEver = games.filter((game) => game.status === 'COMPLETED');
+  const completed = onlyYear === undefined ? completedEver : completedEver.filter((game) => game.completedAt?.startsWith(String(onlyYear)));
   const withHours = completed.filter((game) => hoursOf(game) > 0);
   const longest = [...withHours].sort((a, b) => hoursOf(b) - hoursOf(a))[0];
   const shortest = [...withHours].sort((a, b) => hoursOf(a) - hoursOf(b))[0];
@@ -44,7 +47,7 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
     : 0;
 
   const ratingCounts = new Map<number, number>();
-  for (const game of games) if (game.rating !== null) ratingCounts.set(game.rating, (ratingCounts.get(game.rating) ?? 0) + 1);
+  for (const game of onlyYear === undefined ? games : completed) if (game.rating !== null) ratingCounts.set(game.rating, (ratingCounts.get(game.rating) ?? 0) + 1);
   const difficultyCounts = new Map<string, number>();
   for (const game of completed) if (game.difficulty) difficultyCounts.set(game.difficulty, (difficultyCounts.get(game.difficulty) ?? 0) + 1);
 
@@ -70,7 +73,7 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
   const gamesWithAnyHours = games.filter((game) => hoursOf(game) > 0);
 
   const years = new Map<number, Game[]>();
-  for (const game of completed) {
+  for (const game of completedEver) {
     if (!game.completedAt) continue;
     const year = Number(game.completedAt.slice(0, 4));
     years.set(year, [...(years.get(year) ?? []), game]);
@@ -97,7 +100,7 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
       shortestGame: shortest ? ref(shortest) : null,
       journeyStart,
       journeyDays,
-      completionRate: trackable.length ? Math.round((completed.length / trackable.length) * 1000) / 10 : 0,
+      completionRate: trackable.length ? Math.round((completedEver.length / trackable.length) * 1000) / 10 : 0,
       averageHoursPerGame: gamesWithAnyHours.length ? round(playedHoursTotal / gamesWithAnyHours.length) : null,
     },
     ratingDistribution: Array.from({ length: 11 }, (_, index) => 11 - index).map((rating) => ({ rating, count: ratingCounts.get(rating) ?? 0 })),

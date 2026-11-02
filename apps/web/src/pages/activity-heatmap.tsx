@@ -29,12 +29,13 @@ export function ActivityHeatmap({ refreshKey }: { refreshKey: unknown }) {
   }, [year, refreshKey]);
 
   const minutesByDate = new Map((activity?.days ?? []).map((day) => [day.date, day.minutes]));
+  const achievementsByDate = new Map((activity?.achievementDays ?? []).map((day) => [day.date, day.count]));
   const jan1 = Date.UTC(year, 0, 1);
   const totalDays = Math.round((Date.UTC(year + 1, 0, 1) - jan1) / DAY_MS);
   const leading = new Date(jan1).getUTCDay();
   const cells = Array.from({ length: totalDays }, (_, index) => {
     const date = new Date(jan1 + index * DAY_MS).toISOString().slice(0, 10);
-    return { date, minutes: minutesByDate.get(date) ?? 0 };
+    return { date, minutes: minutesByDate.get(date) ?? 0, achievements: achievementsByDate.get(date) ?? 0 };
   });
   const weeks = Math.ceil((leading + totalDays) / 7);
   const monthLabels = MONTHS.map((name, month) => ({ name, column: Math.floor((leading + Math.round((Date.UTC(year, month, 1) - jan1) / DAY_MS)) / 7) }));
@@ -55,17 +56,18 @@ export function ActivityHeatmap({ refreshKey }: { refreshKey: unknown }) {
         </div>
         <div className="heatmap" role="img" aria-label={`Mapa de atividade de ${year}: ${activity.activeDays} dias jogados`} style={{ gridTemplateRows: 'repeat(7, 12px)' }}>
           {Array.from({ length: leading }, (_, index) => <span key={`pad-${index}`} className="heatmap-pad" />)}
-          {cells.map((cell) => <span key={cell.date} className={`heatmap-cell heatmap-level-${level(cell.minutes, activity.maxDayMinutes)}`}
-            title={`${new Date(`${cell.date}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}: ${cell.minutes ? formatCompactHours(cell.minutes / 60) : 'sem sessões'}`} />)}
+          {cells.map((cell) => <span key={cell.date} className={`heatmap-cell heatmap-level-${level(cell.minutes, activity.maxDayMinutes)}${cell.achievements > 0 ? ' heatmap-achievement' : ''}`}
+            title={`${new Date(`${cell.date}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}: ${cell.minutes ? formatCompactHours(cell.minutes / 60) : 'sem sessões'}${cell.achievements ? ` · ${cell.achievements} ${cell.achievements === 1 ? 'conquista' : 'conquistas'}` : ''}`} />)}
         </div>
       </div>
       <dl className="activity-summary">
         <div><dt>Dias jogados</dt><dd>{activity.activeDays}</dd></div>
         <div><dt>Horas no ano</dt><dd>{formatCompactHours(activity.totalMinutes / 60)}</dd></div>
         <div><dt>Sequência atual</dt><dd>{activity.currentStreak} {activity.currentStreak === 1 ? 'dia' : 'dias'}</dd></div>
+        {achievementsByDate.size > 0 && <div><dt>Dias com conquistas</dt><dd>{achievementsByDate.size}</dd></div>}
         <div><dt>Maior sequência</dt><dd>{activity.longestStreak} {activity.longestStreak === 1 ? 'dia' : 'dias'}</dd></div>
       </dl>
-      <small>Conta apenas sessões registradas; horas retroativas não têm data e ficam de fora.</small>
+      <small>Conta apenas sessões registradas; horas retroativas não têm data e ficam de fora.{achievementsByDate.size > 0 && <> Os pontos em roxo marcam dias com conquistas desbloqueadas (Achievist), que não contam como horas.</>}</small>
     </>}
   </section>;
 }

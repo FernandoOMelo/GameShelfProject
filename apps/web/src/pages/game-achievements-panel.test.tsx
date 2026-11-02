@@ -33,7 +33,7 @@ describe('GameAchievementsPanel', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Mostrar conquistas secretas/ }));
     expect(await screen.findByText('Conquista secreta')).toBeInTheDocument();
-    expect(screen.getByText('Revele jogando para ver a descrição.')).toBeInTheDocument();
+    expect(screen.getByText('Os detalhes desta conquista serão revelados quando desbloqueada')).toBeInTheDocument();
   });
 
   it('avisa o pai com o resumo para alimentar os cartões da lateral', async () => {

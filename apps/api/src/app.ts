@@ -15,7 +15,7 @@ import { registerBacklogRoutes } from './modules/backlog/routes.js';
 import type { PlanningSettingsRepository } from './modules/planning/repository.js';
 import { registerPlanningRoutes } from './modules/planning/routes.js';
 import { registerDashboardRoutes } from './modules/dashboard/routes.js';
-import type { GameMetadataProvider } from './modules/games/metadata-provider.js';
+import type { FranchiseGamesProvider, GameMetadataProvider } from './modules/games/metadata-provider.js';
 import { registerMetadataRoutes } from './modules/games/metadata-routes.js';
 import type { GameTimeEstimateProvider } from './modules/games/time-estimate-provider.js';
 import { registerTimeEstimateRoutes } from './modules/games/time-estimate-routes.js';
@@ -40,6 +40,8 @@ import type { ExternalAchievementRepository } from './modules/game-platforms/ach
 import { registerGamePlatformRoutes } from './modules/game-platforms/routes.js';
 import { registerRawgAchievementRoutes } from './modules/game-platforms/rawg-achievement-routes.js';
 import type { RawgAchievementRepository, RawgAchievementProvider } from './modules/game-platforms/rawg-achievements.js';
+import type { DlcRepository } from './modules/dlcs/repository.js';
+import { registerDlcRoutes } from './modules/dlcs/routes.js';
 import type { PlaythroughRepository } from './modules/playthroughs/repository.js';
 import { registerPlaythroughRoutes } from './modules/playthroughs/routes.js';
 import { ACHIEVIST_SOURCE } from './modules/integrations/achievist/client.js';
@@ -48,7 +50,7 @@ import type { ExternalMatchQueueRepository } from './modules/integrations/match-
 import { registerIntegrationRoutes } from './modules/integrations/routes.js';
 import { ExternalSyncRunner } from './modules/integrations/sync-runner.js';
 
-export function buildApp(options: { rawgAchievementRepository?: RawgAchievementRepository; rawgAchievementProvider?: RawgAchievementProvider; externalAchievementRepository?: ExternalAchievementRepository; externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { rawgAchievementRepository?: RawgAchievementRepository; rawgAchievementProvider?: RawgAchievementProvider; dlcRepository?: DlcRepository; externalAchievementRepository?: ExternalAchievementRepository; externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   app.addHook('onRequest', async (request, reply) => {
@@ -85,13 +87,15 @@ export function buildApp(options: { rawgAchievementRepository?: RawgAchievementR
       options.sessionRepository));
   }
   if (options.gameRepository && options.rawgAchievementRepository) app.register((instance) => registerRawgAchievementRoutes(instance, options.gameRepository!, options.rawgAchievementRepository!, options.rawgAchievementProvider, options.gamePlatformRepository && options.externalAchievementRepository ? { gamePlatforms: options.gamePlatformRepository, externalAchievements: options.externalAchievementRepository } : undefined));
+  if (options.gameRepository && options.dlcRepository) app.register((instance) => registerDlcRoutes(instance, options.gameRepository!, options.dlcRepository!, options.rawgAchievementProvider));
   if (options.gameRepository && options.platformRepository && options.playthroughRepository) {
     app.register((instance) => registerPlaythroughRoutes(instance, options.gameRepository!, options.platformRepository!, options.playthroughRepository!, options.sessionRepository));
   }
   if (options.gameRepository && options.gameListRepository) app.register((instance) => registerGameListRoutes(instance, options.gameRepository!, options.gameListRepository!));
   if (options.savedFilterRepository) app.register((instance) => registerSavedFilterRoutes(instance, options.savedFilterRepository!));
   if (options.imageStorage) app.register((instance) => registerMediaRoutes(instance, options.imageStorage!));
-  if (options.franchiseRepository) app.register((instance) => registerFranchiseRoutes(instance, options.franchiseRepository!));
+  const franchiseGamesProvider = options.metadataProvider && 'franchiseGames' in options.metadataProvider ? options.metadataProvider as unknown as FranchiseGamesProvider : undefined;
+  if (options.franchiseRepository) app.register((instance) => registerFranchiseRoutes(instance, options.franchiseRepository!, franchiseGamesProvider, options.gameRepository));
   if (options.platformRepository) app.register((instance) => registerPlatformRoutes(instance, options.platformRepository!));
   if (options.genreRepository) app.register((instance) => registerGenreRoutes(instance, options.genreRepository!));
   if (options.gameRepository && options.sessionRepository) {
@@ -111,7 +115,8 @@ export function buildApp(options: { rawgAchievementRepository?: RawgAchievementR
     app.register((instance) => registerStatsRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!, options.challengeCompletionRepository,
       options.gamePlatformRepository && options.playthroughRepository
         ? { gamePlatforms: options.gamePlatformRepository, playthroughs: options.playthroughRepository }
-        : undefined));
+        : undefined,
+      options.externalAchievementRepository));
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));

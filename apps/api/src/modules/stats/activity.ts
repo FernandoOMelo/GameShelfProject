@@ -1,12 +1,13 @@
 import type { ActivityResponse, Session } from '@gameshelf/contracts';
+import { achievementDays, type Unlock } from './achievement-activity.js';
 
-type Input = { sessions: Session[]; year: number; today: string; timezoneOffsetMinutes?: number };
+type Input = { sessions: Session[]; year: number; today: string; timezoneOffsetMinutes?: number; unlocks?: Unlock[] };
 
 const DAY_MS = 86_400_000;
 
 // Minutos por dia a partir das sessões encerradas, atribuídos ao dia local de início.
 // Sequências consideram todo o histórico; o heatmap apenas o ano pedido.
-export function buildActivity({ sessions, year, today, timezoneOffsetMinutes = 0 }: Input): ActivityResponse {
+export function buildActivity({ sessions, year, today, timezoneOffsetMinutes = 0, unlocks = [] }: Input): ActivityResponse {
   const minutesByDay = new Map<string, number>();
   for (const session of sessions) {
     if (session.durationMinutes === null || session.durationMinutes <= 0) continue;
@@ -37,6 +38,7 @@ export function buildActivity({ sessions, year, today, timezoneOffsetMinutes = 0
     totalMinutes: days.reduce((sum, day) => sum + day.minutes, 0),
     maxDayMinutes: days.reduce((max, day) => Math.max(max, day.minutes), 0),
     currentStreak, longestStreak,
+    achievementDays: achievementDays(unlocks, timezoneOffsetMinutes).filter((day) => day.date.startsWith(`${year}-`)),
   };
 }
 

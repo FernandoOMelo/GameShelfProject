@@ -72,6 +72,7 @@ function platformRepository(initial: Platform[] = [{ id: STEAM, name: 'Steam', p
     rename: async () => undefined,
     countGameLinks: async () => 0,
     remove: async () => false,
+    setPresentation: async () => undefined,
     listSummaries: async () => [],
   };
 }
@@ -180,6 +181,7 @@ function achievementRepository(): ExternalAchievementRepository & {
   return {
     rows,
     calls,
+    listUnlocks: async () => [],
     listForGamePlatform: async (gamePlatformId) => rows.filter((row) => row.gamePlatformId === gamePlatformId),
     replaceForGamePlatform: async (gamePlatformId, entries, syncedAt) => {
       calls.push(gamePlatformId);

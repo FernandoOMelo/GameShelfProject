@@ -4,6 +4,10 @@ import { sql } from 'drizzle-orm';
 export const franchises = pgTable('franchises', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull().unique(),
+  // Id da franquia no IGDB (ADR-033): guardado quando a franquia vem de um
+  // metadado importado, para listar os outros jogos dela sem precisar
+  // rebuscar por nome (ambíguo entre franquias homônimas).
+  igdbFranchiseId: integer('igdb_franchise_id').unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -19,11 +23,14 @@ export const platforms = pgTable('platforms', {
   // personalizados criados pelo usuário.
   catalogKey: text('catalog_key'),
   iconKey: text('icon_key'),
+  // Cor da marca (#RRGGBB), só de apresentação.
+  color: text('color'),
   parentId: uuid('parent_id').references((): AnyPgColumn => platforms.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('platforms_parent_idx').on(table.parentId),
   check('platforms_parent_not_self', sql`${table.parentId} IS NULL OR ${table.parentId} <> ${table.id}`),
+  check('platforms_color_hex', sql`${table.color} IS NULL OR ${table.color} ~ '^#[0-9A-Fa-f]{6}$'`),
 ]);
 
 export const genres = pgTable('genres', {
@@ -389,4 +396,34 @@ export const externalGameMatches = pgTable('external_game_matches', {
   check('external_game_matches_title_not_blank', sql`length(trim(${table.title})) > 0`),
   // Nulo significa "a fonte não informa", nunca zero.
   check('external_game_matches_playtime_nonnegative', sql`${table.playtimeMinutes} IS NULL OR ${table.playtimeMinutes} >= 0`),
+]);
+
+export const dlcStatus = pgEnum('dlc_status', ['NOT_STARTED', 'PLAYING', 'COMPLETED']);
+
+// DLC de um jogo (ADR-034): entidade própria com progresso e estimativa
+// independentes do jogo base. Conquistas são consultadas ao vivo na RAWG pelo
+// `rawgId` guardado aqui (sem espelho local): é informação de catálogo, de
+// baixo risco se indisponível por instantes, e não há fonte de desbloqueio
+// pessoal por DLC hoje — diferente do jogo base, que tem o Achievist.
+export const dlcs = pgTable('dlcs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gameId: uuid('game_id').notNull().references(() => games.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  coverUrl: text('cover_url'),
+  releaseDate: date('release_date'),
+  owned: boolean('owned').notNull().default(false),
+  status: dlcStatus('status').notNull().default('NOT_STARTED'),
+  estimatedHours: numeric('estimated_hours', { precision: 8, scale: 2 }),
+  playedHours: numeric('played_hours', { precision: 8, scale: 2 }).notNull().default('0'),
+  rawgId: integer('rawg_id'),
+  rawgSlug: text('rawg_slug'),
+  rawgName: text('rawg_name'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('dlcs_game_idx').on(table.gameId),
+  check('dlcs_name_not_blank', sql`length(trim(${table.name})) > 0`),
+  check('dlcs_estimated_hours_nonnegative', sql`${table.estimatedHours} IS NULL OR ${table.estimatedHours} >= 0`),
+  check('dlcs_played_hours_nonnegative', sql`${table.playedHours} >= 0`),
 ]);

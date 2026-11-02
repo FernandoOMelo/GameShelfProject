@@ -2,27 +2,23 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { Game, Platform } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 import { AchievistSyncPanel } from './achievist-sync-panel';
-import { PlatformsPanel } from './platforms-panel';
 import { BackupCard } from './backup-card';
 import { apiUrl } from './shared';
 
 /**
  * Área de configurações (ADR-029). Tudo que configura o app — e não é visão do
- * dia a dia — vive aqui: catálogo de plataformas, integração com o Achievist,
- * backup e meta semanal. O Painel ficou só com leitura e análise.
+ * dia a dia — vive aqui: integração com o Achievist, backup e meta semanal.
+ * O catálogo de plataformas migrou para a aba Plataformas. O Painel ficou só com leitura e análise.
  */
-export function SettingsView({ platforms, games, weeklyHours, onPlatformsChanged, onRefresh }: {
+export function SettingsView({ platforms, games, weeklyHours, onRefresh }: {
   platforms: Platform[];
   games: Game[];
   /** Horas disponíveis por semana já salvas (meta semanal). */
   weeklyHours: number;
-  onPlatformsChanged: () => void;
   onRefresh: () => Promise<void>;
 }) {
   return <section className="settings-page" aria-labelledby="settings-title">
-    <div><p className="eyebrow">CONFIGURAÇÕES</p><h1 id="settings-title">Configurações</h1><p className="library-subtitle">Catálogo de plataformas, integrações externas e preferências.</p></div>
-
-    <PlatformsPanel platforms={platforms} onChanged={onPlatformsChanged} />
+    <div><p className="eyebrow">CONFIGURAÇÕES</p><h1 id="settings-title">Configurações</h1><p className="library-subtitle">Integrações externas, backup e preferências.</p></div>
 
     <AchievistSyncPanel games={games} platforms={platforms} onLinked={() => void onRefresh()} />
 

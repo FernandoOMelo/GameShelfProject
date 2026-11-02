@@ -33,7 +33,7 @@ const playthroughRecord: PlaythroughRecord = {
 
 function validData(): BackupData {
   return {
-    franchises: [{ id: id(1), name: 'Supergiant' }], platforms: [{ id: id(2), name: 'PC', parentId: null }], genres: [{ id: id(3), name: 'Roguelike' }],
+    franchises: [{ id: id(1), name: 'Supergiant', igdbFranchiseId: null }], platforms: [{ id: id(2), name: 'PC', parentId: null }], genres: [{ id: id(3), name: 'Roguelike' }],
     games: [{
       id: id(10), title: 'Hades', description: null, coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null,
       franchiseId: id(1), platformId: id(2), platformIds: [id(2)], genreIds: [id(3)], status: 'COMPLETED', rating: 10, difficulty: 'B', gameType: null, completionCondition: null,
@@ -71,7 +71,7 @@ describe('backup integrity', () => {
 
   it('reports repeated ids, repeated names and dangling references', () => {
     const data = validData();
-    data.franchises.push({ id: id(1), name: 'Supergiant' });
+    data.franchises.push({ id: id(1), name: 'Supergiant', igdbFranchiseId: null });
     data.games[0]!.platformId = id(99);
     data.games[0]!.genreIds = [id(3), id(98)];
     data.sessions[0]!.gameId = id(97);
@@ -100,10 +100,10 @@ describe('backup API', () => {
   function setup(importer: BackupImporter) {
     const app = buildApp({
       gameRepository: { list: async () => [gameRecord], find: async () => gameRecord, create: async () => gameRecord, update: async () => gameRecord, delete: async () => true },
-      franchiseRepository: { list: async () => [{ id: id(1), name: 'Supergiant' }], create: async () => ({ id: id(1), name: 'Supergiant' }) },
+      franchiseRepository: { list: async () => [{ id: id(1), name: 'Supergiant', igdbFranchiseId: null }], find: async () => ({ id: id(1), name: 'Supergiant', igdbFranchiseId: null }), create: async () => ({ id: id(1), name: 'Supergiant', igdbFranchiseId: null }), setIgdbFranchiseId: async () => undefined },
       platformRepository: {
         list: async () => [{ id: id(2), name: 'PC', parentId: null }], create: async () => ({ id: id(2), name: 'PC', parentId: null }),
-        rename: async () => undefined, setParent: async () => undefined, countGameLinks: async () => 0, remove: async () => false, listSummaries: async () => [],
+        rename: async () => undefined, setParent: async () => undefined, setPresentation: async () => undefined, countGameLinks: async () => 0, remove: async () => false, listSummaries: async () => [],
       },
       genreRepository: { list: async () => [{ id: id(3), name: 'Roguelike' }], create: async () => ({ id: id(3), name: 'Roguelike' }) },
       sessionRepository: {

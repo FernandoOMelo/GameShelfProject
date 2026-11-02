@@ -28,10 +28,10 @@ function serveDisabledAchievist() {
 describe('SettingsView', () => {
   it('groups the configuration sections in one page', async () => {
     serveDisabledAchievist();
-    render(<SettingsView platforms={platforms} games={games} weeklyHours={6} onPlatformsChanged={vi.fn()} onRefresh={vi.fn()} />);
+    render(<SettingsView platforms={platforms} games={games} weeklyHours={6} onRefresh={vi.fn()} />);
 
     expect(screen.getByRole('heading', { name: 'Configurações' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Plataformas' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Plataformas' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plataformas externas (Achievist)' })).toBeInTheDocument();
     expect(await screen.findByText(/A integração está desligada/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Meta semanal' })).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe('SettingsView', () => {
   it('saves the weekly goal and refreshes the planning views', async () => {
     serveDisabledAchievist();
     const onRefresh = vi.fn(async () => {});
-    render(<SettingsView platforms={platforms} games={games} weeklyHours={0} onPlatformsChanged={vi.fn()} onRefresh={onRefresh} />);
+    render(<SettingsView platforms={platforms} games={games} weeklyHours={0} onRefresh={onRefresh} />);
 
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Minutos disponíveis por semana' }), { target: { value: '300' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
@@ -59,27 +59,10 @@ describe('SettingsView', () => {
       if (url.endsWith('/planning/settings')) return Promise.resolve(Response.json({ error: 'erro' }, { status: 500 }));
       return Promise.resolve(Response.json([], { status: 200 }));
     });
-    render(<SettingsView platforms={platforms} games={games} weeklyHours={0} onPlatformsChanged={vi.fn()} onRefresh={vi.fn()} />);
+    render(<SettingsView platforms={platforms} games={games} weeklyHours={0} onRefresh={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Salvar meta' }));
 
     expect(await screen.findByText('Não foi possível salvar a meta semanal.')).toBeInTheDocument();
-  });
-
-  it('notifies platform changes back to the app', async () => {
-    serveDisabledAchievist();
-    const onPlatformsChanged = vi.fn();
-    fetchMock.mockImplementation((input, init) => {
-      const url = String(input);
-      if (url.endsWith('/integrations/achievist/sync')) return Promise.resolve(Response.json({ status: 'disabled', summary: null, error: 'desligada' }, { status: 200 }));
-      if (url.endsWith('/platforms') && init?.method === 'POST') return Promise.resolve(Response.json({ id: 'platform-2', name: 'GOG' }, { status: 201 }));
-      return Promise.resolve(Response.json([], { status: 200 }));
-    });
-    render(<SettingsView platforms={platforms} games={games} weeklyHours={0} onPlatformsChanged={onPlatformsChanged} onRefresh={vi.fn()} />);
-
-    fireEvent.change(screen.getByLabelText('Nome da nova plataforma'), { target: { value: 'GOG' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }));
-
-    await waitFor(() => expect(onPlatformsChanged).toHaveBeenCalled());
   });
 });

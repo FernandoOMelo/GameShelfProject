@@ -21,31 +21,91 @@ const lifecycleFields = {
   completedAt: calendarDateSchema.nullable().default(null),
 };
 
-export const franchiseInputSchema = z.object({ name: z.string().trim().min(1).max(200) }).strict();
-export const franchiseSchema = franchiseInputSchema.extend({ id: z.string().uuid() }).strict();
+export const franchiseInputSchema = z.object({ name: z.string().trim().min(1).max(200), igdbFranchiseId: z.number().int().positive().nullable().optional() }).strict();
+export const franchiseSchema = franchiseInputSchema.extend({ id: z.string().uuid(), igdbFranchiseId: z.number().int().positive().nullable() }).strict();
 export type Franchise = z.infer<typeof franchiseSchema>;
+
+// Outros jogos da mesma franquia no IGDB (ADR-033): cruzados com a biblioteca
+// local por título normalizado para indicar o que já está na coleção.
+export const franchiseGameCandidateSchema = z.object({
+  igdbId: z.number().int().positive(),
+  title: z.string().min(1),
+  releaseYear: z.number().int().min(1).max(9999).nullable(),
+  coverUrl: z.string().url().nullable(),
+  inLibrary: z.boolean(),
+  libraryGameId: z.string().uuid().nullable(),
+  libraryGameStatus: gameStatusSchema.nullable(),
+}).strict();
+export const franchiseGamesResponseSchema = z.object({ franchiseName: z.string(), games: z.array(franchiseGameCandidateSchema) }).strict();
+export type FranchiseGameCandidate = z.infer<typeof franchiseGameCandidateSchema>;
+export type FranchiseGamesResponse = z.infer<typeof franchiseGamesResponseSchema>;
+
+// DLC como entidade própria (ADR-034): progresso e catálogo de conquistas
+// independentes do jogo base. Conquistas são buscadas ao vivo na RAWG pelo
+// `rawgId` guardado aqui — não há espelho local nem desbloqueio pessoal.
+export const dlcStatusSchema = z.enum(['NOT_STARTED', 'PLAYING', 'COMPLETED']);
+const dlcOptionalHours = z.number().finite().min(0).max(999999.99).nullable().optional();
+export const dlcInputSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(10000).nullable().optional(),
+  coverUrl: z.string().max(2048).nullable().optional(),
+  releaseDate: calendarDateSchema.nullable().optional(),
+  owned: z.boolean().default(false),
+  status: dlcStatusSchema.default('NOT_STARTED'),
+  estimatedHours: dlcOptionalHours,
+  playedHours: z.number().finite().min(0).max(999999.99).optional(),
+  rawgId: z.number().int().positive().nullable().optional(),
+  rawgSlug: z.string().min(1).nullable().optional(),
+  rawgName: z.string().min(1).nullable().optional(),
+}).strict();
+export const dlcUpdateSchema = dlcInputSchema.partial();
+export const dlcSchema = dlcInputSchema.extend({
+  id: z.string().uuid(),
+  gameId: z.string().uuid(),
+  playedHours: z.number().finite().min(0).max(999999.99),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+export type DlcInput = z.infer<typeof dlcInputSchema>;
+export type DlcUpdate = z.infer<typeof dlcUpdateSchema>;
+export type Dlc = z.infer<typeof dlcSchema>;
 // Plataformas têm dois níveis (ADR-025): sem `parentId` é um grupo (PC,
 // PlayStation); com `parentId` é uma loja ou variante dentro dele (Steam, GOG).
 // O padrão nulo mantém backups anteriores importáveis.
+// Identidade visual opcional: ícone do catálogo e cor da marca (#RRGGBB).
+const platformIconKey = z.string().trim().min(1).max(40).nullable().optional();
+const platformColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Use uma cor no formato #RRGGBB.').nullable().optional();
 export const platformInputSchema = z.object({
   name: z.string().trim().min(1).max(200),
   parentId: z.string().uuid().nullable().optional(),
+  iconKey: platformIconKey,
+  color: platformColor,
 }).strict();
 export const platformUpdateSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   parentId: z.string().uuid().nullable().optional(),
+  iconKey: platformIconKey,
+  color: platformColor,
 }).strict();
+export const platformCatalogEntrySchema = z.object({
+  name: z.string(),
+  catalogKey: z.string(),
+  iconKey: z.string(),
+  color: z.string(),
+}).strict();
+export type PlatformCatalogEntry = z.infer<typeof platformCatalogEntrySchema>;
 export const platformSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   catalogKey: z.string().nullable().optional(),
   iconKey: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
   parentId: z.string().uuid().nullable().default(null),
 }).strict();
 export type PlatformInput = z.infer<typeof platformInputSchema>;
 export type PlatformUpdate = z.infer<typeof platformUpdateSchema>;
-export const genreInputSchema = franchiseInputSchema;
-export const genreSchema = franchiseSchema;
+export const genreInputSchema = z.object({ name: z.string().trim().min(1).max(200) }).strict();
+export const genreSchema = genreInputSchema.extend({ id: z.string().uuid() }).strict();
 export type Platform = z.infer<typeof platformSchema>;
 export type Genre = z.infer<typeof genreSchema>;
 
@@ -167,6 +227,7 @@ export const gameMetadataCandidateSchema = z.object({
   developer: z.string().nullable().optional(),
   publisher: z.string().nullable().optional(),
   franchise: z.string().nullable().optional(),
+  franchiseIgdbId: z.number().int().positive().nullable().optional(),
   genres: z.array(z.string()).optional(),
   platforms: z.array(z.string()).optional(),
 }).strict();
@@ -741,6 +802,10 @@ export const statsResponseSchema = z.object({
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
 export type StatsGroup = z.infer<typeof statsGroupSchema>;
 
+/** Filtro opcional das estatísticas: só jogos zerados no ano informado. */
+export const statsQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+}).strict();
 export const activityQuerySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0),
@@ -753,6 +818,8 @@ export const activityResponseSchema = z.object({
   maxDayMinutes: z.number().int().nonnegative(),
   currentStreak: z.number().int().nonnegative(),
   longestStreak: z.number().int().nonnegative(),
+  /** Dias do ano com conquistas desbloqueadas (espelho do Achievist), à parte das sessões. */
+  achievementDays: z.array(z.object({ date: calendarDateSchema, count: z.number().int().positive() }).strict()).default([]),
 }).strict();
 export type ActivityResponse = z.infer<typeof activityResponseSchema>;
 
@@ -768,6 +835,14 @@ const timelineGameRefSchema = z.object({
   coverUrl: mediaUrl.nullable(),
 });
 const timelineBaseSchema = z.object({ at: z.string().datetime(), date: calendarDateSchema });
+/** Conquista desbloqueada, como o Achievist a informa (nome e descrição podem vir vazios em troféus secretos). */
+export const timelineAchievementSchema = z.object({
+  name: z.string().nullable(),
+  description: z.string().nullable(),
+  iconUrl: z.string().max(2048).nullable(),
+  unlockedAt: z.string().datetime(),
+}).strict();
+export type TimelineAchievement = z.infer<typeof timelineAchievementSchema>;
 
 export const timelineEventSchema = z.discriminatedUnion('type', [
   timelineBaseSchema.extend({ type: z.literal('GAME_ADDED') }).merge(timelineGameRefSchema).strict(),
@@ -776,6 +851,9 @@ export const timelineEventSchema = z.discriminatedUnion('type', [
   timelineBaseSchema.extend({
     type: z.literal('SESSION'),
     sessionId: z.string().uuid(),
+    platformId: z.string().uuid().nullable().default(null),
+    /** Conquistas desbloqueadas durante a sessão (ou no mesmo dia, quando só há uma sessão). */
+    achievements: z.array(timelineAchievementSchema).default([]),
     durationMinutes: z.number().int().nonnegative().nullable(),
     progress: z.number().int().min(0).max(100).nullable(),
     location: z.string().nullable(),
@@ -797,6 +875,14 @@ export const timelineEventSchema = z.discriminatedUnion('type', [
     activityDays: z.number().int().nonnegative(),
   }).merge(timelineGameRefSchema).strict(),
   timelineBaseSchema.extend({
+    type: z.literal('ACHIEVEMENTS_UNLOCKED'),
+    /** Conquistas desbloqueadas no dia, naquele jogo, sem sessão registrada. */
+    count: z.number().int().positive(),
+    platformId: z.string().uuid().nullable().default(null),
+    /** As primeiras do dia, para exibir os ícones; `count` é o total. */
+    achievements: z.array(timelineAchievementSchema).default([]),
+  }).merge(timelineGameRefSchema).strict(),
+  timelineBaseSchema.extend({
     type: z.literal('CHALLENGE_COMPLETED'),
     title: z.string(),
     gamesCount: z.number().int().positive(),
@@ -809,6 +895,16 @@ export const timelineResponseSchema = z.object({
 }).strict();
 
 export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+
+/** Conquistas desbloqueadas por dia (todos os jogos); o gráfico acumulado é montado no cliente. */
+export const achievementSeriesQuerySchema = z.object({
+  timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0),
+}).strict();
+export const achievementSeriesResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
+  days: z.array(z.object({ date: calendarDateSchema, count: z.number().int().positive() }).strict()),
+}).strict();
+export type AchievementSeriesResponse = z.infer<typeof achievementSeriesResponseSchema>;
 export type TimelineResponse = z.infer<typeof timelineResponseSchema>;
 
 export const replayResponseSchema = z.object({

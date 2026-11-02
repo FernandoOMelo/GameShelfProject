@@ -39,12 +39,22 @@ export function formatElapsed(startedAt: string, now: number): string {
   return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
-// Compact hours for dense tables ("1.569 h"); long form stays in formatHours.
+// Compact time for dense tables and cards: minutes below one hour ("42min"),
+// "Xh Ymin" up to 100 h and whole hours with thousands separator beyond that.
 export function formatCompactHours(value: number): string {
-  return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value)} h`;
+  const totalMinutes = Math.round(value * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}min`;
+  if (hours >= 100 || minutes === 0) return `${new Intl.NumberFormat('pt-BR').format(hours)}h`;
+  return `${hours}h ${minutes}min`;
 }
 
 export const difficultyLabels = { C: 'C · Fácil', B: 'B · Médio', A: 'A · Complicado', AA: 'AA · Difícil', AAA: 'AAA · Imperdoável' } as const;
+
+export const statusLabels = {
+  DESIRED: 'Desejado', BACKLOG: 'Na biblioteca', PLAYING: 'Jogando', PAUSED: 'Pausado', COMPLETED: 'Zerado', ABANDONED: 'Abandonado',
+} as const;
 
 // Fixed-order categorical hues (dark-surface steps of the reference palette): color follows the status, never its rank.
 export const statusColors = {

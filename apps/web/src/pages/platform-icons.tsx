@@ -1,4 +1,6 @@
 import React from 'react';
+import type { CSSProperties } from 'react';
+import { brandPaths } from './platform-brand-paths';
 
 /**
  * Ícones SVG de plataforma baseados em iconKey. Formas geométricas abstratas
@@ -149,7 +151,31 @@ const iconMap: Record<string, () => React.ReactElement> = {
   mobile: MobileIcon,
 };
 
+/** Logo de marca (path oficial) quando existe; senão o ícone abstrato local. */
 export function PlatformIcon({ iconKey }: { iconKey: string | null | undefined }) {
+  const brand = iconKey ? brandPaths[iconKey] : undefined;
+  if (brand) {
+    return <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable={false}><path d={brand} /></svg>;
+  }
   const IconComponent = (iconKey ? iconMap[iconKey] : undefined) ?? GenericIcon;
   return <IconComponent />;
 }
+
+/** Variável CSS com a cor da marca; os estilos de badge e logo a usam quando presente. */
+export function platformStyle(platform: { color?: string | null }): CSSProperties | undefined {
+  return platform.color ? ({ '--platform-color': platform.color } as CSSProperties) : undefined;
+}
+
+/** Quadrado com a cor da marca e o logo em branco, como nos cartões de conta. */
+export function PlatformLogo({ platform, size = 40 }: { platform: { iconKey?: string | null; color?: string | null }; size?: number }) {
+  return <span className="platform-logo" style={{ ...platformStyle(platform), width: size, height: size, fontSize: size * 0.55 }} aria-hidden="true"><PlatformIcon iconKey={platform.iconKey} /></span>;
+}
+
+/** Ícones que podem ser escolhidos no cadastro de plataforma. */
+export const platformIconOptions: Array<{ key: string; label: string }> = [
+  { key: 'playstation', label: 'PlayStation' }, { key: 'xbox', label: 'Xbox' }, { key: 'nintendo', label: 'Nintendo' },
+  { key: 'steam', label: 'Steam' }, { key: 'epic', label: 'Epic Games' }, { key: 'gog', label: 'GOG' },
+  { key: 'rockstar', label: 'Rockstar' }, { key: 'google-play', label: 'Google Play' }, { key: 'ea', label: 'EA' },
+  { key: 'ubisoft', label: 'Ubisoft' }, { key: 'battlenet', label: 'Battle.net' }, { key: 'pc', label: 'PC' },
+  { key: 'retro', label: 'Retro' }, { key: 'mobile', label: 'Mobile' },
+];

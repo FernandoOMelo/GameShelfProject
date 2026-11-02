@@ -25,6 +25,7 @@ import { AchievistClient } from './modules/integrations/achievist/client.js';
 import { IgdbMetadataProvider } from './modules/games/igdb-metadata-provider.js';
 import { HltbTimeEstimateProvider } from './modules/games/hltb-time-estimate-provider.js';
 import { LocalImageStorage } from './modules/games/image-storage.js';
+import { DrizzleDlcRepository } from './modules/dlcs/drizzle-dlc-repository.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,6 +45,7 @@ const app = buildApp({
   gamePlatformRepository: new DrizzleGamePlatformRepository(database.db),
   externalAchievementRepository: new DrizzleExternalAchievementRepository(database.db),
   rawgAchievementRepository: new DrizzleRawgAchievementRepository(database.db),
+  dlcRepository: new DrizzleDlcRepository(database.db),
   playthroughRepository: new DrizzlePlaythroughRepository(database.db),
   backlogRepository: new DrizzleBacklogRepository(database.db),
   gameListRepository: new DrizzleGameListRepository(database.db),

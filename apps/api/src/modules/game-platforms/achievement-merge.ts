@@ -25,29 +25,47 @@ function isCompletionTrophy(name: string, description: string | null): boolean {
 }
 
 /**
- * Cruza o catálogo RAWG (fonte de ícone/descrição/raridade) com os
- * desbloqueios pessoais espelhados do Achievist, por nome normalizado.
- * Item sem correspondência e ainda bloqueado é tratado como secreto: nome e
- * descrição ficam ocultos até desbloquear (ADR-028 — a fonte é dona do dado
- * de desbloqueio, aqui só decidimos o que mostrar).
+ * Monta a lista de conquistas do jogo. A RAWG só cataloga as conquistas do
+ * Steam (em inglês, sem idioma configurável) e não informa secretas; o
+ * Achievist espelha o catálogo completo da plataforma do usuário (ex.: os 61
+ * troféus do PSN, no idioma da conta, com desbloqueios). Por isso:
+ * - com dados do Achievist, eles são a lista e a RAWG só completa ícone,
+ *   descrição e raridade que faltarem, casando por nome;
+ * - sem dados do Achievist, a lista é o catálogo da RAWG, sem secretas;
+ * - secreta = ainda bloqueada e sem descrição na fonte (a PSN omite os
+ *   detalhes até desbloquear).
  */
 export function mergeAchievements(catalog: RawgAchievement[], external: ExternalAchievement[]): MergedAchievement[] {
-  const externalByName = new Map(external.map((item) => [normalizeName(item.name), item]));
-  return catalog.map((item) => {
-    const match = externalByName.get(normalizeName(item.name));
-    const unlocked = match?.unlocked ?? false;
-    const secret = !match && !unlocked;
+  if (external.length === 0) {
+    return catalog.map((item) => ({
+      id: item.id, name: item.name, description: item.description, iconUrl: item.imageUrl, rarityPercent: item.percent,
+      rarityTier: rarityTier(item.percent), unlocked: false, unlockedAt: null, secret: false,
+      isCompletionTrophy: isCompletionTrophy(item.name, item.description),
+    }));
+  }
+  const catalogByName = new Map(catalog.map((item) => [normalizeName(item.name), item]));
+  const unique = new Map<string, ExternalAchievement>();
+  for (const item of external) {
+    const key = normalizeName(item.name);
+    const current = unique.get(key);
+    if (!current || (!current.unlocked && item.unlocked)) unique.set(key, item);
+  }
+  return [...unique.values()].map((item) => {
+    const reference = catalogByName.get(normalizeName(item.name));
+    const description = item.description ?? reference?.description ?? null;
+    const secret = !item.unlocked && description === null;
+    const rarityPercent = item.rarityPercent ?? reference?.percent ?? null;
     return {
       id: item.id,
       name: secret ? null : item.name,
-      description: secret ? null : item.description,
-      iconUrl: match?.iconUrl ?? item.imageUrl,
-      rarityPercent: item.percent,
-      rarityTier: rarityTier(item.percent),
-      unlocked,
-      unlockedAt: match?.unlockedAt ?? null,
+      description: secret ? null : description,
+      iconUrl: item.iconUrl ?? reference?.imageUrl ?? null,
+      rarityPercent,
+      rarityTier: rarityTier(rarityPercent),
+      unlocked: item.unlocked,
+      unlockedAt: item.unlockedAt,
       secret,
-      isCompletionTrophy: isCompletionTrophy(item.name, item.description),
+      isCompletionTrophy: isCompletionTrophy(item.name, description),
     };
   });
 }
@@ -67,7 +85,7 @@ export function buildAchievementsResponse(linkedGame: RawgAchievementCandidate |
     { common: 0, uncommon: 0, rare: 0, ultraRare: 0 },
   );
   return {
-    catalogAvailable: linkedGame !== null,
+    catalogAvailable: linkedGame !== null || external.length > 0,
     linkedGame,
     total: achievements.length,
     unlockedCount,

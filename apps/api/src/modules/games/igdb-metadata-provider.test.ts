@@ -14,7 +14,7 @@ describe('IgdbMetadataProvider', () => {
         first_release_date: Date.UTC(2020, 8, 17) / 1000,
         cover: { image_id: 'cover-image' },
         artworks: [{ image_id: 'background-image' }],
-        franchise: { name: 'Hades' },
+        franchise: { id: 777, name: 'Hades' },
         involved_companies: [
           { developer: true, company: { name: 'Supergiant Games' } },
           { publisher: true, company: { name: 'Supergiant Games' } },
@@ -45,6 +45,7 @@ describe('IgdbMetadataProvider', () => {
       developer: 'Supergiant Games',
       publisher: 'Supergiant Games',
       franchise: 'Hades',
+      franchiseIgdbId: 777,
       genres: ['Role-playing'],
       platforms: ['PC'],
     }]);

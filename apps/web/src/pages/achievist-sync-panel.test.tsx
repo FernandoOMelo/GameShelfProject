@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExternalIntegrationStatus, ExternalPendingMatch, ExternalSyncState, Game, Platform } from '@gameshelf/contracts';
 import { AchievistSyncPanel } from './achievist-sync-panel';
@@ -55,18 +55,20 @@ describe('AchievistSyncPanel', () => {
     render(<AchievistSyncPanel games={games} platforms={platforms} />);
 
     expect(await screen.findByText(/2 jogos da sua biblioteca têm este título/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Jogo correspondente a Hades')).toHaveValue('');
+    expect(screen.getByRole('button', { name: /^Hades/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /^HADES!/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Vincular a um jogo' })).toBeDisabled();
   });
 
   it('pre-selects the single suggestion but only links on confirmation', async () => {
     serve(state(), [match()]);
     render(<AchievistSyncPanel games={games} platforms={platforms} />);
 
-    const select = await screen.findByLabelText('Jogo correspondente a Hades');
-    expect(select).toHaveValue('game-1');
+    const chip = await screen.findByRole('button', { name: /^Hades/ });
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
     expect(fetchMock.mock.calls.every(([url]) => !String(url).includes('/confirm'))).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar vínculo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular a um jogo' }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/pending/match-1/confirm'))).toBe(true));
     const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/confirm'))!;
@@ -93,9 +95,11 @@ describe('AchievistSyncPanel', () => {
   it('keeps an entry out of future runs when the user ignores it', async () => {
     serve(state(), [match()]);
     render(<AchievistSyncPanel games={games} platforms={platforms} />);
-    await screen.findByText('Hades');
+    await screen.findByText('Hades', { selector: 'strong' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ignorar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais ações de Hades' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ignorar' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Ignorar entrada' })).getByRole('button', { name: 'Ignorar' }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/pending/match-1/ignore'))).toBe(true));
   });
@@ -121,5 +125,58 @@ describe('AchievistSyncPanel', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('O login no Achievist falhou com HTTP 401.');
     expect(screen.getByRole('button', { name: 'Sincronizar agora' })).toBeInTheDocument();
+  });
+
+  it('finds another library game by search and links it', async () => {
+    serve(state(), [match({ suggestions: [], ambiguous: false })]);
+    render(<AchievistSyncPanel games={games} platforms={platforms} />);
+
+    fireEvent.change(await screen.findByLabelText('Jogo correspondente a Hades'), { target: { value: 'hades!' } });
+    fireEvent.click(screen.getByRole('button', { name: /^HADES!/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular a um jogo' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/pending/match-1/confirm'))).toBe(true));
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes('/confirm'))!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({ gameId: 'game-2' });
+  });
+
+  it('filters the queue by ambiguity and by title', async () => {
+    serve(state(), [
+      match({ id: 'm1', title: 'Hades' }),
+      match({ id: 'm2', title: 'Celeste', suggestions: [{ gameId: 'game-1', title: 'Hades' }, { gameId: 'game-2', title: 'HADES!' }], ambiguous: true }),
+    ]);
+    render(<AchievistSyncPanel games={games} platforms={platforms} />);
+    await screen.findByText('Celeste', { selector: 'strong' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ambíguos' }));
+    expect(screen.queryByText('Hades', { selector: 'strong' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Todos' }));
+    fireEvent.change(screen.getByLabelText('Buscar entrada importada'), { target: { value: 'cele' } });
+    expect(screen.queryByText('Hades', { selector: 'strong' })).not.toBeInTheDocument();
+    expect(screen.getByText('Celeste', { selector: 'strong' })).toBeInTheDocument();
+  });
+
+  it('links every single-suggestion entry in a batch only after confirming', async () => {
+    serve(state(), [
+      match({ id: 'm1', title: 'Hades', suggestions: [{ gameId: 'game-1', title: 'Hades' }] }),
+      match({ id: 'm2', title: 'Hades II', suggestions: [{ gameId: 'game-2', title: 'HADES!' }] }),
+      match({ id: 'm3', title: 'Celeste', suggestions: [{ gameId: 'game-1', title: 'Hades' }, { gameId: 'game-2', title: 'HADES!' }], ambiguous: true }),
+    ]);
+    const serveQueue = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input, init) => String(input).endsWith('/confirm') ? Promise.resolve(Response.json({})) : serveQueue(input, init));
+    render(<AchievistSyncPanel games={games} platforms={platforms} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Vincular todos com sugestão única \(2\)/ }));
+    expect(fetchMock.mock.calls.every(([url]) => !String(url).includes('/confirm'))).toBe(true);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Vincular com sugestão única' })).getByRole('button', { name: 'Vincular todos' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/confirm')).length).toBe(2));
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/m3/confirm'))).toBe(false);
+  });
+
+  it('shows an empty state when everything is linked', async () => {
+    serve(state(), []);
+    render(<AchievistSyncPanel games={games} platforms={platforms} />);
+    expect(await screen.findByText(/Tudo vinculado/)).toBeInTheDocument();
   });
 });

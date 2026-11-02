@@ -39,6 +39,7 @@ const platformRepository: PlatformRepository = {
   setParent: async (platformId, parentId) => ({ id: platformId, name: 'PC', parentId }),
   countGameLinks: async () => 0,
   remove: async () => false,
+  setPresentation: async () => undefined,
   listSummaries: async () => [],
 };
 
