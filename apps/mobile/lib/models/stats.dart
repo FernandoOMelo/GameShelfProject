@@ -121,7 +121,70 @@ class StatsYearBucket {
       );
 }
 
+/// Tempo informado por uma plataforma (Achievist), para o gráfico de barras.
+class ExternalPlaytimeByPlatform {
+  final String key;
+  final String name;
+  final double hours;
+
+  const ExternalPlaytimeByPlatform({required this.key, required this.name, required this.hours});
+
+  factory ExternalPlaytimeByPlatform.fromJson(Map<String, dynamic> json) => ExternalPlaytimeByPlatform(
+        key: json['key'] as String,
+        name: json['name'] as String,
+        hours: (json['hours'] as num).toDouble(),
+      );
+}
+
+/// Números da biblioteca inteira (`libraryStatsSchema`): um jogo em três
+/// plataformas continua sendo um jogo, e o tempo local fica separado do tempo
+/// informado pelas plataformas, que nunca são somados.
+class LibraryStats {
+  final int gameCount;
+  final int platformLinkCount;
+  final int playthroughsStarted;
+  final int playthroughsCompleted;
+  final int replaysStarted;
+  final int gamesWithCompletedPlaythrough;
+  final double localPlayedHours;
+  final double externalPlaytimeHours;
+  final double externalCountedHours;
+  final double consolidatedPlayedHours;
+  final List<ExternalPlaytimeByPlatform> externalPlaytimeByPlatform;
+
+  const LibraryStats({
+    this.gameCount = 0,
+    this.platformLinkCount = 0,
+    this.playthroughsStarted = 0,
+    this.playthroughsCompleted = 0,
+    this.replaysStarted = 0,
+    this.gamesWithCompletedPlaythrough = 0,
+    this.localPlayedHours = 0,
+    this.externalPlaytimeHours = 0,
+    this.externalCountedHours = 0,
+    this.consolidatedPlayedHours = 0,
+    this.externalPlaytimeByPlatform = const [],
+  });
+
+  factory LibraryStats.fromJson(Map<String, dynamic> json) => LibraryStats(
+        gameCount: json['gameCount'] as int? ?? 0,
+        platformLinkCount: json['platformLinkCount'] as int? ?? 0,
+        playthroughsStarted: json['playthroughsStarted'] as int? ?? 0,
+        playthroughsCompleted: json['playthroughsCompleted'] as int? ?? 0,
+        replaysStarted: json['replaysStarted'] as int? ?? 0,
+        gamesWithCompletedPlaythrough: json['gamesWithCompletedPlaythrough'] as int? ?? 0,
+        localPlayedHours: (json['localPlayedHours'] as num?)?.toDouble() ?? 0,
+        externalPlaytimeHours: (json['externalPlaytimeHours'] as num?)?.toDouble() ?? 0,
+        externalCountedHours: (json['externalCountedHours'] as num?)?.toDouble() ?? 0,
+        consolidatedPlayedHours: (json['consolidatedPlayedHours'] as num?)?.toDouble() ?? 0,
+        externalPlaytimeByPlatform: ((json['externalPlaytimeByPlatform'] as List<dynamic>?) ?? const [])
+            .map((e) => ExternalPlaytimeByPlatform.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 class StatsResponse {
+  final LibraryStats? library;
   final StatsTotals totals;
   final List<StatsCountBucket> ratingDistribution;
   final List<StatsCountBucket> difficultyDistribution;
@@ -136,6 +199,7 @@ class StatsResponse {
   final List<StatsGroup> byDeveloper;
 
   const StatsResponse({
+    this.library,
     required this.totals,
     required this.ratingDistribution,
     required this.difficultyDistribution,
@@ -151,6 +215,9 @@ class StatsResponse {
   });
 
   factory StatsResponse.fromJson(Map<String, dynamic> json) => StatsResponse(
+        library: json['library'] is Map<String, dynamic>
+            ? LibraryStats.fromJson(json['library'] as Map<String, dynamic>)
+            : null,
         totals: StatsTotals.fromJson(json['totals'] as Map<String, dynamic>),
         ratingDistribution: (json['ratingDistribution'] as List<dynamic>)
             .map((e) => e as Map<String, dynamic>)

@@ -1,12 +1,13 @@
 import '../models/goal.dart';
 import 'api_client.dart';
+import 'timezone.dart';
 
 class GoalsApi {
   static Future<List<GoalProgress>> list() async {
     final data = await ApiClient.instance.getCached<List<dynamic>>(
       '/goals',
       queryParameters: {
-        'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+        'timezoneOffsetMinutes': apiTimezoneOffsetMinutes(),
       },
     );
     return data.map((e) => GoalProgress.fromJson(e as Map<String, dynamic>)).toList();

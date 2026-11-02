@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../models/activity.dart';
+import '../models/catalog.dart';
 import '../models/game.dart';
+import '../models/platform_summary.dart';
 import '../models/stats.dart';
+import '../providers/catalog_provider.dart';
 import '../providers/games_provider.dart';
+import '../providers/platforms_provider.dart';
 import '../providers/stats_provider.dart';
+import '../widgets/achievements_chart.dart';
 import '../widgets/game_cover.dart';
+import '../widgets/platform_logo.dart';
 import '../widgets/section.dart';
 import '../widgets/status.dart';
 import 'game_detail_screen.dart';
+import 'platforms_screen.dart' show PlatformCard;
 
 /// Estatísticas da coleção — paridade com o `StatsView` da web.
 ///
@@ -35,6 +42,7 @@ class StatsScreen extends ConsumerWidget {
         ],
       ),
       body: statsAsync.when(
+        skipLoadingOnReload: true,
         data: (stats) => RefreshIndicator(
           onRefresh: () async => ref.invalidate(statsProvider),
           child: _StatsContent(stats: stats),
@@ -51,18 +59,49 @@ class StatsScreen extends ConsumerWidget {
   }
 }
 
-class _StatsContent extends StatelessWidget {
+class _StatsContent extends ConsumerWidget {
   final StatsResponse stats;
 
   const _StatsContent({required this.stats});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final totals = stats.totals;
-    final ratedEntries =
-        stats.ratingDistribution.where((entry) => entry.count > 0).toList();
-    final difficultyEntries =
-        stats.difficultyDistribution.where((entry) => entry.count > 0).toList();
+    final library = stats.library;
+    final period = ref.watch(statsYearProvider);
+    final years = stats.byYear.map((entry) => entry.year).toList();
+    final summaries = ref.watch(platformSummariesProvider).valueOrNull ?? const <PlatformSummary>[];
+    final catalog = ref.watch(platformsProvider).valueOrNull ?? const <CatalogItem>[];
+    final ratedEntries = stats.ratingDistribution.where((entry) => entry.count > 0).toList();
+    final difficultyEntries = stats.difficultyDistribution.where((entry) => entry.count > 0).toList();
+    final byGenre = stats.byGenre.where((group) => group.completedCount > 0).toList();
+    final byType = stats.byType.where((group) => group.completedCount > 0).toList();
+    final byDeveloper = stats.byDeveloper.where((group) => group.completedCount > 0).toList();
+    final journey = totals.journeyStart == null ? null : '${totals.journeyDays} dias';
+    final journeyHint = totals.journeyStart == null
+        ? null
+        : '${(totals.journeyDays / 365.25).toStringAsFixed(1).replaceAll('.', ',')} anos desde o primeiro registro';
+    final timeBars = library?.externalPlaytimeByPlatform.where((entry) => entry.hours > 0).toList() ?? const [];
+
+    // Seções sem dado vão para a faixa do fim, cada uma com o que as preenche.
+    final empty = <(String, String)>[];
+    bool has(bool condition, String title, String hint) {
+      if (!condition) empty.add((title, hint));
+      return condition;
+    }
+
+    final hasRating = has(ratedEntries.isNotEmpty, 'Pontuação', 'Dê nota aos jogos zerados.');
+    final hasDifficulty =
+        has(difficultyEntries.isNotEmpty, 'Nível de dificuldade', 'Informe a dificuldade ao zerar um jogo.');
+    final hasGenre = has(byGenre.isNotEmpty, 'Por gênero', 'Zere um jogo com gênero definido.');
+    final hasType = has(byType.isNotEmpty, 'Por tipo', 'Informe o tipo do jogo na edição.');
+    final hasDeveloper = has(byDeveloper.isNotEmpty, 'Top 10 desenvolvedoras', 'Zere um jogo com desenvolvedora.');
+    final hasRelease =
+        has(stats.byReleaseYear.isNotEmpty, 'Por ano de lançamento', 'Informe o ano de lançamento dos jogos.');
+    final hasFavorites =
+        has(stats.favorites.isNotEmpty, 'Top 10 jogos favoritos', 'Marque jogos como favoritos na edição do jogo.');
+    final hasTopGenres = has(stats.topGenres.isNotEmpty, 'Top 5 gêneros favoritos', 'Precisa de notas nos jogos zerados.');
+    final hasTopTypes = has(stats.topTypes.isNotEmpty, 'Top 10 tipos favoritos', 'Precisa de notas nos jogos zerados.');
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -77,127 +116,229 @@ class _StatsContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        const Text('Estatísticas',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        const Text('Estatísticas', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        const Text(
-          'Números dos jogos zerados. As horas de cada jogo contam no ano em que '
-          'ele foi zerado.',
-          style: TextStyle(color: Color(0xFF8888A0), fontSize: 13, height: 1.4),
+        Text(
+          period == null
+              ? 'Números dos jogos zerados. As horas de cada jogo contam no ano em que ele foi zerado.'
+              : 'Jogos zerados em $period. A biblioteca, as jornadas e as plataformas abaixo continuam mostrando tudo.',
+          style: const TextStyle(color: Color(0xFF8888A0), fontSize: 13, height: 1.4),
         ),
+        if (years.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('Tudo'),
+                  selected: period == null,
+                  onSelected: (_) => ref.read(statsYearProvider.notifier).state = null,
+                ),
+                for (final year in years) ...[
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: Text('$year'),
+                    selected: period == year,
+                    onSelected: (_) => ref.read(statsYearProvider.notifier).state = year,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
-        _KpiGrid(cards: [
-          _KpiCard(label: 'Jogos zerados', value: '${totals.completedCount}', accent: true),
-          _KpiCard(label: 'Horas em jogos zerados', value: formatHours(totals.completedHours)),
-          _KpiCard(
+        _MetricGrid(metrics: [
+          _Metric(
+            hero: true,
+            accent: true,
+            label: 'Jogos zerados',
+            value: '${totals.completedCount}',
+            hint: totals.completedCount == 0 ? 'Zere um jogo para ver' : null,
+          ),
+          _Metric(hero: true, label: 'Horas em jogos zerados', value: formatHours(totals.completedHours)),
+          _Metric(
+            hero: true,
             label: 'Média por jogo zerado',
-            value: formatHours(totals.averageCompletedHours),
+            value: totals.averageCompletedHours == null ? null : formatHours(totals.averageCompletedHours),
+            emptyHint: 'Zere um jogo com horas',
           ),
-          _KpiCard(
-            label: 'Tempo de jornada',
-            value: totals.journeyStart == null
-                ? '—'
-                : '${totals.journeyDays} dias (${(totals.journeyDays / 365.25).toStringAsFixed(1).replaceAll('.', ',')} anos)',
-          ),
+          if (library != null)
+            _Metric(
+              hero: true,
+              accent: true,
+              label: 'Total consolidado',
+              value: formatHours(library.consolidatedPlayedHours),
+              info: 'O total consolidado soma as horas registradas aqui com ${formatHours(library.externalCountedHours)} '
+                  'de plataformas marcadas como fonte do total, descontando o que já foi lançado como horas '
+                  'retroativas. As demais horas informadas por plataformas ficam de fora para não contar a '
+                  'mesma atividade duas vezes.',
+            ),
         ]),
-        const SizedBox(height: 12),
-        _KpiGrid(cards: [
-          _KpiCard(
+        const _SectionHeading('Biblioteca'),
+        _MetricGrid(metrics: [
+          if (library != null) _Metric(label: 'Jogos cadastrados', value: '${library.gameCount}'),
+          if (library != null) _Metric(label: 'Associações de plataforma', value: '${library.platformLinkCount}'),
+          _Metric(
             label: 'Taxa de conclusão',
             value: '${_br(totals.completionRate)}%',
+            info: 'Ignora jogos desejados, que ainda não estão na biblioteca.',
           ),
-          _KpiCard(
+          _Metric(label: 'Tempo de jornada', value: journey, hint: journeyHint, emptyHint: 'Sem registros ainda'),
+        ]),
+        if (library != null) ...[
+          const _SectionHeading('Jornadas'),
+          _MetricGrid(metrics: [
+            _Metric(label: 'Jornadas iniciadas', value: '${library.playthroughsStarted}'),
+            _Metric(label: 'Jornadas concluídas', value: '${library.playthroughsCompleted}'),
+            _Metric(label: 'Replays iniciados', value: '${library.replaysStarted}'),
+            _Metric(label: 'Jogos com jornada zerada', value: '${library.gamesWithCompletedPlaythrough}'),
+          ]),
+        ],
+        const _SectionHeading('Tempo'),
+        _MetricGrid(metrics: [
+          if (library != null) _Metric(label: 'Horas registradas aqui', value: formatHours(library.localPlayedHours)),
+          if (library != null)
+            _Metric(
+              label: 'Horas informadas por plataformas',
+              value: formatHours(library.externalPlaytimeHours),
+              info: 'Medida separada do histórico de sessões: as duas não são somadas.',
+            ),
+          _Metric(
             label: 'Média por jogo jogado',
-            value: formatHours(totals.averageHoursPerGame),
+            value: totals.averageHoursPerGame == null ? null : formatHours(totals.averageHoursPerGame),
+            info: 'Considera todo jogo com horas registradas, zerado ou não.',
+            emptyHint: 'Sem horas registradas',
           ),
-          _KpiCard(
+          _Metric(
             label: 'Jogo mais longo',
-            value: totals.longestGame?.title ?? '—',
-            detail: totals.longestGame == null ? null : formatHours(totals.longestGame!.hours),
+            value: totals.longestGame?.title,
+            hint: totals.longestGame == null ? null : formatHours(totals.longestGame!.hours),
+            emptyHint: 'Zere um jogo com horas',
+            small: true,
           ),
-          _KpiCard(
+          _Metric(
             label: 'Jogo mais curto',
-            value: totals.shortestGame?.title ?? '—',
-            detail: totals.shortestGame == null ? null : formatHours(totals.shortestGame!.hours),
+            value: totals.shortestGame?.title,
+            hint: totals.shortestGame == null ? null : formatHours(totals.shortestGame!.hours),
+            emptyHint: 'Zere um jogo com horas',
+            small: true,
           ),
         ]),
-        const SizedBox(height: 8),
-        const Text(
-          'A taxa de conclusão ignora jogos desejados, que ainda não estão na '
-          'biblioteca. A média por jogo jogado considera todo jogo com horas '
-          'registradas, zerado ou não.',
-          style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.4),
-        ),
-        const SizedBox(height: 20),
-        const _ReplayPanel(),
+        if (timeBars.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Tempo informado por plataforma',
+            child: _PlatformTimeBars(entries: timeBars, catalog: catalog),
+          ),
+        ],
+        if (summaries.any((item) => item.gameCount > 0)) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Plataformas',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Toda a biblioteca, não só os jogos zerados.',
+                    style: TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+                const SizedBox(height: 12),
+                for (final summary in summaries.where((item) => item.gameCount > 0))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: PlatformCard(summary: summary, readOnly: true),
+                  ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
+        _ReplayPanel(suggestedYear: years.isEmpty ? null : years.first),
+        const SizedBox(height: 16),
+        const AchievementsChart(),
         const _ActivityHeatmap(),
         const SizedBox(height: 16),
         _YearTimeline(entries: stats.byYear, onOpenGame: (id) => _openGame(context, id)),
-        const SizedBox(height: 16),
-        _Panel(
-          title: 'Pontuação',
-          child: _BarList(
-            emptyMessage: 'Nenhum jogo zerado com nota registrada.',
-            entries: [
-              for (final entry in ratedEntries)
-                _BarEntry(
-                  label: entry.label == '11' ? '11 · Jogo da vida' : entry.label,
-                  value: entry.count,
-                ),
-            ],
+        if (hasRating) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Pontuação',
+            child: _BarList(
+              emptyMessage: 'Nenhum jogo zerado com nota registrada.',
+              entries: [
+                for (final entry in ratedEntries)
+                  _BarEntry(label: entry.label == '11' ? '11 · Jogo da vida' : entry.label, value: entry.count),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        _Panel(
-          title: 'Nível de dificuldade',
-          child: _BarList(
-            emptyMessage: 'Nenhum jogo zerado com dificuldade informada.',
-            entries: [
-              for (final entry in difficultyEntries)
-                _BarEntry(
-                  label: difficultyLabels[entry.label] ?? entry.label,
-                  value: entry.count,
-                ),
-            ],
+        ],
+        if (hasDifficulty) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Nível de dificuldade',
+            child: _BarList(
+              emptyMessage: 'Nenhum jogo zerado com dificuldade informada.',
+              entries: [
+                for (final entry in difficultyEntries)
+                  _BarEntry(label: difficultyLabels[entry.label] ?? entry.label, value: entry.count),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        _GroupTable(title: 'Por gênero', groups: stats.byGenre),
-        const SizedBox(height: 16),
-        _GroupTable(title: 'Por plataforma', groups: stats.byPlatform),
-        const SizedBox(height: 16),
-        _GroupTable(title: 'Por tipo', groups: stats.byType),
-        const SizedBox(height: 16),
-        _GroupTable(title: 'Top 10 desenvolvedoras', groups: stats.byDeveloper),
-        const SizedBox(height: 16),
-        _Panel(
-          title: 'Por ano de lançamento',
-          child: _BarList(
-            emptyMessage: 'Nenhum jogo com ano de lançamento informado.',
-            entries: [
-              for (final entry in stats.byReleaseYear)
-                _BarEntry(label: entry.label, value: entry.count),
-            ],
+        ],
+        if (hasGenre) ...[const SizedBox(height: 16), _RankBars(title: 'Por gênero', groups: byGenre)],
+        if (hasType) ...[const SizedBox(height: 16), _RankBars(title: 'Por tipo', groups: byType)],
+        if (hasDeveloper) ...[const SizedBox(height: 16), _RankBars(title: 'Top 10 desenvolvedoras', groups: byDeveloper)],
+        if (hasRelease) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Por ano de lançamento',
+            child: _ColumnChart(entries: [for (final entry in stats.byReleaseYear) (entry.label, entry.count)]),
           ),
-        ),
-        const SizedBox(height: 16),
-        _FavoritesPanel(
-          favorites: stats.favorites,
-          onOpenGame: (id) => _openGame(context, id),
-        ),
-        const SizedBox(height: 16),
-        _RankPanel(title: 'Top 5 gêneros favoritos', groups: stats.topGenres),
-        const SizedBox(height: 16),
-        _RankPanel(title: 'Top 10 tipos favoritos', groups: stats.topTypes),
+        ],
+        if (hasFavorites) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Top 10 jogos favoritos',
+            child: _FavoriteShelf(favorites: stats.favorites, onOpenGame: (id) => _openGame(context, id)),
+          ),
+        ],
+        if (hasTopGenres) ...[const SizedBox(height: 16), _RankPanel(title: 'Top 5 gêneros favoritos', groups: stats.topGenres)],
+        if (hasTopTypes) ...[const SizedBox(height: 16), _RankPanel(title: 'Top 10 tipos favoritos', groups: stats.topTypes)],
+        if (hasTopGenres || hasTopTypes) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Rankings de gênero e tipo usam a média das notas dos jogos zerados.',
+            style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 11),
+          ),
+        ],
+        if (empty.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _Panel(
+            title: 'Ainda sem dados',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final item in empty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.$1, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(item.$2, style: const TextStyle(color: Color(0xFF737771), fontSize: 12)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
       ],
     );
   }
 
   /// Formata um número no padrão pt-BR (vírgula decimal, sem casas desnecessárias).
-  static String _br(double value) =>
-      value.toStringAsFixed(1).replaceAll('.', ',').replaceAll(',0', '');
+  static String _br(double value) => value.toStringAsFixed(1).replaceAll('.', ',').replaceAll(',0', '');
 
   static void _openGame(BuildContext context, String gameId) {
     final container = ProviderScope.containerOf(context);
@@ -217,57 +358,95 @@ class _StatsContent extends StatelessWidget {
   }
 }
 
-/// Cartão de destaque com rótulo, valor e detalhe opcional.
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String? detail;
-  final bool accent;
+class _SectionHeading extends StatelessWidget {
+  final String title;
 
-  const _KpiCard({
+  const _SectionHeading(this.title);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 24, bottom: 10),
+        child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+      );
+}
+
+/// Número com rótulo. Valor ausente vira um traço discreto com a dica do que o
+/// preenche; `info` mostra a explicação ao tocar no ⓘ.
+class _Metric extends StatelessWidget {
+  final String label;
+  final String? value;
+  final String? hint;
+  final String? info;
+  final String? emptyHint;
+  final bool hero;
+  final bool accent;
+  final bool small;
+
+  const _Metric({
     required this.label,
     required this.value,
-    this.detail,
+    this.hint,
+    this.info,
+    this.emptyHint,
+    this.hero = false,
     this.accent = false,
+    this.small = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final valueStyle = TextStyle(
+      color: accent ? const Color(0xFF7FB0FF) : Colors.white,
+      fontSize: hero ? 26 : (small ? 14 : 20),
+      fontWeight: FontWeight.w700,
+      height: 1.2,
+    );
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(hero ? 16 : 14),
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E2A),
         borderRadius: BorderRadius.circular(14),
-        border: accent
-            ? Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.4))
-            : null,
+        border: accent ? Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.4)) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: accent ? const Color(0xFF6C63FF) : Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              Flexible(child: Text(label, style: const TextStyle(color: Color(0xFF8B949E), fontSize: 11.5))),
+              if (info != null)
+                Tooltip(
+                  message: info!,
+                  triggerMode: TooltipTriggerMode.tap,
+                  showDuration: const Duration(seconds: 6),
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF6E7681)),
+                  ),
+                ),
+            ],
           ),
-          if (detail != null)
-            Text(detail!, style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+          const SizedBox(height: 6),
+          if (value == null) ...[
+            const Text('—', style: TextStyle(color: Color(0xFF4A515B), fontSize: 20)),
+            if (emptyHint != null) Text(emptyHint!, style: const TextStyle(color: Color(0xFF737771), fontSize: 11)),
+          ] else ...[
+            Text(value!, style: valueStyle),
+            if (hint != null) Text(hint!, style: const TextStyle(color: Color(0xFF737771), fontSize: 11)),
+          ],
         ],
       ),
     );
   }
 }
 
-class _KpiGrid extends StatelessWidget {
-  final List<Widget> cards;
+/// Grade de duas colunas de largura igual; o cartão sozinho na última linha
+/// ocupa a mesma largura dos outros.
+class _MetricGrid extends StatelessWidget {
+  final List<Widget> metrics;
 
-  const _KpiGrid({required this.cards});
+  const _MetricGrid({required this.metrics});
 
   @override
   Widget build(BuildContext context) {
@@ -278,9 +457,227 @@ class _KpiGrid extends StatelessWidget {
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
-          children: [for (final card in cards) SizedBox(width: width, child: card)],
+          children: [for (final metric in metrics) SizedBox(width: width, child: metric)],
         );
       },
+    );
+  }
+}
+
+/// Barras do tempo informado por plataforma, na cor e com o logo de cada uma.
+class _PlatformTimeBars extends StatelessWidget {
+  final List<ExternalPlaytimeByPlatform> entries;
+  final List<CatalogItem> catalog;
+
+  const _PlatformTimeBars({required this.entries, required this.catalog});
+
+  @override
+  Widget build(BuildContext context) {
+    final max = entries.fold<double>(0, (top, entry) => entry.hours > top ? entry.hours : top);
+    return Column(
+      children: [
+        const Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Medida separada do histórico de sessões: as duas não são somadas.',
+              style: TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+        ),
+        const SizedBox(height: 12),
+        for (final entry in entries)
+          Builder(builder: (context) {
+            final platform = catalog.where((item) => item.id == entry.key || item.name == entry.name).firstOrNull;
+            final color = hexColor(platform?.color) ?? const Color(0xFF6C63FF);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  PlatformLogo(iconKey: platform?.iconKey, color: platform?.color, size: 24),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 84,
+                    child: Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5)),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: max == 0 ? 0 : entry.hours / max,
+                        minHeight: 8,
+                        backgroundColor: const Color(0xFF2A2A3A),
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(formatHours(entry.hours), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+/// Barras ordenadas com participação percentual; as cinco maiores, e o resto
+/// sob "Ver mais". Horas e nota média aparecem ao tocar.
+class _RankBars extends StatefulWidget {
+  final String title;
+  final List<StatsGroup> groups;
+
+  const _RankBars({required this.title, required this.groups});
+
+  @override
+  State<_RankBars> createState() => _RankBarsState();
+}
+
+class _RankBarsState extends State<_RankBars> {
+  static const _visible = 5;
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = widget.groups;
+    final total = groups.fold<int>(0, (sum, group) => sum + group.completedCount);
+    final max = groups.fold<int>(1, (top, group) => group.completedCount > top ? group.completedCount : top);
+    final shown = _expanded ? groups : groups.take(_visible).toList();
+    return _Panel(
+      title: widget.title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final group in shown)
+            Tooltip(
+              triggerMode: TooltipTriggerMode.tap,
+              message: '${formatHours(group.hours)}'
+                  '${group.averageRating == null ? '' : ' · nota média ${group.averageRating!.toStringAsFixed(1).replaceAll('.', ',')}'}',
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 96,
+                      child: Text(group.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5)),
+                    ),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: group.completedCount / max,
+                          minHeight: 8,
+                          backgroundColor: const Color(0xFF2A2A3A),
+                          valueColor: const AlwaysStoppedAnimation(Color(0xFF6C63FF)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '${group.completedCount} · ${total > 0 ? (group.completedCount / total * 100).round() : 0}%',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (groups.length > _visible)
+            TextButton(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              child: Text(_expanded ? 'Ver menos' : 'Ver mais (${groups.length - _visible})'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Colunas por ano de lançamento, com rolagem horizontal quando há muitos anos.
+class _ColumnChart extends StatelessWidget {
+  final List<(String, int)> entries;
+
+  const _ColumnChart({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final max = entries.fold<int>(1, (top, entry) => entry.$2 > top ? entry.$2 : top);
+    return SizedBox(
+      height: 150,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final entry in entries)
+            SizedBox(
+              width: 44,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text('${entry.$2}', style: const TextStyle(fontSize: 11, color: Color(0xFFC9CED6))),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: 24,
+                    height: ((entry.$2 / max) * 90).clamp(5.0, 90.0),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF6C63FF),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(entry.$1, style: const TextStyle(fontSize: 10.5, color: Color(0xFF8B949E))),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Prateleira horizontal de capas dos jogos favoritos, com a nota.
+class _FavoriteShelf extends StatelessWidget {
+  final List<StatsGameRef> favorites;
+  final ValueChanged<String> onOpenGame;
+
+  const _FavoriteShelf({required this.favorites, required this.onOpenGame});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 190,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: favorites.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final game = favorites[index];
+          return InkWell(
+            onTap: () => onOpenGame(game.id),
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 100,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Stack(
+                    children: [
+                      GameCover(coverUrl: game.coverUrl, width: 100, height: 134),
+                      if (game.rating != null)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(999)),
+                            child: Text('${game.rating}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(game.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -372,99 +769,6 @@ class _BarList extends StatelessWidget {
   }
 }
 
-class _GroupTable extends StatelessWidget {
-  final String title;
-  final List<StatsGroup> groups;
-
-  const _GroupTable({required this.title, required this.groups});
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = groups.where((group) => group.completedCount > 0).toList();
-    return _Panel(
-      title: title,
-      child: visible.isEmpty
-          ? const Text('Sem dados ainda.',
-              style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 13))
-          : Column(
-              children: [
-                const _TableHeader(),
-                for (final group in visible)
-                  _TableRow(
-                    name: group.name,
-                    count: '${group.completedCount}',
-                    hours: formatHours(group.hours),
-                    rating: group.averageRating == null
-                        ? '—'
-                        : group.averageRating!.toStringAsFixed(1).replaceAll('.', ','),
-                  ),
-              ],
-            ),
-    );
-  }
-}
-
-class _TableHeader extends StatelessWidget {
-  const _TableHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const style = TextStyle(
-      color: Color(0xFF6B6B7E),
-      fontSize: 10,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.4,
-    );
-    return const Padding(
-      padding: EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(flex: 4, child: Text('NOME', style: style)),
-          Expanded(flex: 2, child: Text('ZERADOS', textAlign: TextAlign.right, style: style)),
-          Expanded(flex: 2, child: Text('TEMPO', textAlign: TextAlign.right, style: style)),
-          Expanded(flex: 2, child: Text('NOTA MÉDIA', textAlign: TextAlign.right, style: style)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TableRow extends StatelessWidget {
-  final String name;
-  final String count;
-  final String hours;
-  final String rating;
-
-  const _TableRow({
-    required this.name,
-    required this.count,
-    required this.hours,
-    required this.rating,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const valueStyle = TextStyle(color: Color(0xFFB8B8C8), fontSize: 12);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 12)),
-          ),
-          Expanded(flex: 2, child: Text(count, textAlign: TextAlign.right, style: valueStyle)),
-          Expanded(flex: 2, child: Text(hours, textAlign: TextAlign.right, style: valueStyle)),
-          Expanded(flex: 2, child: Text(rating, textAlign: TextAlign.right, style: valueStyle)),
-        ],
-      ),
-    );
-  }
-}
-
 class _RankPanel extends StatelessWidget {
   final String title;
   final List<StatsGroup> groups;
@@ -496,52 +800,6 @@ class _RankPanel extends StatelessWidget {
                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                       ],
-                    ),
-                  ),
-              ],
-            ),
-    );
-  }
-}
-
-class _FavoritesPanel extends StatelessWidget {
-  final List<StatsGameRef> favorites;
-  final ValueChanged<String> onOpenGame;
-
-  const _FavoritesPanel({required this.favorites, required this.onOpenGame});
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      title: 'Top 10 jogos favoritos',
-      child: favorites.isEmpty
-          ? const Text('Marque jogos como favoritos na edição do jogo.',
-              style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 13))
-          : Column(
-              children: [
-                for (var i = 0; i < favorites.length; i++)
-                  InkWell(
-                    onTap: () => onOpenGame(favorites[i].id),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 22,
-                            child: Text('${i + 1}',
-                                style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.w700)),
-                          ),
-                          Expanded(
-                            child: Text(favorites[i].title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontSize: 13)),
-                          ),
-                          if (favorites[i].rating != null)
-                            Text('${favorites[i].rating}',
-                                style: const TextStyle(color: Color(0xFF8888A0), fontSize: 13)),
-                        ],
-                      ),
                     ),
                   ),
               ],
@@ -632,7 +890,10 @@ class _YearTimeline extends StatelessWidget {
 }
 
 class _ReplayPanel extends ConsumerStatefulWidget {
-  const _ReplayPanel();
+  /// Último ano com jogos zerados, oferecido quando o ano atual está vazio.
+  final int? suggestedYear;
+
+  const _ReplayPanel({this.suggestedYear});
 
   @override
   ConsumerState<_ReplayPanel> createState() => _ReplayPanelState();
@@ -663,10 +924,19 @@ class _ReplayPanelState extends ConsumerState<_ReplayPanel> {
           const SizedBox(height: 12),
           replayAsync.when(
             data: (replay) {
-              final empty = replay.sessionCount == 0 && replay.completedCount == 0;
+              final empty = replay.sessionCount == 0 && replay.completedCount == 0 && replay.activeDays == 0;
               if (empty) {
-                return Text('Nada registrado em $_year.',
-                    style: const TextStyle(color: Color(0xFF6B6B7E), fontSize: 13));
+                final suggested = widget.suggestedYear;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text('Nada registrado em $_year.',
+                          style: const TextStyle(color: Color(0xFF6B6B7E), fontSize: 13)),
+                    ),
+                    if (suggested != null && suggested != _year)
+                      TextButton(onPressed: () => setState(() => _year = suggested), child: Text('Ver $suggested')),
+                  ],
+                );
               }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -805,6 +1075,9 @@ class _HeatmapBody extends StatelessWidget {
     final minutesByDate = {
       for (final day in activity.days) day.date: day.minutes,
     };
+    final achievementsByDate = {
+      for (final day in activity.achievementDays) day.date: day.count,
+    };
     final jan1 = DateTime.utc(year, 1, 1);
     final totalDays = DateTime.utc(year + 1, 1, 1).difference(jan1).inDays;
     final leading = jan1.weekday % 7; // domingo = 0
@@ -862,16 +1135,22 @@ class _HeatmapBody extends StatelessWidget {
                                   ? jan1.add(Duration(days: index)).toIso8601String().substring(0, 10)
                                   : null;
                               final minutes = date == null ? 0 : (minutesByDate[date] ?? 0);
+                              final achievements = date == null ? 0 : (achievementsByDate[date] ?? 0);
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: gap),
                                 child: Container(
                                   width: cell,
                                   height: cell,
                                   decoration: BoxDecoration(
-                                    color: inRange
-                                        ? levelColors[level(minutes)]
-                                        : Colors.transparent,
+                                    color: !inRange
+                                        ? Colors.transparent
+                                        : (minutes == 0 && achievements > 0
+                                            ? const Color(0xFF3B2F5E)
+                                            : levelColors[level(minutes)]),
                                     borderRadius: BorderRadius.circular(2),
+                                    border: achievements > 0
+                                        ? Border.all(color: const Color(0xFFA78BFA), width: 1.5)
+                                        : null,
                                   ),
                                 ),
                               );
@@ -890,11 +1169,13 @@ class _HeatmapBody extends StatelessWidget {
           ('Horas no ano', formatHours(activity.totalMinutes / 60)),
           ('Sequência atual', '${activity.currentStreak} ${activity.currentStreak == 1 ? 'dia' : 'dias'}'),
           ('Maior sequência', '${activity.longestStreak} ${activity.longestStreak == 1 ? 'dia' : 'dias'}'),
+          if (achievementsByDate.isNotEmpty) ('Dias com conquistas', '${achievementsByDate.length}'),
         ]),
         const SizedBox(height: 8),
-        const Text(
-          'Conta apenas sessões registradas; horas retroativas não têm data e ficam de fora.',
-          style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.4),
+        Text(
+          'Conta apenas sessões registradas; horas retroativas não têm data e ficam de fora.'
+          '${achievementsByDate.isNotEmpty ? ' Os dias com borda roxa têm conquistas desbloqueadas (Achievist), que não contam como horas.' : ''}',
+          style: const TextStyle(color: Color(0xFF6B6B7E), fontSize: 11, height: 1.4),
         ),
       ],
     );

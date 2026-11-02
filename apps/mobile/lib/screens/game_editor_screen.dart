@@ -20,7 +20,10 @@ double? _numberOrNull(String value) {
 class GameEditorScreen extends ConsumerStatefulWidget {
   final Game? game;
 
-  const GameEditorScreen({super.key, this.game});
+  /// Título já preenchido ao cadastrar um jogo novo (ex.: a partir da franquia).
+  final String? initialTitle;
+
+  const GameEditorScreen({super.key, this.game, this.initialTitle});
 
   @override
   ConsumerState<GameEditorScreen> createState() => _GameEditorScreenState();
@@ -69,7 +72,10 @@ class _GameEditorScreenState extends ConsumerState<GameEditorScreen> {
   void initState() {
     super.initState();
     final game = widget.game;
-    if (game == null) return;
+    if (game == null) {
+      _title.text = widget.initialTitle ?? '';
+      return;
+    }
     _title.text = game.title;
     _description.text = game.description ?? '';
     _coverUrl.text = game.coverUrl ?? '';

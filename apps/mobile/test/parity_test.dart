@@ -287,7 +287,7 @@ void main() {
   });
 
   group('TimelineScreen', () {
-    testWidgets('agrupa os eventos por dia', (tester) async {
+    testWidgets('mostra os eventos como cartões do feed, com data relativa', (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [
           timelineProvider.overrideWith(() => FakeTimelineNotifier(TimelineState(

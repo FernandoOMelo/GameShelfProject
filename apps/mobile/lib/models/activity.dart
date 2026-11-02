@@ -10,6 +10,9 @@ class ActivityResponse {
   final int currentStreak;
   final int longestStreak;
 
+  /// Dias do ano com conquistas desbloqueadas (Achievist), à parte das sessões.
+  final List<AchievementActivityDay> achievementDays;
+
   const ActivityResponse({
     required this.year,
     required this.days,
@@ -18,6 +21,7 @@ class ActivityResponse {
     required this.maxDayMinutes,
     required this.currentStreak,
     required this.longestStreak,
+    this.achievementDays = const [],
   });
 
   factory ActivityResponse.fromJson(Map<String, dynamic> json) => ActivityResponse(
@@ -30,7 +34,20 @@ class ActivityResponse {
         maxDayMinutes: json['maxDayMinutes'] as int,
         currentStreak: json['currentStreak'] as int,
         longestStreak: json['longestStreak'] as int,
+        achievementDays: ((json['achievementDays'] as List<dynamic>?) ?? const [])
+            .map((e) => AchievementActivityDay.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
+}
+
+class AchievementActivityDay {
+  final String date;
+  final int count;
+
+  const AchievementActivityDay({required this.date, required this.count});
+
+  factory AchievementActivityDay.fromJson(Map<String, dynamic> json) =>
+      AchievementActivityDay(date: json['date'] as String, count: json['count'] as int);
 }
 
 class ActivityDay {

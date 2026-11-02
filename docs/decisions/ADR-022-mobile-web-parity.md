@@ -86,3 +86,8 @@ banner avisa.
 - [ADR-015](ADR-015-pwa-offline.md) — uso offline e fila de sessões.
 - [ADR-004](ADR-004-single-user.md) — usuário único, sem autorização.
 - [docs/product/mobile.md](../product/mobile.md) — experiência mobile.
+
+## Evolução
+
+A segunda leva de paridade (detalhe em abas, plataformas, conquistas, atividade,
+estatísticas e Achievist) está no [ADR-037](ADR-037-mobile-parity-phase-2.md).

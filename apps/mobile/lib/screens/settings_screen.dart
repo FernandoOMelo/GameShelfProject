@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/settings_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/queue_provider.dart';
+import 'achievist_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -89,6 +90,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       )
                     : const Text('Salvar'),
               ),
+            ),
+            const SizedBox(height: 28),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.link_rounded, color: Color(0xFF6C63FF)),
+              title: const Text('Plataformas externas (Achievist)', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Conexão, sincronização e vínculo dos jogos importados',
+                  style: TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF6B6B7E)),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievistScreen())),
             ),
           ],
         ),

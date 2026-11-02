@@ -1,9 +1,29 @@
+/// Conquista desbloqueada, como o Achievist a informa (`timelineAchievementSchema`).
+/// Troféus secretos podem vir sem nome, descrição ou ícone.
+class TimelineAchievement {
+  final String? name;
+  final String? description;
+  final String? iconUrl;
+  final DateTime unlockedAt;
+
+  const TimelineAchievement({this.name, this.description, this.iconUrl, required this.unlockedAt});
+
+  factory TimelineAchievement.fromJson(Map<String, dynamic> json) => TimelineAchievement(
+        name: json['name'] as String?,
+        description: json['description'] as String?,
+        iconUrl: json['iconUrl'] as String?,
+        unlockedAt: DateTime.parse(json['unlockedAt'] as String),
+      );
+}
+
 /// Evento da linha do tempo (`timelineEventSchema`, união discriminada por `type`).
 class TimelineEvent {
   static const gameAdded = 'GAME_ADDED';
   static const gameStarted = 'GAME_STARTED';
   static const gameCompleted = 'GAME_COMPLETED';
   static const session = 'SESSION';
+  static const externalPlaytimeImported = 'EXTERNAL_PLAYTIME_IMPORTED';
+  static const achievementsUnlocked = 'ACHIEVEMENTS_UNLOCKED';
   static const challengeCompleted = 'CHALLENGE_COMPLETED';
 
   final String type;
@@ -22,6 +42,19 @@ class TimelineEvent {
   final String? keyDecisions;
   final String? tips;
 
+  /// Plataforma da sessão ou das conquistas (para o ícone do cartão).
+  final String? platformId;
+
+  /// Conquistas dentro da sessão, ou as do dia quando não há sessão.
+  final List<TimelineAchievement> achievements;
+
+  /// Total de conquistas do dia em `ACHIEVEMENTS_UNLOCKED` (pode passar de `achievements`).
+  final int? count;
+
+  /// Tempo importado de uma plataforma (`EXTERNAL_PLAYTIME_IMPORTED`).
+  final String? platformName;
+  final int? importedMinutes;
+
   final String? challengeTitle;
   final int? gamesCount;
 
@@ -39,9 +72,17 @@ class TimelineEvent {
     this.notes,
     this.keyDecisions,
     this.tips,
+    this.platformId,
+    this.achievements = const [],
+    this.count,
+    this.platformName,
+    this.importedMinutes,
     this.challengeTitle,
     this.gamesCount,
   });
+
+  /// Quantas conquistas o cartão anuncia: o total do dia ou as da sessão.
+  int get unlockedCount => count ?? achievements.length;
 
   factory TimelineEvent.fromJson(Map<String, dynamic> json) => TimelineEvent(
         type: json['type'] as String,
@@ -57,6 +98,13 @@ class TimelineEvent {
         notes: json['notes'] as String?,
         keyDecisions: json['keyDecisions'] as String?,
         tips: json['tips'] as String?,
+        platformId: json['platformId'] as String?,
+        achievements: ((json['achievements'] as List<dynamic>?) ?? const [])
+            .map((e) => TimelineAchievement.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        count: json['type'] == 'ACHIEVEMENTS_UNLOCKED' ? json['count'] as int? : null,
+        platformName: json['platformName'] as String?,
+        importedMinutes: json['importedMinutes'] as int?,
         challengeTitle: json['title'] as String?,
         gamesCount: json['gamesCount'] as int?,
       );

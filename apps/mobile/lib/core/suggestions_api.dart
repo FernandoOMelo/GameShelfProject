@@ -1,5 +1,6 @@
 import '../models/suggestion.dart';
 import 'api_client.dart';
+import 'timezone.dart';
 
 /// Sugestões de próximo jogo (`GET /backlog/suggestions`).
 class SuggestionsApi {
@@ -7,7 +8,7 @@ class SuggestionsApi {
     final data = await ApiClient.instance.getCached<List<dynamic>>(
       '/backlog/suggestions',
       queryParameters: {
-        'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+        'timezoneOffsetMinutes': apiTimezoneOffsetMinutes(),
       },
     );
     return data.map((e) => Suggestion.fromJson(e as Map<String, dynamic>)).toList();

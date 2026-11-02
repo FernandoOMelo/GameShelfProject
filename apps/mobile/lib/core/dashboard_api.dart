@@ -1,11 +1,12 @@
 import '../models/dashboard.dart';
 import 'api_client.dart';
+import 'timezone.dart';
 
 class DashboardApi {
   static Map<String, dynamic> _query({String? from, String? to}) => {
         'from': ?from,
         'to': ?to,
-        'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+        'timezoneOffsetMinutes': apiTimezoneOffsetMinutes(),
       };
 
   static Future<Dashboard> load({String? from, String? to}) async {

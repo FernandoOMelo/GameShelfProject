@@ -1,5 +1,6 @@
 import '../models/timeline.dart';
 import 'api_client.dart';
+import 'timezone.dart';
 
 class TimelineApi {
   /// Uma página da linha do tempo. [before] é o cursor devolvido como `nextBefore`.
@@ -9,7 +10,7 @@ class TimelineApi {
       queryParameters: {
         'limit': limit,
         if (before != null) 'before': before.toUtc().toIso8601String(),
-        'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+        'timezoneOffsetMinutes': apiTimezoneOffsetMinutes(),
       },
     );
     return TimelineResponse.fromJson(data.data!);

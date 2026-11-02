@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'settings_screen.dart';
 import 'goals_screen.dart';
 import 'lists_screen.dart';
+import 'platforms_screen.dart';
 import 'stats_screen.dart';
 import 'timeline_screen.dart';
 
@@ -24,6 +25,12 @@ class MoreScreen extends StatelessWidget {
             title: 'Listas',
             subtitle: 'Organize a coleção e acompanhe missões',
             onTap: () => _push(context, const ListsScreen()),
+          ),
+          _MoreTile(
+            icon: Icons.devices_other_rounded,
+            title: 'Plataformas',
+            subtitle: 'Catálogo, tempo e conquistas por plataforma',
+            onTap: () => _push(context, const PlatformsScreen()),
           ),
           _MoreTile(
             icon: Icons.insights_rounded,

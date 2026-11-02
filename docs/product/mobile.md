@@ -84,9 +84,13 @@ Cinco abas, com paridade funcional em relação à web
 - **Biblioteca**: busca, filtros (status, prioridade, plataforma, gênero, franquia,
   lista, ano de conclusão, arquivados) e ordenação, sobre `GET /games`; cadastro,
   edição e exclusão de jogos, com busca de metadata (IGDB) e tempos (HowLongToBeat)
-  nas mesmas rotas da web. O detalhe do jogo traz estimativas, total jogado, histórico
-  de sessões (registrar, editar, excluir), horas retroativas, favorito e entrada/
-  saída da fila. O ícone de relógio no card abre o **registro retroativo** — dia
+  nas mesmas rotas da web. O detalhe do jogo é dividido em quatro abas
+  ([ADR-037](../decisions/ADR-037-mobile-parity-phase-2.md)): **Resumo** (estimativas,
+  total jogado, ficha e o bloco de plataformas e jornadas, com as datas de início e de
+  zerado sugeridas pelas conquistas do Achievist), **Conquistas** (busca, filtro e
+  secretas ocultas por padrão), **Sessões** (totais, horas retroativas em horas e
+  minutos, diário e histórico, com registrar, editar e excluir) e **DLC & Franquia**.
+  Favorito e entrada/saída da fila ficam no menu. O ícone de relógio no card abre o **registro retroativo** — dia
   (Hoje, Ontem ou outra data) e duração em um toque, com a sessão terminando no
   horário atual;
 - **Fila**: ordenável por arrastar (pela alça) e por ações de mover para cima/baixo;
@@ -97,8 +101,13 @@ Cinco abas, com paridade funcional em relação à web
   principal (definir/editar objetivo e lista acompanhada), metas (criar, ajustar alvo,
   excluir) e meta semanal (minutos disponíveis por semana, usados na previsão do
   backlog);
-- **Mais**: Listas (ver, criar, renomear, excluir e editar os jogos), Estatísticas,
-  Atividade (linha do tempo paginada), Metas e Configurações.
+- **Mais**: Listas (ver, criar, renomear, excluir e editar os jogos), **Plataformas**
+  (cartões com logo e cor oficiais, números por plataforma, estado da sincronização e
+  cadastro pelo catálogo ou personalizado), Estatísticas (destaques, seções, barras,
+  prateleira de favoritos e filtro de ano), Atividade (feed paginado no estilo do
+  Trophies Hunter, com as conquistas dentro das sessões e o gráfico acumulado), Metas
+  e Configurações, que também abre a tela do **Achievist** (conexão, sincronização e
+  vínculo dos jogos importados, com busca, filtros e ação em lote).
 
 ### Sem conexão no app Flutter
 
@@ -109,6 +118,15 @@ Mesma doutrina do ADR-015, implementada em sqflite:
 - o cache só entra em erro de conexão — erro HTTP do servidor continua aparecendo;
 - iniciar e encerrar sessão offline entram numa fila local e são enviados em ordem ao
   reconectar; 409 é tratado como "já registrada" e a operação sai da fila.
+- as telas novas (plataformas, conquistas, jornadas, DLC, Achievist) leem pelo cache
+  quando a API respondeu antes e exigem conexão para qualquer escrita.
+
+Horas aparecem sempre como `42min`, `5h 17min` ou, a partir de 100 h, só as horas
+(`1.569h`), no mesmo padrão da web. O deslocamento de fuso enviado à API segue o sinal
+do `getTimezoneOffset()` do JavaScript (`apiTimezoneOffsetMinutes`).
+
+O ícone do app (controle sobre uma prateleira, em roxo) tem versão legada, redonda,
+adaptativa e monocromática (tema do Android 13) em `android/app/src/main/res/mipmap-*`.
 
 Para compilar sem acesso ao CDN do Google, ver
 `apps/mobile/android/download_flutter_artifacts.ps1`.

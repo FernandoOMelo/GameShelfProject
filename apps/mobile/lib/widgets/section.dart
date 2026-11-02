@@ -103,21 +103,37 @@ class MessageState extends StatelessWidget {
   }
 }
 
-/// Formata horas no padrão compacto da web ("12,5 h").
+/// Formata horas no padrão da web: minutos abaixo de 1 h ("42min"), "Xh Ymin"
+/// até 100 h e só as horas (com separador de milhar) acima disso ("1.569h").
 String formatHours(double? value) {
   if (value == null) return '—';
-  final rounded = (value * 10).round() / 10;
-  final text = rounded == rounded.roundToDouble()
-      ? rounded.toStringAsFixed(0)
-      : rounded.toStringAsFixed(1).replaceAll('.', ',');
-  return '$text h';
+  return _compactDuration((value * 60).round());
 }
 
-/// Formata minutos como "1 h 30" ou "45 min".
+/// Formata minutos no mesmo padrão de [formatHours]: "45min", "1h 30min".
 String formatMinutes(int? minutes) {
   if (minutes == null) return 'Em andamento';
-  final hours = minutes ~/ 60;
-  final rest = minutes % 60;
-  if (hours == 0) return '$rest min';
-  return rest == 0 ? '$hours h' : '$hours h $rest min';
+  return _compactDuration(minutes);
+}
+
+String _compactDuration(int totalMinutes) {
+  final hours = totalMinutes ~/ 60;
+  final minutes = totalMinutes % 60;
+  if (hours == 0) return '${minutes}min';
+  if (hours >= 100 || minutes == 0) return '${_thousands(hours)}h';
+  return '${hours}h ${minutes}min';
+}
+
+String _thousands(int value) => value.toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
+
+/// "há 19 minutos", "há 2 horas", "há 3 dias" — para estados de sincronização.
+String formatRelative(DateTime moment, {DateTime? now}) {
+  final diff = (now ?? DateTime.now()).difference(moment);
+  if (diff.inMinutes < 1) return 'agora há pouco';
+  if (diff.inMinutes < 60) return 'há ${diff.inMinutes} ${diff.inMinutes == 1 ? 'minuto' : 'minutos'}';
+  if (diff.inHours < 24) return 'há ${diff.inHours} ${diff.inHours == 1 ? 'hora' : 'horas'}';
+  return 'há ${diff.inDays} ${diff.inDays == 1 ? 'dia' : 'dias'}';
 }
