@@ -6,6 +6,8 @@ const rarityLabels: Record<MergedAchievement['rarityTier'], string> = {
   COMMON: 'Comum', UNCOMMON: 'Incomum', RARE: 'Raro', ULTRA_RARE: 'Ultra raro',
 };
 
+const specialLabels: Record<NonNullable<MergedAchievement['specialKind']>, string> = { PLATINUM: 'Platina', COMPLETION: 'Jogo concluído', SPECIAL: 'Especial' };
+
 const formatDate = (value: string) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(value));
 
 type Props = {
@@ -28,18 +30,32 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'UNLOCKED' | 'LOCKED'>('ALL');
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState('');
 
   useEffect(() => {
     let active = true;
     setData('loading');
     setShowSecrets(false);
-    setGroupId(null);
     fetch(`${apiUrl}/games/${gameId}/achievements`)
       .then((response) => { if (!response.ok) throw new Error('falhou'); return response.json() as Promise<GameAchievementsResponse>; })
       .then((body) => { if (!active) return; setData(body); onDataChange?.(body); })
       .catch(() => { if (!active) return; setData('failed'); onDataChange?.(null); });
     return () => { active = false; };
-  }, [gameId]);
+  }, [gameId, version]);
+
+  async function refreshGroup(platformLinkId: string) {
+    setRefreshing(true);
+    setRefreshMessage('');
+    try {
+      const response = await fetch(`${apiUrl}/games/${gameId}/platforms/${platformLinkId}/achievements?refresh=true`);
+      const body = response.ok ? await response.json() as { refreshError?: string | null } : null;
+      if (!body || body.refreshError) setRefreshMessage(body?.refreshError ?? 'Não foi possível atualizar as conquistas.');
+      setVersion((current) => current + 1);
+    } catch { setRefreshMessage('Não foi possível atualizar as conquistas.'); }
+    finally { setRefreshing(false); }
+  }
 
   if (data === 'loading') return <p className="session-empty">Carregando conquistas…</p>;
   if (data === 'failed') return <p role="alert" className="session-feedback">Não foi possível carregar as conquistas.</p>;
@@ -59,6 +75,10 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
     {groups.length > 1 && <div className="details-tabs ach-platform-tabs" role="tablist" aria-label="Plataformas com conquistas">
       {groups.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === group?.id} className={item.id === group?.id ? 'is-active' : ''} onClick={() => setGroupId(item.id)}>{item.name}<span className="details-tab-count">{item.unlockedCount}/{item.total}</span></button>)}
     </div>}
+    {group?.refreshable && <div className="ach-refresh">
+      <button type="button" className="session-edit" disabled={refreshing} onClick={() => void refreshGroup(group.id)}>{refreshing ? 'Atualizando…' : `Atualizar conquistas de ${group.name}`}</button>
+      {refreshMessage && <span role="alert" className="session-feedback">{refreshMessage}</span>}
+    </div>}
     <div className="ach-summary">
       <span className="achievement-summary-badge">{group?.unlockedCount ?? 0}/{group?.total ?? 0} · {group?.percent ?? 0}%</span>
       <div className="achievement-progress-wrap"><div className="achievement-progress-bar" style={{ width: `${group?.percent ?? 0}%` }} /></div>
@@ -74,7 +94,7 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
       </select>
     </div>
     {visible.length === 0
-      ? <p className="session-empty">{groupAchievements.length === 0 ? 'A RAWG não informa conquistas para este jogo.' : 'Nenhuma conquista para mostrar com esses filtros.'}</p>
+      ? <p className="session-empty">{groupAchievements.length === 0 ? (group?.refreshable ? 'Esta plataforma ainda não tem conquistas sincronizadas. Use “Atualizar conquistas” para buscar na fonte.' : 'A RAWG não informa conquistas para este jogo.') : 'Nenhuma conquista para mostrar com esses filtros.'}</p>
       : <ul className="achievement-list achievement-list-rich">{visible.map((item) => <li key={item.id} className={`${item.unlocked ? 'achievement-unlocked' : 'achievement-locked'}${item.secret ? ' achievement-secret' : ''}`}>
         {item.secret
           ? <span className="achievement-icon achievement-icon-secret" aria-hidden="true"><i className="ach-eye-off" /></span>
@@ -83,6 +103,7 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
           <strong>{item.name ?? 'Conquista secreta'}</strong>
           <p>{item.description ?? 'Os detalhes desta conquista serão revelados quando desbloqueada'}</p>
           <div className="achievement-tags">
+            {item.specialKind && <span className="achievement-rarity">{specialLabels[item.specialKind]}</span>}
             <span className={`achievement-rarity rarity-${item.rarityTier.toLowerCase().replace('_', '-')}`}>{rarityLabels[item.rarityTier]}</span>
             {item.rarityPercent !== null && <span className="achievement-percent">{item.rarityPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}
           </div>

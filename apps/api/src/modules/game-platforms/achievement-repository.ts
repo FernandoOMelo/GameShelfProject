@@ -27,6 +27,8 @@ export interface ExternalAchievementRepository {
   /** Todos os desbloqueios com data, de todos os jogos, para linha do tempo e gráficos. */
   listUnlocks(): Promise<AchievementUnlock[]>;
   listForGamePlatform(gamePlatformId: string): Promise<ExternalAchievementRecord[]>;
+  /** Totais e desbloqueadas por associação, sem carregar as conquistas (cartões da biblioteca). */
+  countsByGamePlatform(): Promise<Map<string, { total: number; unlocked: number }>>;
   /**
    * Substitui o espelho local das conquistas daquela associação.
    *

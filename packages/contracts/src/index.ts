@@ -71,6 +71,17 @@ export const dlcSchema = dlcInputSchema.extend({
 export type DlcInput = z.infer<typeof dlcInputSchema>;
 export type DlcUpdate = z.infer<typeof dlcUpdateSchema>;
 export type Dlc = z.infer<typeof dlcSchema>;
+// Uso de cada jogo para a biblioteca (ADR-039): tempo consolidado (ADR-027) e
+// conquistas somadas das plataformas com fonte externa. Fica fora de `gameSchema`
+// porque é derivado, e o backup guarda só o que é dado.
+export const gameUsageSchema = z.object({
+  gameId: z.string().uuid(),
+  playedHours: z.number().nonnegative(),
+  achievementsUnlocked: z.number().int().nonnegative(),
+  achievementsTotal: z.number().int().nonnegative(),
+}).strict();
+export type GameUsage = z.infer<typeof gameUsageSchema>;
+
 // Mesclar jogos duplicados (ADR-038): o jogo da rota permanece e absorve o
 // jogo de origem, que deixa de existir. Sessões, plataformas, jornadas, DLCs,
 // fila e listas passam para o jogo que permanece.
@@ -423,6 +434,10 @@ export type RawgAchievementsResponse = z.infer<typeof rawgAchievementsResponseSc
 // nome com os desbloqueios pessoais do Achievist. Sem correspondência e ainda
 // bloqueada, tratamos como secreta (nome e descrição ficam ocultos).
 export const achievementRarityTierSchema = z.enum(['COMMON', 'UNCOMMON', 'RARE', 'ULTRA_RARE']);
+// Conquistas especiais, em três tipos que não se confundem: platina (todas as
+// conquistas), jogo concluído (terminar a história/campanha) e outras (dificuldade
+// máxima, finais...).
+export const achievementSpecialKindSchema = z.enum(['PLATINUM', 'COMPLETION', 'SPECIAL']);
 export const mergedAchievementSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
@@ -433,7 +448,9 @@ export const mergedAchievementSchema = z.object({
   unlocked: z.boolean(),
   unlockedAt: z.string().datetime().nullable(),
   secret: z.boolean(),
+  /** Verdadeiro só para `specialKind === 'COMPLETION'` (mantido por compatibilidade). */
   isCompletionTrophy: z.boolean(),
+  specialKind: achievementSpecialKindSchema.nullable(),
 }).strict();
 // Um jogo multiplataforma tem um conjunto de conquistas por plataforma: os
 // troféus do PlayStation não são as conquistas do Steam. `groups` separa cada
@@ -448,6 +465,9 @@ export const achievementGroupSchema = z.object({
   unlockedCount: z.number().int().nonnegative(),
   percent: z.number().min(0).max(100),
   completionTrophyId: z.string().nullable(),
+  platinumTrophyId: z.string().nullable(),
+  /** Há uma fonte externa ligada a esta plataforma que pode ser atualizada sob demanda. */
+  refreshable: z.boolean(),
   achievements: z.array(mergedAchievementSchema),
 }).strict();
 export const gameAchievementsResponseSchema = z.object({
@@ -459,11 +479,13 @@ export const gameAchievementsResponseSchema = z.object({
   achievements: z.array(mergedAchievementSchema),
   groups: z.array(achievementGroupSchema),
   completionTrophyId: z.string().nullable(),
+  platinumTrophyId: z.string().nullable(),
   rarityBreakdown: z.object({ common: z.number().int().nonnegative(), uncommon: z.number().int().nonnegative(), rare: z.number().int().nonnegative(), ultraRare: z.number().int().nonnegative() }),
 }).strict();
 export type AchievementRarityTier = z.infer<typeof achievementRarityTierSchema>;
 export type MergedAchievement = z.infer<typeof mergedAchievementSchema>;
 export type AchievementGroup = z.infer<typeof achievementGroupSchema>;
+export type AchievementSpecialKind = z.infer<typeof achievementSpecialKindSchema>;
 export type GameAchievementsResponse = z.infer<typeof gameAchievementsResponseSchema>;
 
 // ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────
@@ -647,7 +669,7 @@ export type GameListInput = z.infer<typeof gameListInputSchema>;
 export type GameListSummary = z.infer<typeof gameListSummarySchema>;
 export type GameList = z.infer<typeof gameListSchema>;
 
-export const librarySortSchema = z.enum(['TITLE', 'STARTED_DESC', 'COMPLETED_DESC']);
+export const librarySortSchema = z.enum(['TITLE', 'STARTED_DESC', 'COMPLETED_DESC', 'HOURS_DESC']);
 export type LibrarySort = z.infer<typeof librarySortSchema>;
 
 const filterChoice = z.string().trim().max(200).default('ALL');

@@ -148,6 +148,9 @@ class MergedAchievement {
   final bool secret;
   final bool isCompletionTrophy;
 
+  /// PLATINUM, COMPLETION (jogo concluído) ou SPECIAL; nulo nas comuns.
+  final String? specialKind;
+
   const MergedAchievement({
     required this.id,
     this.name,
@@ -159,6 +162,7 @@ class MergedAchievement {
     this.unlockedAt,
     this.secret = false,
     this.isCompletionTrophy = false,
+    this.specialKind,
   });
 
   factory MergedAchievement.fromJson(Map<String, dynamic> json) => MergedAchievement(
@@ -172,8 +176,15 @@ class MergedAchievement {
         unlockedAt: _instant(json['unlockedAt']),
         secret: json['secret'] as bool? ?? false,
         isCompletionTrophy: json['isCompletionTrophy'] as bool? ?? false,
+        specialKind: json['specialKind'] as String?,
       );
 }
+
+const specialKindLabels = {
+  'PLATINUM': 'Platina',
+  'COMPLETION': 'Jogo concluído',
+  'SPECIAL': 'Especial',
+};
 
 const rarityTierLabels = {
   'COMMON': 'Comum',
@@ -193,7 +204,11 @@ class AchievementGroup {
   final double percent;
   final List<MergedAchievement> achievements;
 
+  /// A associação tem fonte externa e pode ser atualizada sob demanda.
+  final bool refreshable;
+
   const AchievementGroup({
+    this.refreshable = false,
     required this.id,
     required this.name,
     required this.total,
@@ -208,6 +223,7 @@ class AchievementGroup {
         total: json['total'] as int? ?? 0,
         unlockedCount: json['unlockedCount'] as int? ?? 0,
         percent: (json['percent'] as num?)?.toDouble() ?? 0,
+        refreshable: json['refreshable'] as bool? ?? false,
         achievements: ((json['achievements'] as List<dynamic>?) ?? const [])
             .map((e) => MergedAchievement.fromJson(e as Map<String, dynamic>))
             .toList(),

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameUsage, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { GameAchievementsPanel } from './game-achievements-panel';
 import { DlcPanel } from './dlc-panel';
 import { GameMergeDialog } from './game-merge-dialog';
@@ -30,7 +30,7 @@ const PlatformsView = lazy(async () => ({ default: (await import('./platforms-vi
 const profileViews: AppView[] = ['library', 'queue', 'lists', 'platforms', 'stats', 'timeline'];
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
-const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente' };
+const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente', HOURS_DESC: 'Mais horas jogadas' };
 function platformBadge(platform: Platform): { label: string; className: string } {
   const iconKey = platform.iconKey ?? null;
   const name = platform.name;
@@ -61,8 +61,9 @@ function compareDateDesc(left: string | null, right: string | null) {
   if (!right) return -1;
   return right.localeCompare(left);
 }
-function sortGames(games: Game[], sortBy: LibrarySort): Game[] {
+function sortGames(games: Game[], sortBy: LibrarySort, usage: Map<string, GameUsage>): Game[] {
   if (sortBy === 'TITLE') return games;
+  if (sortBy === 'HOURS_DESC') return [...games].sort((a, b) => (usage.get(b.id)?.playedHours ?? 0) - (usage.get(a.id)?.playedHours ?? 0) || a.title.localeCompare(b.title));
   const field = sortBy === 'STARTED_DESC' ? 'startedAt' : 'completedAt';
   return [...games].sort((a, b) => compareDateDesc(a[field], b[field]) || a.title.localeCompare(b.title));
 }
@@ -138,6 +139,8 @@ export function App() {
   const [listFilter, setListFilter] = useState('ALL');
   const [completedYearFilter, setCompletedYearFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState<LibrarySort>('TITLE');
+  /** Tempo consolidado e conquistas por jogo, para os cartões e a ordenação por horas. */
+  const [usage, setUsage] = useState<Map<string, GameUsage>>(new Map());
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [activeSavedFilter, setActiveSavedFilter] = useState('ALL');
   const [newFilterName, setNewFilterName] = useState('');
@@ -242,11 +245,20 @@ export function App() {
       const response = await fetch(`${apiUrl}/games`);
       if (!response.ok) throw new Error('A API não conseguiu carregar sua biblioteca.');
       setGames(await response.json() as Game[]);
+      void loadUsage();
     } catch {
       setError('Não foi possível conectar à API. Confirme que a aplicação e o banco estão ativos.');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadUsage() {
+    try {
+      const response = await fetch(`${apiUrl}/games/usage`);
+      const body = response.ok ? await response.json() as unknown : null;
+      if (Array.isArray(body)) setUsage(new Map((body as GameUsage[]).map((item) => [item.gameId, item])));
+    } catch { /* os cartões só ficam sem horas e conquistas */ }
   }
 
   async function loadLists() {
@@ -387,7 +399,7 @@ export function App() {
     && (developerFilter === 'ALL' || game.developer === developerFilter)
     && (listGameIds === null || listGameIds.has(game.id))
     && (completedYearFilter === 'ALL' || (game.completedAt ?? '').startsWith(completedYearFilter))), [games, query, statusFilter, priorityFilter, platformFilter, genreFilter, franchiseFilter, developerFilter, showArchived, listGameIds, completedYearFilter]);
-  const visibleGames = useMemo(() => sortGames(filteredGames, sortBy), [filteredGames, sortBy]);
+  const visibleGames = useMemo(() => sortGames(filteredGames, sortBy, usage), [filteredGames, sortBy, usage]);
   const journal = useMemo(() => latestJournal(sessions), [sessions]);
   const completedYears = useMemo(() => [...new Set(games.map((game) => game.completedAt?.slice(0, 4)).filter((year): year is string => Boolean(year)))].sort((a, b) => b.localeCompare(a)), [games]);
 
@@ -1186,7 +1198,7 @@ export function App() {
               <p className="eyebrow">BIBLIOTECA · DETALHES DO JOGO</p>
               <h1 id="details-title">{selectedGame.title}</h1>
               <p className="details-byline">{[selectedGame.releaseYear, selectedGame.developer, selectedGame.publisher, franchises.find((franchise) => franchise.id === selectedGame.franchiseId)?.name].filter(Boolean).join(' · ') || 'Metadata ainda não informada'}</p>
-              <div className="details-badges">{(() => { const p = platforms.find((platform) => platform.id === selectedGame.platformId); if (!p) return null; const badge = platformBadge(p); return <span className={`game-platform-badge platform-badge-lg ${badge.className}`} style={platformStyle(p)}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })()}<span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
+              <div className="details-badges">{[...new Set([selectedGame.platformId, ...(selectedGame.platformIds ?? [])].filter((id): id is string => Boolean(id)))].map((id) => { const p = platforms.find((platform) => platform.id === id); if (!p) return null; const badge = platformBadge(p); return <span key={id} className={`game-platform-badge platform-badge-lg ${badge.className}`} style={platformStyle(p)}><PlatformIcon iconKey={p.iconKey} />{badge.label}</span>; })}<span className={`status-pill status-${selectedGame.status.toLowerCase()}`}>{statusLabels[selectedGame.status]}</span><span className="priority-badge">Prioridade {selectedGame.priority === 'HIGH' ? 'alta' : selectedGame.priority === 'LOW' ? 'baixa' : 'normal'}</span>{selectedGame.favorite && <span className="priority-badge">★ Favorito</span>}{selectedGame.gameOfYear && selectedGame.completedAt && <span className="priority-badge">Jogo do ano {selectedGame.completedAt.slice(0, 4)}</span>}{selectedGame.difficulty && <span className="priority-badge">Dificuldade {difficultyLabels[selectedGame.difficulty]}</span>}{selectedGame.rating != null && <span className="priority-badge">Nota {selectedGame.rating === 11 ? '11 · Jogo da Vida' : `${selectedGame.rating}/10`}</span>}</div>
             </div>
             <dl className="game-detail-metrics" aria-label="Resumo do jogo">
               {achievementsSummary && achievementsSummary.total > 0 && <div><dt>Conquistas</dt><dd>{achievementsSummary.unlockedCount} / {achievementsSummary.total}</dd></div>}
@@ -1301,16 +1313,19 @@ export function App() {
               </li>)}</ol>}
             </section>}
             {activeDetailTab === 'dlc-franquia' && <div className="dlc-franchise-grid">
-              <section className="details-section"><h2>DLC deste jogo</h2><DlcPanel gameId={selectedGame.id} games={games} onOpenGame={(id) => { const target = games.find((item) => item.id === id); if (target) openGame(target); }} /></section>
+              <section className="details-section"><h2>DLC deste jogo</h2><DlcPanel gameId={selectedGame.id} games={games} usage={usage} onOpenGame={(id) => { const target = games.find((item) => item.id === id); if (target) openGame(target); }} /></section>
               <section className="details-section"><h2>Franquia{franchises.find((franchise) => franchise.id === selectedGame.franchiseId) ? ` · ${franchises.find((franchise) => franchise.id === selectedGame.franchiseId)!.name}` : ''}</h2><FranchisePanel franchiseId={selectedGame.franchiseId} onAddGame={(title) => { openEditor(); setFormTitle(title); }} /></section>
             </div>}
           </div>
           {achievementsSummary && achievementsSummary.total > 0 && <aside className="gd-rail" aria-label="Resumo das conquistas">
-            {achievementsSummary?.completionTrophyId && (() => {
-              const trophy = achievementsSummary.achievements.find((item) => item.id === achievementsSummary.completionTrophyId);
+            {([
+              [achievementsSummary?.completionTrophyId, 'Terminado', 'Conquista de conclusão', 'Jogo concluído, detectado pela descrição da conquista'],
+              [achievementsSummary?.platinumTrophyId, 'Platinado', 'Platina', 'Todas as conquistas, detectado pelo nome ou descrição'],
+            ] as const).map(([trophyId, doneLabel, pendingLabel, hint]) => {
+              const trophy = trophyId ? achievementsSummary?.achievements.find((item) => item.id === trophyId) : undefined;
               if (!trophy) return null;
-              return <div className="rail-card completion-trophy-card"><span className="completion-badge">{trophy.unlocked ? 'Terminado' : 'Conquista de conclusão'}</span><div className="completion-trophy-row">{trophy.iconUrl ? <img src={trophy.iconUrl} alt="" /> : <span className="achievement-icon" aria-hidden="true">★</span>}<div><strong>{trophy.name ?? 'Conquista secreta'}</strong><span>Detectada pela descrição da conquista</span></div></div></div>;
-            })()}
+              return <div key={trophyId} className="rail-card completion-trophy-card"><span className="completion-badge">{trophy.unlocked ? doneLabel : pendingLabel}</span><div className="completion-trophy-row">{trophy.iconUrl ? <img src={trophy.iconUrl} alt="" /> : <span className="achievement-icon" aria-hidden="true">★</span>}<div><strong>{trophy.name ?? 'Conquista secreta'}</strong><span>{hint}</span></div></div></div>;
+            })}
             {achievementsSummary && achievementsSummary.total > 0 && <div className="rail-card">
               <p className="eyebrow">CONQUISTAS POR RARIDADE</p>
               <dl className="rarity-breakdown-list">
@@ -1356,6 +1371,7 @@ export function App() {
           <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span>{game.gameOfYear && <span className="cover-badge cover-goty" aria-label="Jogo do ano" title="Jogo do ano">★</span>}{game.favorite && !game.gameOfYear && <span className="cover-badge cover-fav" aria-label="Favorito" title="Favorito">♥</span>}</span>
           <span className="game-card-body">
             <span className="game-card-title">{game.title}</span><span className="game-card-meta">{[game.releaseYear, game.developer].filter(Boolean).join(' · ') || 'Detalhes não informados'}</span>
+            {(() => { const item = usage.get(game.id); if (!item || (item.playedHours === 0 && item.achievementsTotal === 0)) return null; return <span className="game-card-usage" aria-label="Tempo de jogo e conquistas">{item.playedHours > 0 && <span title="Tempo de jogo">⏱ {formatCompactHours(item.playedHours)}</span>}{item.achievementsTotal > 0 && <span title="Conquistas">🏆 {item.achievementsUnlocked}/{item.achievementsTotal}</span>}</span>; })()}
             {game.platformIds.length > 0 && <span className="game-platform-badges" aria-label="Plataformas">{game.platformIds.map((platformId) => platforms.find((platform) => platform.id === platformId)).filter((platform): platform is Platform => Boolean(platform)).map((platform) => { const badge = platformBadge(platform); return <span className={`game-platform-badge ${badge.className}`} key={platform.id} title={platform.name} style={platformStyle(platform)}><PlatformIcon iconKey={platform.iconKey} />{badge.label}</span>; })}</span>}
             {(() => { const progress = cardProgress(game); if (progress === null) return null; return <span className="game-card-progress"><span className="game-card-progress-track" aria-hidden="true"><span className="game-card-progress-fill" style={{ width: `${progress}%` }} /></span><span className="game-card-progress-value">{progress}%</span></span>; })()}
           </span>

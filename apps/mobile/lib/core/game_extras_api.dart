@@ -21,6 +21,11 @@ class GameExtrasApi {
     await _client.patch<dynamic>('/games/$gameId/platforms/$id', data: body);
   }
 
+  /// Busca as conquistas da associação na fonte externa e atualiza o espelho.
+  static Future<void> refreshAchievements(String gameId, String id) async {
+    await _client.get<dynamic>('/games/$gameId/platforms/$id/achievements', queryParameters: {'refresh': 'true'});
+  }
+
   static Future<void> removePlatform(String gameId, String id) async {
     await _client.delete<dynamic>('/games/$gameId/platforms/$id');
   }

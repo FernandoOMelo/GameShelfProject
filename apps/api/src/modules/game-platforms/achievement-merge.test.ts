@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ExternalAchievement, RawgAchievement } from '@gameshelf/contracts';
-import { buildAchievementsResponse, mergeAchievements, rarityTier } from './achievement-merge.js';
+import { buildAchievementsResponse, classifyAchievement, mergeAchievements, rarityTier } from './achievement-merge.js';
 
 const rawg = (overrides: Partial<RawgAchievement>): RawgAchievement => ({
   id: crypto.randomUUID(), rawgId: 1, name: 'Troféu', description: 'Descrição', imageUrl: 'https://x/icon.png', percent: 50, ...overrides,
@@ -48,13 +48,22 @@ describe('mergeAchievements', () => {
     expect(item).toMatchObject({ name: 'Oculto', secret: false });
   });
 
-  it('detecta a conquista de conclusão por heurística de texto', () => {
+  it('distingue platina, jogo concluído e conquistas especiais', () => {
+    expect(classifyAchievement('Platinum Trophy', 'Obtained all trophies')).toBe('PLATINUM');
+    expect(classifyAchievement('Esperança do planeta', 'Conquiste todos os troféus de Final Fantasy VII Rebirth.')).toBe('PLATINUM');
+    expect(classifyAchievement('Hardboiled Writer', 'You completed the game on Normal difficulty.')).toBe('COMPLETION');
+    expect(classifyAchievement('Fim de jogo', 'Conclua a história principal.')).toBe('COMPLETION');
+    expect(classifyAchievement('Pesadelo', 'Finish the game on Nightmare difficulty.')).toBe('COMPLETION');
+    expect(classifyAchievement('Todos os finais', 'Veja todos os finais.')).toBe('SPECIAL');
+    expect(classifyAchievement('Atolados', 'Conclua o Capítulo 2.')).toBeNull();
+  });
+
+  it('marca só o jogo concluído como isCompletionTrophy', () => {
     const items = mergeAchievements([
-      rawg({ name: 'Esperança do planeta', description: 'Conquiste todos os troféus de Final Fantasy VII Rebirth.' }),
-      rawg({ name: 'Atolados', description: 'Conclua o Capítulo 2.' }),
+      rawg({ name: 'Platinum Trophy', description: 'Obtained all trophies' }),
+      rawg({ name: 'Hardboiled Writer', description: 'You completed the game on Normal difficulty.' }),
     ], []);
-    expect(items.find((item) => item.isCompletionTrophy)?.id).toBe(items[0]!.id);
-    expect(items[1]!.isCompletionTrophy).toBe(false);
+    expect(items.map((item) => [item.specialKind, item.isCompletionTrophy])).toEqual([['PLATINUM', false], ['COMPLETION', true]]);
   });
 });
 
@@ -72,7 +81,8 @@ describe('buildAchievementsResponse', () => {
     expect(response.total).toBe(2);
     expect(response.unlockedCount).toBe(1);
     expect(response.percent).toBe(50);
-    expect(response.completionTrophyId).toBe(response.achievements[1]!.id);
+    expect(response.platinumTrophyId).toBe(response.achievements[1]!.id);
+    expect(response.completionTrophyId).toBeNull();
     expect(response.rarityBreakdown).toEqual({ common: 1, uncommon: 0, rare: 0, ultraRare: 1 });
     expect(response.groups).toHaveLength(1);
     expect(response.groups[0]).toMatchObject({ id: 'gp-1', platformId: psId, name: 'PlayStation 5', total: 2, unlockedCount: 1 });
@@ -84,9 +94,18 @@ describe('buildAchievementsResponse', () => {
       { id: 'gp-pc', platformId: pcId, name: 'PC', items: [external({ name: 'Primeiro passo', unlocked: false, unlockedAt: null })] },
     ]);
     expect(response.groups.map((group) => [group.name, group.total, group.unlockedCount])).toEqual([['PlayStation 5', 2, 1], ['PC', 1, 0]]);
+    expect(response.groups.every((group) => group.refreshable === false)).toBe(true);
     expect(response.total).toBe(3);
     expect(response.unlockedCount).toBe(1);
     expect(response.achievements).toHaveLength(3);
+  });
+
+  it('mantém a aba de uma associação com fonte externa ainda sem conquistas espelhadas', () => {
+    const response = buildAchievementsResponse(null, [], [
+      { id: 'gp-ps5', platformId: psId, name: 'PlayStation 5', items: [external({ name: 'A' })], refreshable: true },
+      { id: 'gp-ps4', platformId: pcId, name: 'PlayStation 4', items: [], refreshable: true },
+    ]);
+    expect(response.groups.map((group) => [group.name, group.total, group.refreshable])).toEqual([['PlayStation 5', 1, true], ['PlayStation 4', 0, true]]);
   });
 
   it('sem fonte pessoal, o catálogo RAWG forma um único grupo', () => {

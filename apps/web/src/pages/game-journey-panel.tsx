@@ -169,6 +169,7 @@ export function GameJourneyPanel({ gameId, gameDates, onApplyDate, platforms, lo
   const nextLabel = (playthroughs?.length ?? 0) === 0 ? 'Iniciar jornada' : 'Iniciar replay';
 
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [changingLink, setChangingLink] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<{ title: string; description: string; action: () => void } | null>(null);
   const [formEnd, setFormEnd] = useState('');
 
@@ -226,6 +227,7 @@ export function GameJourneyPanel({ gameId, gameDates, onApplyDate, platforms, lo
             <div className="jp-menu">
               <button type="button" className="jp-menu-btn" aria-label={`Mais ações de ${name}`} aria-expanded={menuFor === link.id} onClick={() => setMenuFor(menuFor === link.id ? null : link.id)}>⋯</button>
               {menuFor === link.id && <div className="jp-menu-list" role="menu">
+                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenuFor(null); setChangingLink(link.id); }}>Alterar plataforma</button>
                 {!link.isPrimary && <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenuFor(null); void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { isPrimary: true }); }}>Tornar principal</button>}
                 {hasExternal && (link.externalPlaytimeMinutes ?? 0) > link.externalPlaytimeImportedMinutes && <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenuFor(null); void importPlaytime(link); }}>Lançar como horas retroativas</button>}
                 <button type="button" role="menuitem" className="jp-danger" disabled={busy} onClick={() => { setMenuFor(null); setPendingRemoval({ title: 'Desassociar plataforma', description: `Remover ${name} deste jogo?`, action: () => void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'DELETE') }); }}>Desassociar</button>
@@ -239,6 +241,26 @@ export function GameJourneyPanel({ gameId, gameDates, onApplyDate, platforms, lo
           </div>
         </li>;
       })}</ul>}
+
+    {changingLink && (() => {
+      const link = (links ?? []).find((item) => item.id === changingLink);
+      if (!link) return null;
+      return <form className="session-form jp-form" onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        void send(`${apiUrl}/games/${gameId}/platforms/${link.id}`, 'PATCH', { platformId: String(form.get('platformId')), edition: String(form.get('edition') ?? '').trim() || null }).then((ok) => { if (ok) { setChangingLink(null); onGameChanged?.(); } });
+      }}>
+        <label className="form-field">Nova plataforma<select name="platformId" required defaultValue={link.platformId}>
+          {platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}
+        </select></label>
+        <label className="form-field">Edição<input name="edition" maxLength={120} defaultValue={link.edition ?? ''} /></label>
+        <p className="form-wide session-empty">O tempo, as conquistas e a origem Achievist desta associação continuam com ela; só a plataforma muda.</p>
+        <div className="form-wide session-actions">
+          <Button type="submit" disabled={busy}>Salvar plataforma</Button>
+          <button type="button" className="cancel-button" onClick={() => setChangingLink(null)}>Cancelar</button>
+        </div>
+      </form>;
+    })()}
 
     {addingPlatform && <form className="session-form jp-form" onSubmit={(event) => void addPlatform(event)}>
       <label className="form-field">Plataforma<select name="platformId" required defaultValue="">

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/games_api.dart';
 import '../core/sessions_api.dart';
 import '../models/game.dart';
+import '../models/game_usage.dart';
 import '../models/session.dart';
 
 class GamesNotifier extends AsyncNotifier<List<Game>> {
@@ -49,6 +50,16 @@ class GamesNotifier extends AsyncNotifier<List<Game>> {
 }
 
 final gamesProvider = AsyncNotifierProvider<GamesNotifier, List<Game>>(GamesNotifier.new);
+
+/// Horas e conquistas por jogo. Falhar aqui só deixa os cartões sem esses números.
+final gameUsageProvider = FutureProvider<Map<String, GameUsage>>((ref) async {
+  ref.watch(gamesProvider);
+  try {
+    return await GamesApi.usage();
+  } catch (_) {
+    return const {};
+  }
+});
 
 class SessionsNotifier extends FamilyAsyncNotifier<List<Session>, String> {
   @override

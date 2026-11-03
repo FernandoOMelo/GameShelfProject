@@ -451,8 +451,8 @@ class _Hero extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final platforms = ref.watch(platformsProvider).valueOrNull ?? const <CatalogItem>[];
-    final platform = platforms.where((item) => item.id == game.platformId).firstOrNull;
-    final brand = hexColor(platform?.color);
+    final linked = <String>{?game.platformId, ...game.platformIds};
+    final gamePlatforms = platforms.where((item) => linked.contains(item.id)).toList();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -471,22 +471,29 @@ class _Hero extends ConsumerWidget {
                   if (game.gameOfYear) const _Tag('Jogo do ano'),
                 ],
               ),
-              if (platform != null) ...[
+              if (gamePlatforms.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: brand ?? const Color(0xFF5B6573),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PlatformGlyph(iconKey: platform.iconKey, size: 14),
-                      const SizedBox(width: 6),
-                      Text(platform.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final platform in gamePlatforms)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: hexColor(platform.color) ?? const Color(0xFF5B6573),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PlatformGlyph(iconKey: platform.iconKey, size: 14),
+                            const SizedBox(width: 6),
+                            Text(platform.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ],
               const SizedBox(height: 10),

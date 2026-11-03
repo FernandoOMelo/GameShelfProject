@@ -108,6 +108,10 @@ export async function registerGamePlatformRoutes(
     }
     const record = await repository.update(gameId, id, parsed.data);
     if (!record) return reply.code(404).send({ error: 'Plataforma associada não encontrada.' });
+    // Trocar a plataforma da associação principal mantém o resumo do jogo coerente.
+    if (record.isPrimary && parsed.data.platformId && parsed.data.platformId !== current.platformId) {
+      await games.update(gameId, { platformId: record.platformId });
+    }
     return reply.send(gamePlatformSchema.parse(toGamePlatform(record)));
   });
 

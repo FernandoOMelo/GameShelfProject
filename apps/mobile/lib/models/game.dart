@@ -15,6 +15,9 @@ class Game {
   final String? franchiseId;
   final String? platformId;
   final List<String> genreIds;
+
+  /// Todas as plataformas associadas (`platformId` é a principal).
+  final List<String> platformIds;
   final String status;
   final int? rating;
   final String? difficulty;
@@ -49,6 +52,7 @@ class Game {
     this.franchiseId,
     this.platformId,
     this.genreIds = const [],
+    this.platformIds = const [],
     this.rating,
     this.difficulty,
     this.gameType,
@@ -82,6 +86,7 @@ class Game {
         publisher: json['publisher'] as String?,
         franchiseId: json['franchiseId'] as String?,
         platformId: json['platformId'] as String?,
+        platformIds: (json['platformIds'] as List<dynamic>? ?? const []).cast<String>(),
         genreIds: (json['genreIds'] as List<dynamic>? ?? const [])
             .map((e) => e as String)
             .toList(),

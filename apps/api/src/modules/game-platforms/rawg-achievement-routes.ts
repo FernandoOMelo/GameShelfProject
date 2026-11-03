@@ -7,6 +7,13 @@ import type { GamePlatformRepository } from './repository.js';
 import type { ExternalAchievementRepository } from './achievement-repository.js';
 import { buildAchievementsResponse, type ExternalAchievementGroup } from './achievement-merge.js';
 
+/** "Nome: descrição" da conquista de jogo concluído (só as não secretas), dentro do limite do campo. */
+export function completionConditionFrom(response: ReturnType<typeof buildAchievementsResponse>): string | null {
+  const trophy = response.groups.flatMap((group) => group.achievements).find((item) => item.specialKind === 'COMPLETION' && item.name);
+  if (!trophy?.name) return null;
+  return (trophy.description ? `${trophy.name}: ${trophy.description}` : trophy.name).slice(0, 300);
+}
+
 const validId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 type MergeSources = { gamePlatforms: GamePlatformRepository; externalAchievements: ExternalAchievementRepository; platforms?: PlatformRepository };
 
@@ -19,10 +26,16 @@ export function registerRawgAchievementRoutes(app: FastifyInstance, games: GameR
     if (!merge) return [];
     const [links, platforms] = await Promise.all([merge.gamePlatforms.listForGame(gameId), merge.platforms?.list() ?? Promise.resolve([])]);
     const nameOf = (id: string) => platforms.find((platform) => platform.id === id)?.name ?? 'Plataforma';
-    return Promise.all(links.map(async (link) => ({
+    const baseName = (link: (typeof links)[number]) => link.edition ? `${nameOf(link.platformId)} · ${link.edition}` : nameOf(link.platformId);
+    // Duas associações com o mesmo nome (ex.: dois "PlayStation 5") continuam
+    // sendo abas distintas; a conta ou a ordem desfaz a ambiguidade.
+    const nameCounts = new Map<string, number>();
+    for (const link of links) nameCounts.set(baseName(link), (nameCounts.get(baseName(link)) ?? 0) + 1);
+    return Promise.all(links.map(async (link, index) => ({
       id: link.id,
       platformId: link.platformId,
-      name: link.edition ? `${nameOf(link.platformId)} · ${link.edition}` : nameOf(link.platformId),
+      refreshable: link.externalSource !== null && link.externalId !== null,
+      name: (nameCounts.get(baseName(link)) ?? 0) > 1 ? `${baseName(link)} (${link.externalAccountLabel ?? `#${index + 1}`})` : baseName(link),
       items: (await merge.externalAchievements.listForGamePlatform(link.id)).map((item) => ({
         id: item.id, externalId: item.externalId, name: item.name, description: item.description, iconUrl: item.iconUrl,
         points: item.points, rarityPercent: item.rarityPercent === null ? null : Number(item.rarityPercent), unlocked: item.unlocked,
@@ -41,7 +54,12 @@ export function registerRawgAchievementRoutes(app: FastifyInstance, games: GameR
     if (!linkedGame && tryLink && await tryLink({ id: game.id, title: game.title, releaseYear: game.releaseYear ?? null })) {
       ({ linkedGame, achievements } = await store.get(game.id));
     }
-    return reply.send(gameAchievementsResponseSchema.parse(buildAchievementsResponse(linkedGame, achievements, await externalGroups(game.id))));
+    const response = buildAchievementsResponse(linkedGame, achievements, await externalGroups(game.id));
+    // A condição de zeramento é preenchida a partir da conquista de jogo
+    // concluído, mas nunca sobrescreve o que o usuário já escreveu.
+    const condition = !game.completionCondition?.trim() ? completionConditionFrom(response) : null;
+    if (condition) await games.update(game.id, { completionCondition: condition }).catch(() => undefined);
+    return reply.send(gameAchievementsResponseSchema.parse(response));
   });
   app.get<{ Params: { gameId: string } }>('/games/:gameId/rawg-achievements', async (request, reply) => {
     if (!validId(request.params.gameId)) return reply.code(400).send({ error: 'ID inválido.' });

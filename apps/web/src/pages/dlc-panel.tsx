@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { Dlc, Game, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
+import type { Dlc, Game, GameUsage, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
 import { Button, Switch } from '@gameshelf/ui';
 import { apiUrl, formatHoursMinutes } from './shared';
 
@@ -16,10 +16,12 @@ type Props = {
   gameId: string;
   /** Biblioteca, para vincular a DLC a um jogo já cadastrado (ADR-038). */
   games?: Game[];
+  /** Horas e conquistas por jogo, para o progresso da DLC vinculada. */
+  usage?: Map<string, GameUsage>;
   onOpenGame?: (gameId: string) => void;
 };
 
-export function DlcPanel({ gameId, games = [], onOpenGame }: Props) {
+export function DlcPanel({ gameId, games = [], usage = new Map(), onOpenGame }: Props) {
   const [dlcs, setDlcs] = useState<Dlc[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
@@ -125,46 +127,63 @@ export function DlcPanel({ gameId, games = [], onOpenGame }: Props) {
   return <div className="dlc-panel">
     <datalist id="dlc-link-games">{linkableGames.map((game) => <option key={game.id} value={gameOptionLabel(game)} />)}</datalist>
     {dlcs.length === 0 && !adding && <p className="session-empty">Nenhuma DLC cadastrada para este jogo.</p>}
-    <ul className="dlc-list">{dlcs.map((dlc) => <li key={dlc.id} className="dlc-item">
-      <div className="dlc-item-head">
-        <div>
-          <strong>{dlc.name}</strong>
-          <span>{[dlc.releaseDate ? formatDate(dlc.releaseDate) : null, linkedGame(dlc) ? linkedStatusLabel(linkedGame(dlc)!.status) : statusLabels[dlc.status]].filter(Boolean).join(' · ')}</span>
+    <ul className="dlc-list">{dlcs.map((dlc) => {
+      const game = linkedGame(dlc);
+      const cover = game?.coverUrl ?? dlc.coverUrl;
+      const status = game ? linkedStatusLabel(game.status) : statusLabels[dlc.status];
+      const played = game ? (usage.get(game.id)?.playedHours ?? 0) : dlc.playedHours;
+      const estimated = dlc.estimatedHours ?? game?.estimatedMainHours ?? null;
+      const progress = estimated && played > 0 ? Math.min(100, Math.round((played / estimated) * 100)) : null;
+      const achievementCount = game ? usage.get(game.id) : undefined;
+      return <li key={dlc.id} className="dlc-item dlc-card">
+        <div className="dlc-card-cover">{cover ? <img src={cover} alt={`Capa de ${dlc.name}`} loading="lazy" /> : <span aria-hidden="true">▧</span>}</div>
+        <div className="dlc-card-body">
+          <div className="dlc-card-head">
+            <div>
+              <strong>{dlc.name}</strong>
+              <div className="dlc-card-meta">
+                <span className={`status-pill status-${(game?.status ?? (dlc.status === 'COMPLETED' ? 'completed' : dlc.status === 'PLAYING' ? 'playing' : 'backlog')).toLowerCase()}`} style={{ position: 'static' }}>{status}</span>
+                {dlc.releaseDate && <span>{formatDate(dlc.releaseDate)}</span>}
+                {played > 0 && <span>⏱ {formatHoursMinutes(played)}{estimated ? ` de ${formatHoursMinutes(estimated)}` : ''}</span>}
+                {achievementCount && achievementCount.achievementsTotal > 0 && <span>🏆 {achievementCount.achievementsUnlocked}/{achievementCount.achievementsTotal}</span>}
+              </div>
+            </div>
+            {!game && <label className="form-field checkbox-field dlc-owned"><span>Possuo</span><Switch checked={dlc.owned} onChange={(event) => void patch(dlc, { owned: event.target.checked })} /></label>}
+          </div>
+          {progress !== null && <div className="estimate-progress" title={`${progress}% da estimativa`}><div className="estimate-progress-fill" style={{ width: `${progress}%` }} /><span>{progress}%</span></div>}
+          {game
+            ? <p className="session-empty dlc-linked">Vinculada ao jogo cadastrado <strong>{game.title}</strong>: status e horas vêm dele.</p>
+            : dlc.linkedGameId && <p className="session-empty dlc-linked">O jogo vinculado não existe mais.</p>}
+          {!dlc.linkedGameId && <div className="dlc-item-controls">
+            <select aria-label={`Status de ${dlc.name}`} value={dlc.status} disabled={busy} onChange={(event) => void patch(dlc, { status: event.target.value })}>
+              {(Object.keys(statusLabels) as Array<Dlc['status']>).map((option) => <option key={option} value={option}>{statusLabels[option]}</option>)}
+            </select>
+            <label>Estimativa (h)<input type="number" min="0" step="0.25" defaultValue={dlc.estimatedHours ?? ''} onBlur={(event) => { const value = event.target.value; void patch(dlc, { estimatedHours: value === '' ? null : Number(value) }); }} /></label>
+            <label>Jogadas (h)<input type="number" min="0" step="0.25" defaultValue={dlc.playedHours} onBlur={(event) => void patch(dlc, { playedHours: Number(event.target.value) || 0 })} /></label>
+          </div>}
+          {linking === dlc.id && <form className="dlc-link-form" onSubmit={(event) => { event.preventDefault(); void linkGame(dlc, String(new FormData(event.currentTarget).get('linkedGame') ?? '')); }}>
+            <label className="form-field">Jogo cadastrado<input name="linkedGame" list="dlc-link-games" autoFocus placeholder="Digite o título do jogo" /></label>
+            <div className="session-actions"><Button type="submit" disabled={busy}>Vincular</Button><button type="button" className="cancel-button" onClick={() => setLinking(null)}>Cancelar</button></div>
+          </form>}
+          <div className="dlc-card-actions">
+            {game && onOpenGame && <button type="button" className="session-edit" onClick={() => onOpenGame(game.id)}>Abrir jogo</button>}
+            {dlc.linkedGameId
+              ? <button type="button" className="session-edit" disabled={busy} onClick={() => void patch(dlc, { linkedGameId: null })}>Desvincular jogo</button>
+              : games.length > 0 && <button type="button" className="session-edit" onClick={() => { setLinking(dlc.id); setMessage(''); }}>Vincular a jogo cadastrado</button>}
+            {dlc.rawgId
+              ? <button type="button" className="session-edit" onClick={() => void toggleAchievements(dlc)}>{achievements[dlc.id] ? 'Ocultar conquistas' : 'Ver conquistas'}</button>
+              : <button type="button" className="session-edit" onClick={() => void searchRawg(dlc)}>Vincular catálogo RAWG</button>}
+            <button type="button" className="session-delete" disabled={busy} onClick={() => void removeDlc(dlc)}>Excluir</button>
+          </div>
+          {candidates[dlc.id] === 'loading' && <p className="session-empty">Buscando na RAWG…</p>}
+          {candidates[dlc.id] === 'failed' && <p role="alert" className="session-feedback">Não foi possível buscar na RAWG.</p>}
+          {Array.isArray(candidates[dlc.id]) && <ul className="session-list">{(candidates[dlc.id] as RawgAchievementCandidate[]).map((candidate) => <li key={candidate.id}><div><strong>{candidate.name}</strong><span>{candidate.released?.slice(0, 4) ?? 'Ano não informado'}</span></div><button type="button" className="session-edit" onClick={() => void linkRawg(dlc, candidate)}>Usar esta referência</button></li>)}</ul>}
+          {achievements[dlc.id] === 'loading' && <p className="session-empty">Carregando conquistas…</p>}
+          {achievements[dlc.id] === 'failed' && <p role="alert" className="session-feedback">Não foi possível carregar as conquistas.</p>}
+          {Array.isArray(achievements[dlc.id]) && (achievements[dlc.id] as RawgAchievement[]).length > 0 && <ul className="achievement-list">{(achievements[dlc.id] as RawgAchievement[]).map((achievement) => <li key={achievement.id}><span className="achievement-icon" aria-hidden="true">○</span><div className="achievement-body"><strong>{achievement.name}</strong>{achievement.description && <p>{achievement.description}</p>}</div>{achievement.percent !== null && <span className="achievement-rarity">{achievement.percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}</li>)}</ul>}
         </div>
-        {!dlc.linkedGameId && <label className="form-field checkbox-field dlc-owned"><span>Possuo</span><Switch checked={dlc.owned} onChange={(event) => void patch(dlc, { owned: event.target.checked })} /></label>}
-      </div>
-      {dlc.linkedGameId
-        ? <p className="session-empty dlc-linked">Vinculada ao jogo cadastrado <strong>{linkedGame(dlc)?.title ?? 'jogo removido'}</strong>: o progresso e as horas vêm dele.{linkedGame(dlc) && onOpenGame && <> <button type="button" className="session-edit" onClick={() => onOpenGame(dlc.linkedGameId!)}>Abrir jogo</button></>}</p>
-        : <div className="dlc-item-controls">
-          <select aria-label={`Status de ${dlc.name}`} value={dlc.status} disabled={busy} onChange={(event) => void patch(dlc, { status: event.target.value })}>
-            {(Object.keys(statusLabels) as Array<Dlc['status']>).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
-          </select>
-          <label>Estimativa (h)<input type="number" min="0" step="0.25" defaultValue={dlc.estimatedHours ?? ''} onBlur={(event) => { const value = event.target.value; void patch(dlc, { estimatedHours: value === '' ? null : Number(value) }); }} /></label>
-          <label>Jogadas (h)<input type="number" min="0" step="0.25" defaultValue={dlc.playedHours} onBlur={(event) => void patch(dlc, { playedHours: Number(event.target.value) || 0 })} /></label>
-        </div>}
-      {linking === dlc.id && <form className="dlc-link-form" onSubmit={(event) => { event.preventDefault(); void linkGame(dlc, String(new FormData(event.currentTarget).get('linkedGame') ?? '')); }}>
-        <label className="form-field">Jogo cadastrado<input name="linkedGame" list="dlc-link-games" autoFocus placeholder="Digite o título do jogo" /></label>
-        <div className="session-actions"><Button type="submit" disabled={busy}>Vincular</Button><button type="button" className="cancel-button" onClick={() => setLinking(null)}>Cancelar</button></div>
-      </form>}
-      <div className="session-item-actions">
-        {dlc.linkedGameId
-          ? <button type="button" className="session-edit" disabled={busy} onClick={() => void patch(dlc, { linkedGameId: null })}>Desvincular jogo</button>
-          : games.length > 0 && <button type="button" className="session-edit" onClick={() => { setLinking(dlc.id); setMessage(''); }}>Vincular a jogo cadastrado</button>}
-        {dlc.rawgId
-          ? <button type="button" className="session-edit" onClick={() => void toggleAchievements(dlc)}>{achievements[dlc.id] ? 'Ocultar conquistas' : 'Ver conquistas'}</button>
-          : <button type="button" className="session-edit" onClick={() => void searchRawg(dlc)}>Vincular catálogo RAWG</button>}
-        <button type="button" className="session-delete" disabled={busy} onClick={() => void removeDlc(dlc)}>Excluir</button>
-      </div>
-      {candidates[dlc.id] === 'loading' && <p className="session-empty">Buscando na RAWG…</p>}
-      {candidates[dlc.id] === 'failed' && <p role="alert" className="session-feedback">Não foi possível buscar na RAWG.</p>}
-      {Array.isArray(candidates[dlc.id]) && <ul className="session-list">{(candidates[dlc.id] as RawgAchievementCandidate[]).map((candidate) => <li key={candidate.id}><div><strong>{candidate.name}</strong><span>{candidate.released?.slice(0, 4) ?? 'Ano não informado'}</span></div><button type="button" className="session-edit" onClick={() => void linkRawg(dlc, candidate)}>Usar esta referência</button></li>)}</ul>}
-      {achievements[dlc.id] === 'loading' && <p className="session-empty">Carregando conquistas…</p>}
-      {achievements[dlc.id] === 'failed' && <p role="alert" className="session-feedback">Não foi possível carregar as conquistas.</p>}
-      {Array.isArray(achievements[dlc.id]) && (achievements[dlc.id] as RawgAchievement[]).length === 0
-        ? null
-        : Array.isArray(achievements[dlc.id]) && <ul className="achievement-list">{(achievements[dlc.id] as RawgAchievement[]).map((achievement) => <li key={achievement.id}><span className="achievement-icon" aria-hidden="true">○</span><div className="achievement-body"><strong>{achievement.name}</strong>{achievement.description && <p>{achievement.description}</p>}</div>{achievement.percent !== null && <span className="achievement-rarity">{achievement.percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}</li>)}</ul>}
-      {!dlc.linkedGameId && dlc.estimatedHours != null && dlc.playedHours > 0 && <p className="session-empty">{formatHoursMinutes(dlc.playedHours)} jogadas de {formatHoursMinutes(dlc.estimatedHours)} estimadas.</p>}
-    </li>)}</ul>
+      </li>;
+    })}</ul>
 
     {adding ? <form className="session-form" onSubmit={(event) => void createDlc(event)}>
       <label className="form-field">Nome<input name="name" maxLength={200} autoFocus /></label>

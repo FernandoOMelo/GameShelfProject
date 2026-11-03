@@ -149,6 +149,21 @@ class GameJourneyPanel extends ConsumerWidget {
                             ref,
                             () => GameExtrasApi.updatePlatform(gameId, link.id, {'countsTowardTotal': !link.countsTowardTotal}),
                             'Não foi possível salvar.'),
+                        onChange: () async {
+                          final body = await showModalBottomSheet<Map<String, dynamic>>(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: _card,
+                            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                            builder: (_) => _ChangePlatformSheet(link: link, catalog: catalog),
+                          );
+                          if (body != null && context.mounted) {
+                            await _run(context, ref, () async {
+                              await GameExtrasApi.updatePlatform(gameId, link.id, body);
+                              onGameChanged();
+                            }, 'Não foi possível alterar a plataforma.');
+                          }
+                        },
                         onMakePrimary: () => _run(context, ref,
                             () => GameExtrasApi.updatePlatform(gameId, link.id, {'isPrimary': true}), 'Não foi possível salvar.'),
                         onImport: () => _run(context, ref, () async {
@@ -368,11 +383,13 @@ class _PlatformLinkCard extends StatelessWidget {
   final CatalogItem? platform;
   final VoidCallback onToggleOwned;
   final VoidCallback onToggleCounts;
+  final VoidCallback onChange;
   final VoidCallback onMakePrimary;
   final VoidCallback onImport;
   final VoidCallback onRemove;
 
   const _PlatformLinkCard({
+    required this.onChange,
     required this.link,
     required this.platform,
     required this.onToggleOwned,
@@ -433,11 +450,13 @@ class _PlatformLinkCard extends StatelessWidget {
               PopupMenuButton<String>(
                 tooltip: 'Mais ações de $name',
                 onSelected: (value) => switch (value) {
+                  'change' => onChange(),
                   'primary' => onMakePrimary(),
                   'import' => onImport(),
                   _ => onRemove(),
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'change', child: Text('Alterar plataforma')),
                   if (!link.isPrimary) const PopupMenuItem(value: 'primary', child: Text('Tornar principal')),
                   if (link.canImportPlaytime)
                     const PopupMenuItem(value: 'import', child: Text('Lançar como horas retroativas')),
@@ -535,6 +554,76 @@ class _PlaythroughCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Corrige a plataforma de uma associação já criada. O tempo, as conquistas e a
+/// origem externa continuam com ela; só a plataforma (e a edição) mudam.
+class _ChangePlatformSheet extends StatefulWidget {
+  final GamePlatform link;
+  final List<CatalogItem> catalog;
+
+  const _ChangePlatformSheet({required this.link, required this.catalog});
+
+  @override
+  State<_ChangePlatformSheet> createState() => _ChangePlatformSheetState();
+}
+
+class _ChangePlatformSheetState extends State<_ChangePlatformSheet> {
+  late final TextEditingController _edition = TextEditingController(text: widget.link.edition ?? '');
+  late String _platformId = widget.link.platformId;
+
+  @override
+  void dispose() {
+    _edition.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...widget.catalog]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Alterar plataforma', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              const Text('O tempo, as conquistas e a origem Achievist desta associação continuam com ela.',
+                  style: TextStyle(color: _muted, fontSize: 12)),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: sorted.any((item) => item.id == _platformId) ? _platformId : null,
+                decoration: const InputDecoration(labelText: 'Plataforma'),
+                items: [for (final item in sorted) DropdownMenuItem(value: item.id, child: Text(item.name))],
+                onChanged: (value) => setState(() => _platformId = value ?? _platformId),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: _edition, maxLength: 120, decoration: const InputDecoration(labelText: 'Edição', counterText: '')),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar'))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context, {
+                        'platformId': _platformId,
+                        'edition': _edition.text.trim().isEmpty ? null : _edition.text.trim(),
+                      }),
+                      child: const Text('Salvar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

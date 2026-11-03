@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/catalog.dart';
 import '../models/game.dart';
 import '../models/game_list.dart';
+import '../models/game_usage.dart';
 import '../models/saved_filter.dart';
 import '../providers/catalog_provider.dart';
 import '../providers/games_provider.dart';
@@ -164,7 +165,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Widget _body(List<Game> all) {
-    final visible = _visibleGames(all);
+    final usage = ref.watch(gameUsageProvider).valueOrNull ?? const <String, GameUsage>{};
+    final visible = _visibleGames(all, usage);
     return RefreshIndicator(
       onRefresh: () => ref.read(gamesProvider.notifier).refresh(),
       child: Column(
@@ -215,6 +217,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     itemBuilder: (_, index) => _GameTile(
                       game: visible[index],
                       siblings: visible,
+                      usage: usage[visible[index].id],
                       compact: _compact,
                       onEdit: () => _openEditor(visible[index]),
                       onDelete: () => _confirmDelete(visible[index]),
@@ -226,7 +229,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  List<Game> _visibleGames(List<Game> all) {
+  List<Game> _visibleGames(List<Game> all, Map<String, GameUsage> usage) {
     final term = _searchController.text.trim().toLowerCase();
     final filtered = all.where((game) {
       if (_filters.archived != game.archived) return false;
@@ -246,6 +249,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }).toList();
 
     if (_filters.sortBy == 'TITLE') return filtered;
+    if (_filters.sortBy == 'HOURS_DESC') {
+      filtered.sort((a, b) {
+        final byHours = (usage[b.id]?.playedHours ?? 0).compareTo(usage[a.id]?.playedHours ?? 0);
+        return byHours != 0 ? byHours : a.title.compareTo(b.title);
+      });
+      return filtered;
+    }
     final field = _filters.sortBy == 'STARTED_DESC' ? 'startedAt' : 'completedAt';
     filtered.sort((a, b) {
       final left = field == 'startedAt' ? a.startedAt : a.completedAt;
@@ -422,6 +432,7 @@ class _GameTile extends StatelessWidget {
 
   /// Jogos na ordem e filtro da lista, para navegar Anterior/Próximo no detalhe.
   final List<Game> siblings;
+  final GameUsage? usage;
   final bool compact;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -429,6 +440,7 @@ class _GameTile extends StatelessWidget {
   const _GameTile({
     required this.game,
     required this.siblings,
+    required this.usage,
     required this.compact,
     required this.onEdit,
     required this.onDelete,
@@ -475,6 +487,27 @@ class _GameTile extends StatelessWidget {
                         ],
                       ],
                     ),
+                    if (usage != null && (usage!.playedHours > 0 || usage!.achievementsTotal > 0)) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 12,
+                        children: [
+                          if (usage!.playedHours > 0)
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.schedule_rounded, size: 13, color: Color(0xFF8888A0)),
+                              const SizedBox(width: 4),
+                              Text(formatHours(usage!.playedHours), style: const TextStyle(color: Color(0xFF8888A0), fontSize: 11)),
+                            ]),
+                          if (usage!.achievementsTotal > 0)
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.emoji_events_outlined, size: 13, color: Color(0xFF8888A0)),
+                              const SizedBox(width: 4),
+                              Text('${usage!.achievementsUnlocked}/${usage!.achievementsTotal}',
+                                  style: const TextStyle(color: Color(0xFF8888A0), fontSize: 11)),
+                            ]),
+                        ],
+                      ),
+                    ],
                     if (!compact && (game.developer != null || game.releaseYear != null)) ...[
                       const SizedBox(height: 6),
                       Text(
@@ -573,6 +606,7 @@ class _FilterSheetState extends State<_FilterSheet> {
               'TITLE': 'Título',
               'STARTED_DESC': 'Início mais recente',
               'COMPLETED_DESC': 'Conclusão mais recente',
+              'HOURS_DESC': 'Mais horas jogadas',
             }, (value) => setState(() => _sortBy = value)),
             _dropdown(
               'Plataforma',

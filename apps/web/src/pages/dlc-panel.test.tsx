@@ -63,7 +63,7 @@ describe('DlcPanel', () => {
     fireEvent.change(screen.getByLabelText('Jogo cadastrado'), { target: { value: 'FF7R Intermission (2021)' } });
     fireEvent.click(screen.getByRole('button', { name: 'Vincular' }));
 
-    expect(await screen.findByText(/o progresso e as horas vêm dele/)).toBeInTheDocument();
+    expect(await screen.findByText(/status e horas vêm dele/)).toBeInTheDocument();
     expect(screen.getByText(/Concluída/)).toBeInTheDocument();
     const patchCall = fetchMock.mock.calls[1];
     expect(patchCall?.[0]).toBe('/api/games/game-1/dlcs/dlc-1');

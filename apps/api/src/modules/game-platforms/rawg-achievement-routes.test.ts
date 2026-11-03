@@ -58,6 +58,7 @@ describe('rotas do catálogo RAWG', () => {
     const gamePlatforms = { listForGame: async () => [{ id: 'link-1', platformId: '00000000-0000-4000-8000-0000000000a1', edition: null }] } as unknown as GamePlatformRepository;
     const externalAchievements: ExternalAchievementRepository = {
       listUnlocks: async () => [],
+      countsByGamePlatform: async () => new Map(),
       listForGamePlatform: async () => [{
         id: '00000000-0000-4000-8000-000000000009', gamePlatformId: 'link-1', externalId: '40', name: 'primeira vitória', description: null, iconUrl: null,
         points: null, rarityPercent: null, unlocked: true, unlockedAt: new Date('2026-10-09T12:21:00.000Z'), syncedAt: new Date('2026-10-28T00:00:00.000Z'),
@@ -84,6 +85,7 @@ describe('rotas do catálogo RAWG', () => {
     });
     const externalAchievements: ExternalAchievementRepository = {
       listUnlocks: async () => [],
+      countsByGamePlatform: async () => new Map(),
       listForGamePlatform: async (id) => [record(id === 'link-ps' ? '00000000-0000-4000-8000-0000000000b1' : '00000000-0000-4000-8000-0000000000b2', id, id === 'link-ps')],
       replaceForGamePlatform: async () => [],
     };
@@ -114,5 +116,28 @@ describe('rotas do catálogo RAWG', () => {
     expect(first.json()).toMatchObject({ catalogAvailable: true, total: 1, groups: [{ id: 'catalog' }] });
     await app.inject(`/games/${gameId}/achievements`);
     expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it('preenche a condição de zeramento com a conquista de jogo concluído, sem sobrescrever o que já existe', async () => {
+    const link = { linkedGame: candidate, achievements: [
+      { id: '00000000-0000-4000-8000-000000000002', rawgId: 1, name: 'Hardboiled Writer', description: 'You completed the game on Normal difficulty.', imageUrl: null, percent: 15 },
+    ], refreshedAt: '2026-10-25T00:00:00.000Z' };
+    const store: RawgAchievementRepository = { get: async () => link, replace: async () => link };
+    const update = vi.fn(async () => undefined);
+    const empty = { find: async () => ({ id: gameId, title: 'Alan Wake', completionCondition: null }), update } as unknown as GameRepository;
+    const filled = { find: async () => ({ id: gameId, title: 'Alan Wake', completionCondition: 'Zerar tudo' }), update } as unknown as GameRepository;
+
+    const app = Fastify();
+    apps.push(app);
+    registerRawgAchievementRoutes(app, empty, store);
+    await app.inject(`/games/${gameId}/achievements`);
+    expect(update).toHaveBeenCalledWith(gameId, { completionCondition: 'Hardboiled Writer: You completed the game on Normal difficulty.' });
+
+    update.mockClear();
+    const other = Fastify();
+    apps.push(other);
+    registerRawgAchievementRoutes(other, filled, store);
+    await other.inject(`/games/${gameId}/achievements`);
+    expect(update).not.toHaveBeenCalled();
   });
 });

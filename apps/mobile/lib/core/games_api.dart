@@ -1,4 +1,5 @@
 import '../models/game.dart';
+import '../models/game_usage.dart';
 import 'api_client.dart';
 
 class GamesApi {
@@ -31,6 +32,14 @@ class GamesApi {
 
   static Future<void> delete(String id) async {
     await ApiClient.instance.delete('/games/$id');
+  }
+
+  /// Tempo consolidado e conquistas por jogo (cartões e ordenação da biblioteca).
+  static Future<Map<String, GameUsage>> usage() async {
+    final data = await ApiClient.instance.getCached<List<dynamic>>('/games/usage');
+    return {
+      for (final item in data) (item as Map<String, dynamic>)['gameId'] as String: GameUsage.fromJson(item),
+    };
   }
 
   /// Ids de jogos que parecem duplicatas de [gameId] (mesmo título normalizado).

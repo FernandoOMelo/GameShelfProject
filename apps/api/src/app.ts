@@ -38,6 +38,7 @@ import { registerSavedFilterRoutes } from './modules/saved-filters/routes.js';
 import type { GamePlatformRepository } from './modules/game-platforms/repository.js';
 import type { ExternalAchievementRepository } from './modules/game-platforms/achievement-repository.js';
 import { registerGamePlatformRoutes } from './modules/game-platforms/routes.js';
+import { registerGameUsageRoutes } from './modules/games/usage-routes.js';
 import { registerGameMergeRoutes } from './modules/games/merge-routes.js';
 import type { GameMergeRepository } from './modules/games/merge.js';
 import { registerRawgAchievementRoutes } from './modules/game-platforms/rawg-achievement-routes.js';
@@ -97,6 +98,7 @@ export function buildApp(options: { gameMergeRepository?: GameMergeRepository; r
       options.sessionRepository));
   }
   if (options.gameRepository && options.rawgAchievementRepository) app.register((instance) => registerRawgAchievementRoutes(instance, options.gameRepository!, options.rawgAchievementRepository!, options.rawgAchievementProvider, options.gamePlatformRepository && options.externalAchievementRepository ? { gamePlatforms: options.gamePlatformRepository, externalAchievements: options.externalAchievementRepository, platforms: options.platformRepository } : undefined));
+  if (options.gameRepository && options.sessionRepository && options.gamePlatformRepository) app.register((instance) => registerGameUsageRoutes(instance, options.gameRepository!, options.sessionRepository!, options.gamePlatformRepository!, options.externalAchievementRepository));
   if (options.gameRepository && options.gameMergeRepository) app.register((instance) => registerGameMergeRoutes(instance, options.gameRepository!, options.gameMergeRepository!, options.backlogRepository));
   if (options.gameRepository && options.dlcRepository) app.register((instance) => registerDlcRoutes(instance, options.gameRepository!, options.dlcRepository!, options.rawgAchievementProvider));
   if (options.gameRepository && options.platformRepository && options.playthroughRepository) {

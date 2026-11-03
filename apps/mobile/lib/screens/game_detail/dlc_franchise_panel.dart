@@ -4,6 +4,7 @@ import '../../core/game_extras_api.dart';
 import '../../core/platforms_api.dart';
 import '../../models/game.dart';
 import '../../models/game_extras.dart';
+import '../../models/game_usage.dart';
 import '../../providers/game_extras_provider.dart';
 import '../../providers/games_provider.dart';
 import '../../widgets/game_cover.dart';
@@ -71,6 +72,7 @@ class _DlcSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dlcs = ref.watch(dlcsProvider(gameId));
     final library = ref.watch(gamesProvider).valueOrNull ?? const <Game>[];
+    final usage = ref.watch(gameUsageProvider).valueOrNull ?? const <String, GameUsage>{};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -106,7 +108,11 @@ class _DlcSection extends ConsumerWidget {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                GameCover(coverUrl: dlc.coverUrl, width: 44, height: 58, borderRadius: BorderRadius.circular(8)),
+                                GameCover(
+                                    coverUrl: linked(dlc, library)?.coverUrl ?? dlc.coverUrl,
+                                    width: 56,
+                                    height: 74,
+                                    borderRadius: BorderRadius.circular(8)),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
@@ -119,7 +125,7 @@ class _DlcSection extends ConsumerWidget {
                                             ? 'Vinculada a ${linked(dlc, library)!.title} · ${_linkedStatus(linked(dlc, library)!.status)}'
                                             : [
                                                 dlcStatusLabels[dlc.status] ?? dlc.status,
-                                                if (dlc.playedHours > 0) '${formatHours(dlc.playedHours)} jogadas',
+                                                if (_played(dlc, library, usage) > 0) '${formatHours(_played(dlc, library, usage))} jogadas',
                                                 if (dlc.estimatedHours != null) '${formatHours(dlc.estimatedHours)} estimadas',
                                               ].join(' · '),
                                         style: const TextStyle(color: _muted, fontSize: 12),
@@ -189,6 +195,18 @@ class _DlcSection extends ConsumerWidget {
                                 ),
                               ],
                             ),
+                            if (dlc.estimatedHours != null && _played(dlc, library, usage) > 0)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 4, 8, 2),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: (_played(dlc, library, usage) / dlc.estimatedHours!).clamp(0.0, 1.0),
+                                    minHeight: 6,
+                                    backgroundColor: const Color(0xFF2A2A3A),
+                                  ),
+                                ),
+                              ),
                             Row(
                               children: [
                                 const Text('Possuo', style: TextStyle(fontSize: 12)),
@@ -209,6 +227,12 @@ class _DlcSection extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Horas da DLC: as do jogo vinculado, quando há, ou as informadas à mão.
+double _played(Dlc dlc, List<Game> library, Map<String, GameUsage> usage) {
+  final game = linked(dlc, library);
+  return game == null ? dlc.playedHours : (usage[game.id]?.playedHours ?? 0);
 }
 
 Game? linked(Dlc dlc, List<Game> library) =>

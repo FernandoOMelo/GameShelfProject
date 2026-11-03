@@ -127,7 +127,7 @@ export function buildStats({ games, sessions, platforms, genres, gamePlatforms =
  * Sessões sem plataforma informada não entram no desconto: não há como saber a
  * qual plataforma pertencem, e descontar no palpite erraria para menos.
  */
-function externalContribution(link: GamePlatform, minutesByGamePlatform: Map<string, number>): number {
+export function externalContribution(link: GamePlatform, minutesByGamePlatform: Map<string, number>): number {
   if (link.externalPlaytimeMinutes === null) return 0;
   const localOnPlatform = minutesByGamePlatform.get(`${link.gameId}|${link.platformId}`) ?? 0;
   return Math.max(0, link.externalPlaytimeMinutes - link.externalPlaytimeImportedMinutes - localOnPlatform);

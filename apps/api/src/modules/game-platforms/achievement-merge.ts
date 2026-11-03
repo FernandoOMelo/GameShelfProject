@@ -1,11 +1,30 @@
 import type { AchievementGroup, ExternalAchievement, GameAchievementsResponse, MergedAchievement, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
 
-/** Heurísticas pt/en para a conquista que representa "terminei o jogo": platina,
- * zerar todos os troféus/conquistas, ou 100% de conclusão. */
-const COMPLETION_PATTERNS = [
-  /platin/i, /todos os troféus/i, /todas as conquistas/i, /all trophies/i, /all achievements/i,
-  /conquiste? (todos|tudo)/i, /complet[ea]? (o jogo|the game) (a )?100/i, /100\s*%/,
+// Heurísticas pt/en. Três tipos que não se confundem (nesta ordem de precedência):
+// - platina: o troféu de platina, ou obter todas as outras conquistas;
+// - jogo concluído: terminar a história/campanha ("You completed the game...");
+// - especial: dificuldade máxima, todos os finais, novo jogo+ etc.
+const PLATINUM_NAME = /\bplatin(um|a)\b/i;
+const PLATINUM_TEXT = [
+  /(all|every) (other )?(trophies|achievements)/i, /todos os (outros )?(troféus|trofeus)/i, /todas as (outras )?conquistas/i,
+  /collect(ed)? all/i, /conquiste? (todos|tudo)/i, /\b100\s*%/,
 ];
+const COMPLETION_TEXT = [
+  /\b(complet(ed?|e|ing)|finish(ed)?|beat(en)?|clear(ed)?|conclu(i|iu|a|ir|ído)|termin(ou|e|ar)|zer(ou|e|ar))\b.{0,24}\b(the )?(game|story|campaign|main story|jogo|história|historia|campanha|aventura)\b/i,
+  /\b(roll(ing)? )?credits\b/i, /\bcréditos\b/i, /\bfinal boss\b|\bchefe final\b/i,
+];
+const SPECIAL_TEXT = [
+  /\b(nightmare|insane|legendary|hardest|max(imum)? difficulty|dificuldade máxima|new game ?\+|ng ?\+)\b/i,
+  /\ball (the )?endings\b|\btodos os finais\b/i, /\bno damage\b|\bsem (levar )?dano\b/i,
+];
+
+export function classifyAchievement(name: string, description: string | null): MergedAchievement['specialKind'] {
+  const text = `${name} ${description ?? ''}`;
+  if (PLATINUM_NAME.test(name) || PLATINUM_TEXT.some((pattern) => pattern.test(description ?? ''))) return 'PLATINUM';
+  if (COMPLETION_TEXT.some((pattern) => pattern.test(text))) return 'COMPLETION';
+  if (SPECIAL_TEXT.some((pattern) => pattern.test(text))) return 'SPECIAL';
+  return null;
+}
 
 function normalizeName(value: string): string {
   return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -19,11 +38,6 @@ export function rarityTier(percent: number | null): MergedAchievement['rarityTie
   return 'COMMON';
 }
 
-function isCompletionTrophy(name: string, description: string | null): boolean {
-  const text = `${name} ${description ?? ''}`;
-  return COMPLETION_PATTERNS.some((pattern) => pattern.test(text));
-}
-
 /**
  * Monta a lista de conquistas do jogo. A RAWG só cataloga as conquistas do
  * Steam (em inglês, sem idioma configurável) e não informa secretas; o
@@ -35,12 +49,17 @@ function isCompletionTrophy(name: string, description: string | null): boolean {
  * - secreta = ainda bloqueada e sem descrição na fonte (a PSN omite os
  *   detalhes até desbloquear).
  */
+function kindOf(name: string, description: string | null) {
+  const specialKind = classifyAchievement(name, description);
+  return { specialKind, isCompletionTrophy: specialKind === 'COMPLETION' };
+}
+
 export function mergeAchievements(catalog: RawgAchievement[], external: ExternalAchievement[]): MergedAchievement[] {
   if (external.length === 0) {
     return catalog.map((item) => ({
       id: item.id, name: item.name, description: item.description, iconUrl: item.imageUrl, rarityPercent: item.percent,
       rarityTier: rarityTier(item.percent), unlocked: false, unlockedAt: null, secret: false,
-      isCompletionTrophy: isCompletionTrophy(item.name, item.description),
+      ...kindOf(item.name, item.description),
     }));
   }
   const catalogByName = new Map(catalog.map((item) => [normalizeName(item.name), item]));
@@ -65,7 +84,7 @@ export function mergeAchievements(catalog: RawgAchievement[], external: External
       unlocked: item.unlocked,
       unlockedAt: item.unlockedAt,
       secret,
-      isCompletionTrophy: isCompletionTrophy(item.name, description),
+      ...kindOf(item.name, description),
     };
   });
 }
@@ -76,6 +95,8 @@ export type ExternalAchievementGroup = {
   platformId: string;
   name: string;
   items: ExternalAchievement[];
+  /** A associação tem fonte externa: a aba existe mesmo sem conquistas espelhadas ainda. */
+  refreshable?: boolean;
 };
 
 function summarize(achievements: MergedAchievement[]) {
@@ -84,7 +105,8 @@ function summarize(achievements: MergedAchievement[]) {
     total: achievements.length,
     unlockedCount,
     percent: achievements.length === 0 ? 0 : Math.round((unlockedCount / achievements.length) * 1000) / 10,
-    completionTrophyId: achievements.find((item) => item.isCompletionTrophy)?.id ?? null,
+    completionTrophyId: achievements.find((item) => item.specialKind === 'COMPLETION')?.id ?? null,
+    platinumTrophyId: achievements.find((item) => item.specialKind === 'PLATINUM')?.id ?? null,
   };
 }
 
@@ -96,12 +118,14 @@ function summarize(achievements: MergedAchievement[]) {
  * grupos.
  */
 export function buildAchievementsResponse(linkedGame: RawgAchievementCandidate | null, catalog: RawgAchievement[], externalGroups: ExternalAchievementGroup[]): GameAchievementsResponse {
-  const populated = externalGroups.filter((group) => group.items.length > 0);
+  // Uma aba por associação com fonte externa, mesmo vazia: assim dá para ver (e
+  // atualizar) a plataforma cujas conquistas ainda não foram espelhadas.
+  const populated = externalGroups.filter((group) => group.items.length > 0 || group.refreshable);
   const groups: AchievementGroup[] = populated.length === 0
-    ? (catalog.length === 0 ? [] : [{ id: 'catalog', platformId: null, name: 'Catálogo RAWG', ...summarize(mergeAchievements(catalog, [])), achievements: mergeAchievements(catalog, []) }])
+    ? (catalog.length === 0 ? [] : [{ id: 'catalog', platformId: null, name: 'Catálogo RAWG', refreshable: false, ...summarize(mergeAchievements(catalog, [])), achievements: mergeAchievements(catalog, []) }])
     : populated.map((group) => {
       const achievements = mergeAchievements(catalog, group.items);
-      return { id: group.id, platformId: group.platformId, name: group.name, ...summarize(achievements), achievements };
+      return { id: group.id, platformId: group.platformId, name: group.name, refreshable: group.refreshable ?? false, ...summarize(achievements), achievements };
     });
   const achievements = groups.flatMap((group) => group.achievements);
   const rarityBreakdown = achievements.reduce(

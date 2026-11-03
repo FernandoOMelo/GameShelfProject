@@ -182,6 +182,7 @@ function achievementRepository(): ExternalAchievementRepository & {
     rows,
     calls,
     listUnlocks: async () => [],
+      countsByGamePlatform: async () => new Map(),
     listForGamePlatform: async (gamePlatformId) => rows.filter((row) => row.gamePlatformId === gamePlatformId),
     replaceForGamePlatform: async (gamePlatformId, entries, syncedAt) => {
       calls.push(gamePlatformId);

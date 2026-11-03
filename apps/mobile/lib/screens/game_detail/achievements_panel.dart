@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/game_extras.dart';
+import '../../core/game_extras_api.dart';
 import '../../providers/game_extras_provider.dart';
 import '../../widgets/game_cover.dart';
 import '../../widgets/section.dart';
@@ -29,6 +30,7 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
   bool _showSecrets = false;
   int _visible = _pageSize;
   String? _groupId;
+  bool _refreshing = false;
 
   @override
   void dispose() {
@@ -42,6 +44,19 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
         'UNCOMMON' => const Color(0xFF7FB0FF),
         _ => _muted,
       };
+
+  Future<void> _refresh(AchievementGroup group) async {
+    setState(() => _refreshing = true);
+    try {
+      await GameExtrasApi.refreshAchievements(widget.gameId, group.id);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível atualizar as conquistas.')));
+      }
+    }
+    ref.invalidate(gameAchievementsProvider(widget.gameId));
+    if (mounted) setState(() => _refreshing = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +111,15 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
               ),
               const SizedBox(height: 12),
             ],
+            if (group != null && group.refreshable)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _refreshing ? null : () => _refresh(group),
+                  icon: const Icon(Icons.sync_rounded, size: 18),
+                  label: Text(_refreshing ? 'Atualizando…' : 'Atualizar conquistas de ${group.name}'),
+                ),
+              ),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(14)),
@@ -229,6 +253,16 @@ class _AchievementRow extends StatelessWidget {
                     spacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      if (item.specialKind != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF5FD18D).withValues(alpha: 0.7)),
+                          ),
+                          child: Text(specialKindLabels[item.specialKind] ?? item.specialKind!,
+                              style: const TextStyle(color: Color(0xFF5FD18D), fontSize: 10)),
+                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
