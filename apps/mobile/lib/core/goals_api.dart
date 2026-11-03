@@ -13,20 +13,14 @@ class GoalsApi {
     return data.map((e) => GoalProgress.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  static Future<void> create({
-    required String kind,
-    required String period,
-    required int year,
-    int? month,
-    required int target,
-  }) async {
-    await ApiClient.instance.post<dynamic>('/goals', data: {
-      'kind': kind,
-      'period': period,
-      'year': year,
-      'month': ?month,
-      'target': target,
-    });
+  /// `body` segue `goalInputSchema`: metas por período levam period/year/target;
+  /// as demais, listId, target (horas seguidas), title e dueDate conforme o tipo.
+  static Future<void> create(Map<String, dynamic> body) async {
+    await ApiClient.instance.post<dynamic>('/goals', data: body);
+  }
+
+  static Future<void> setDone(String id, bool done) async {
+    await ApiClient.instance.patch<dynamic>('/goals/$id', data: {'done': done});
   }
 
   static Future<void> updateTarget(String id, int target) async {

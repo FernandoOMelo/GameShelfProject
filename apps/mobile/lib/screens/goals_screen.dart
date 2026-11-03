@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/game_list.dart';
 import '../models/goal.dart';
 import '../providers/goals_provider.dart';
+import '../providers/lists_provider.dart';
 import '../widgets/section.dart';
 
 const _months = [
@@ -39,8 +41,8 @@ class GoalsScreen extends ConsumerWidget {
         data: (goals) => goals.isEmpty
             ? const MessageState(
                 icon: Icons.flag_outlined,
-                message: 'Defina metas anuais ou mensais de jogos zerados ou horas '
-                    'jogadas para acompanhar seu ritmo.',
+                message: 'Defina metas anuais ou mensais, zerar uma lista, jogar horas '
+                    'seguidas ou um texto livre para acompanhar seu ritmo.',
               )
             : RefreshIndicator(
                 onRefresh: () => ref.read(goalsProvider.notifier).refresh(),
@@ -52,6 +54,7 @@ class GoalsScreen extends ConsumerWidget {
                     goal: goals[index],
                     onEditTarget: () => _editTarget(context, ref, goals[index]),
                     onDelete: () => _delete(context, ref, goals[index]),
+                    onToggleDone: () => ref.read(goalsProvider.notifier).setDone(goals[index].id, !goals[index].done),
                   ),
                 ),
               ),
@@ -142,8 +145,16 @@ class GoalsScreen extends ConsumerWidget {
   }
 }
 
-/// Rótulo "Zerar 10 jogos · 2026" ou "Jogar 20 h · março de 2026".
+/// Rótulo "Zerar 10 jogos · 2026", "Jogar 20 h · março de 2026" ou o texto da meta.
 String goalLabel(GoalProgress goal) {
+  if (!goal.hasPeriod) {
+    final title = goal.title;
+    return switch (goal.kind) {
+      'COMPLETE_LIST' => title ?? 'Zerar a lista ${goal.listName ?? 'removida'}',
+      'SESSION_HOURS' => title ?? 'Jogar ${goal.target} h seguidas',
+      _ => title ?? 'Meta',
+    };
+  }
   final what = goal.kind == 'COMPLETED_GAMES'
       ? 'Zerar ${goal.target} ${goal.target == 1 ? 'jogo' : 'jogos'}'
       : 'Jogar ${goal.target} h';
@@ -157,11 +168,13 @@ class _GoalTile extends StatelessWidget {
   final GoalProgress goal;
   final VoidCallback onEditTarget;
   final VoidCallback onDelete;
+  final VoidCallback onToggleDone;
 
   const _GoalTile({
     required this.goal,
     required this.onEditTarget,
     required this.onDelete,
+    required this.onToggleDone,
   });
 
   @override
@@ -173,9 +186,13 @@ class _GoalTile extends StatelessWidget {
             : goal.elapsedPercent >= 100
                 ? 'período encerrado'
                 : 'abaixo do ritmo';
-    final progressText = goal.kind == 'COMPLETED_GAMES'
-        ? '${_trim(goal.current)} de ${goal.target}'
-        : '${formatHours(goal.current)} de ${goal.target} h';
+    final progressText = switch (goal.kind) {
+      'PLAYED_HOURS' => '${formatHours(goal.current)} de ${goal.target} h',
+      'SESSION_HOURS' => 'melhor sessão: ${formatHours(goal.current)} de ${goal.target} h',
+      'CUSTOM' => goal.done ? 'concluída' : 'em aberto',
+      _ => '${_trim(goal.current)} de ${goal.target}',
+    };
+    final due = goal.dueDate == null ? '' : ' · até ${goal.dueDate!.split('-').reversed.join('/')}';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -194,9 +211,16 @@ class _GoalTile extends StatelessWidget {
               ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF6B6B7E), size: 20),
-                onSelected: (value) => value == 'target' ? onEditTarget() : onDelete(),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'target', child: Text('Ajustar alvo')),
+                onSelected: (value) => switch (value) {
+                  'target' => onEditTarget(),
+                  'done' => onToggleDone(),
+                  _ => onDelete(),
+                },
+                itemBuilder: (_) => [
+                  if (goal.kind == 'CUSTOM')
+                    PopupMenuItem(value: 'done', child: Text(goal.done ? 'Reabrir' : 'Marcar como concluída'))
+                  else if (goal.kind != 'COMPLETE_LIST')
+                    const PopupMenuItem(value: 'target', child: Text('Ajustar alvo')),
                   PopupMenuItem(
                     value: 'delete',
                     child: Text('Excluir', style: TextStyle(color: Color(0xFFE53E3E))),
@@ -223,7 +247,7 @@ class _GoalTile extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '$progressText (${_trim(goal.percent)}%) · $status',
+            '$progressText${goal.kind == 'CUSTOM' ? '' : ' (${_trim(goal.percent)}%)'} · $status$due',
             style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12),
           ),
         ],
@@ -253,20 +277,49 @@ class _GoalFormState extends ConsumerState<_GoalForm> {
   late int _month = DateTime.now().month;
   late final _yearController = TextEditingController(text: '$_year');
   final _targetController = TextEditingController();
+  final _titleController = TextEditingController();
+  String? _listId;
+  DateTime? _dueDate;
   bool _saving = false;
   String? _message;
+
+  bool get _byPeriod => _kind == 'COMPLETED_GAMES' || _kind == 'PLAYED_HOURS';
 
   @override
   void dispose() {
     _yearController.dispose();
     _targetController.dispose();
+    _titleController.dispose();
     super.dispose();
+  }
+
+  static String _iso(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dueDate ?? now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 10),
+    );
+    if (picked != null) setState(() => _dueDate = picked);
   }
 
   Future<void> _save() async {
     final target = int.tryParse(_targetController.text.trim());
-    if (target == null || target < 1) {
+    final title = _titleController.text.trim();
+    if ((_byPeriod || _kind == 'SESSION_HOURS') && (target == null || target < 1)) {
       setState(() => _message = 'Informe um alvo válido.');
+      return;
+    }
+    if (_kind == 'COMPLETE_LIST' && _listId == null) {
+      setState(() => _message = 'Escolha a lista.');
+      return;
+    }
+    if (_kind == 'CUSTOM' && title.isEmpty) {
+      setState(() => _message = 'Informe o texto da meta.');
       return;
     }
     setState(() {
@@ -274,19 +327,26 @@ class _GoalFormState extends ConsumerState<_GoalForm> {
       _message = null;
     });
     try {
-      await ref.read(goalsProvider.notifier).create(
-            kind: _kind,
-            period: _period,
-            year: _year,
-            month: _period == 'MONTH' ? _month : null,
-            target: target,
-          );
+      await ref.read(goalsProvider.notifier).create({
+        'kind': _kind,
+        if (_byPeriod) ...{
+          'period': _period,
+          'year': _year,
+          if (_period == 'MONTH') 'month': _month,
+          'target': target,
+        } else ...{
+          if (title.isNotEmpty) 'title': title,
+          if (_kind == 'COMPLETE_LIST') 'listId': _listId,
+          if (_kind == 'SESSION_HOURS') 'target': target,
+          if (_dueDate != null) 'dueDate': _iso(_dueDate!),
+        },
+      });
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _message = 'Você já tem uma meta deste tipo para esse período.';
+          _message = _byPeriod ? 'Você já tem uma meta deste tipo para esse período.' : 'Não foi possível criar a meta.';
         });
       }
     }
@@ -294,6 +354,7 @@ class _GoalFormState extends ConsumerState<_GoalForm> {
 
   @override
   Widget build(BuildContext context) {
+    final lists = ref.watch(listsProvider).valueOrNull ?? const <GameListSummary>[];
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -306,61 +367,89 @@ class _GoalFormState extends ConsumerState<_GoalForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Nova meta',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            const Text('Nova meta', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _kind,
               decoration: const InputDecoration(labelText: 'Tipo'),
-              items: const [
-                DropdownMenuItem(value: 'COMPLETED_GAMES', child: Text('Jogos zerados')),
-                DropdownMenuItem(value: 'PLAYED_HOURS', child: Text('Horas jogadas')),
-              ],
+              items: [for (final entry in goalKindLabels.entries) DropdownMenuItem(value: entry.key, child: Text(entry.value))],
               onChanged: (value) {
                 if (value != null) setState(() => _kind = value);
               },
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _period,
-              decoration: const InputDecoration(labelText: 'Período'),
-              items: const [
-                DropdownMenuItem(value: 'YEAR', child: Text('Ano')),
-                DropdownMenuItem(value: 'MONTH', child: Text('Mês')),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => _period = value);
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Ano'),
-              controller: _yearController,
-              onChanged: (value) => _year = int.tryParse(value) ?? _year,
-            ),
-            if (_period == 'MONTH') ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: _month,
-                decoration: const InputDecoration(labelText: 'Mês'),
-                items: [
-                  for (var i = 0; i < _months.length; i++)
-                    DropdownMenuItem(value: i + 1, child: Text(_months[i])),
+            if (_byPeriod) ...[
+              DropdownButtonFormField<String>(
+                initialValue: _period,
+                decoration: const InputDecoration(labelText: 'Período'),
+                items: const [
+                  DropdownMenuItem(value: 'YEAR', child: Text('Ano')),
+                  DropdownMenuItem(value: 'MONTH', child: Text('Mês')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setState(() => _month = value);
+                  if (value != null) setState(() => _period = value);
                 },
               ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _targetController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: _kind == 'COMPLETED_GAMES' ? 'Alvo (jogos)' : 'Alvo (horas)',
+              const SizedBox(height: 12),
+              TextField(
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Ano'),
+                controller: _yearController,
+                onChanged: (value) => _year = int.tryParse(value) ?? _year,
               ),
-            ),
+              if (_period == 'MONTH') ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _month,
+                  decoration: const InputDecoration(labelText: 'Mês'),
+                  items: [
+                    for (var i = 0; i < _months.length; i++) DropdownMenuItem(value: i + 1, child: Text(_months[i])),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _month = value);
+                  },
+                ),
+              ],
+            ],
+            if (_kind == 'COMPLETE_LIST')
+              DropdownButtonFormField<String>(
+                initialValue: _listId,
+                decoration: const InputDecoration(labelText: 'Lista'),
+                items: [for (final list in lists) DropdownMenuItem(value: list.id, child: Text('${list.name} (${list.gameCount})'))],
+                onChanged: (value) => setState(() => _listId = value),
+              ),
+            if (_byPeriod || _kind == 'SESSION_HOURS') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _targetController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: _kind == 'COMPLETED_GAMES' ? 'Alvo (jogos)' : 'Alvo (horas)'),
+              ),
+            ],
+            if (!_byPeriod) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _titleController,
+                maxLength: 200,
+                decoration: InputDecoration(
+                  labelText: _kind == 'CUSTOM' ? 'Texto da meta' : 'Descrição (opcional)',
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _dueDate == null ? 'Sem data limite' : 'Até ${_iso(_dueDate!).split('-').reversed.join('/')}',
+                      style: const TextStyle(color: Color(0xFF8888A0), fontSize: 13),
+                    ),
+                  ),
+                  TextButton(onPressed: _pickDate, child: const Text('Data limite')),
+                  if (_dueDate != null) TextButton(onPressed: () => setState(() => _dueDate = null), child: const Text('Limpar')),
+                ],
+              ),
+            ],
             if (_message != null) ...[
               const SizedBox(height: 12),
               Text(_message!, style: const TextStyle(color: Color(0xFFE53E3E), fontSize: 13)),

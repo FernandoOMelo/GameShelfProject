@@ -9,6 +9,8 @@ import { DrizzleGenreRepository } from './modules/genres/drizzle-genre-repositor
 import { DrizzleSessionRepository } from './modules/sessions/drizzle-session-repository.js';
 import { DrizzleGamePlatformRepository } from './modules/game-platforms/drizzle-game-platform-repository.js';
 import { DrizzleExternalAchievementRepository } from './modules/game-platforms/drizzle-achievement-repository.js';
+import { IntegrationHealthTracker } from './modules/integrations/health.js';
+import { DrizzleMissionRepository } from './modules/missions/drizzle-mission-repository.js';
 import { DrizzleGameMergeRepository } from './modules/games/drizzle-game-merge-repository.js';
 import { DrizzleRawgAchievementRepository, RawgClient } from './modules/game-platforms/rawg-achievements.js';
 import { DrizzlePlaythroughRepository } from './modules/playthroughs/drizzle-playthrough-repository.js';
@@ -37,7 +39,32 @@ if (!env.DATABASE_URL) {
 }
 
 const database = createDatabase(env.DATABASE_URL);
+
+// Saúde das integrações para a tela de Configurações (ADR-040).
+const health = new IntegrationHealthTracker();
+const metadataProvider = env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET
+  ? health.track('igdb', new IgdbMetadataProvider(env.IGDB_CLIENT_ID, env.IGDB_CLIENT_SECRET), ['search', 'franchiseGames'])
+  : undefined;
+const rawgProvider = env.RAWG_API_KEY ? health.track('rawg', new RawgClient(env.RAWG_API_KEY), ['search', 'achievements']) : undefined;
+const externalProvider = env.ACHIEVIST_BASE_URL && env.ACHIEVIST_USERNAME && env.ACHIEVIST_PASSWORD
+  ? health.track('achievist', new AchievistClient(env.ACHIEVIST_BASE_URL, env.ACHIEVIST_USERNAME, env.ACHIEVIST_PASSWORD), ['fetchLibrary', 'fetchAchievements', 'ping'])
+  : undefined;
+health.register({
+  key: 'igdb', name: 'IGDB (metadados)', envVars: ['IGDB_CLIENT_ID', 'IGDB_CLIENT_SECRET'], configured: Boolean(metadataProvider),
+  check: metadataProvider ? async () => `Busca respondeu com ${(await metadataProvider.search('zelda')).length} resultado(s).` : undefined,
+});
+health.register({
+  key: 'rawg', name: 'RAWG (catálogo de conquistas)', envVars: ['RAWG_API_KEY'], configured: Boolean(rawgProvider),
+  check: rawgProvider ? async () => `Busca respondeu com ${(await rawgProvider.search('zelda')).length} resultado(s).` : undefined,
+});
+health.register({
+  key: 'achievist', name: 'Achievist (biblioteca e conquistas)', envVars: ['ACHIEVIST_BASE_URL', 'ACHIEVIST_USERNAME', 'ACHIEVIST_PASSWORD'], configured: Boolean(externalProvider),
+  check: externalProvider?.ping ? async () => `Autenticou com ${(await externalProvider.ping!()).accounts} conta(s).` : undefined,
+});
+
 const app = buildApp({
+  integrationHealth: health,
+  missionRepository: new DrizzleMissionRepository(database.db),
   gameRepository: new DrizzleGameRepository(database.db),
   gameMergeRepository: new DrizzleGameMergeRepository(database.db),
   franchiseRepository: new DrizzleFranchiseRepository(database.db),
@@ -59,15 +86,11 @@ const app = buildApp({
   screenshotRepository: new DrizzleScreenshotRepository(database.db),
   planningSettingsRepository: new DrizzlePlanningSettingsRepository(database.db),
   imageStorage: new LocalImageStorage(resolve(apiDirectory, env.MEDIA_STORAGE_PATH)),
-  ...(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET && {
-    metadataProvider: new IgdbMetadataProvider(env.IGDB_CLIENT_ID, env.IGDB_CLIENT_SECRET),
-  }),
-  ...(env.RAWG_API_KEY && { rawgAchievementProvider: new RawgClient(env.RAWG_API_KEY) }),
+  ...(metadataProvider && { metadataProvider }),
+  ...(rawgProvider && { rawgAchievementProvider: rawgProvider }),
   externalMatchQueueRepository: new DrizzleExternalMatchQueueRepository(database.db),
   // Sem as credenciais do Achievist a integração fica desligada (ADR-024).
-  ...(env.ACHIEVIST_BASE_URL && env.ACHIEVIST_USERNAME && env.ACHIEVIST_PASSWORD && {
-    externalLibraryProvider: new AchievistClient(env.ACHIEVIST_BASE_URL, env.ACHIEVIST_USERNAME, env.ACHIEVIST_PASSWORD),
-  }),
+  ...(externalProvider && { externalLibraryProvider: externalProvider }),
   timeEstimateProvider: new HltbTimeEstimateProvider(),
   webOrigin: env.WEB_ORIGIN,
 });

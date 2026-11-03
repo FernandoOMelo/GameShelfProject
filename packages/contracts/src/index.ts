@@ -973,18 +973,47 @@ export const replayResponseSchema = z.object({
 }).strict();
 export type ReplayResponse = z.infer<typeof replayResponseSchema>;
 
-export const goalKindSchema = z.enum(['COMPLETED_GAMES', 'PLAYED_HOURS']);
+// Metas (ADR-040). Duas delas têm período (ano/mês); as demais têm data limite
+// livre e opcional. O progresso é sempre calculado na leitura.
+export const goalKindSchema = z.enum(['COMPLETED_GAMES', 'PLAYED_HOURS', 'COMPLETE_LIST', 'SESSION_HOURS', 'CUSTOM']);
 export const goalPeriodSchema = z.enum(['YEAR', 'MONTH']);
+export const periodGoalKinds = ['COMPLETED_GAMES', 'PLAYED_HOURS'] as const;
+const goalTitle = z.string().trim().min(1).max(200);
+const goalDescription = z.string().trim().max(2000).nullable();
 export const goalInputSchema = z.object({
   kind: goalKindSchema,
-  period: goalPeriodSchema,
-  year: z.number().int().min(2000).max(2100),
+  period: goalPeriodSchema.optional(),
+  year: z.number().int().min(2000).max(2100).optional(),
   month: z.number().int().min(1).max(12).optional(),
-  target: z.number().int().min(1).max(100000),
+  target: z.number().int().min(1).max(100000).optional(),
+  title: goalTitle.optional(),
+  description: goalDescription.optional(),
+  listId: z.string().uuid().optional(),
+  dueDate: calendarDateSchema.nullable().optional(),
 }).strict().superRefine((value, context) => {
-  if (value.period === 'MONTH' && value.month === undefined) context.addIssue({ code: 'custom', path: ['month'], message: 'Informe o mês da meta mensal.' });
-  if (value.period === 'YEAR' && value.month !== undefined) context.addIssue({ code: 'custom', path: ['month'], message: 'Metas anuais não têm mês.' });
+  const issue = (path: string, message: string) => context.addIssue({ code: 'custom', path: [path], message });
+  if (value.kind === 'COMPLETED_GAMES' || value.kind === 'PLAYED_HOURS') {
+    if (!value.period) issue('period', 'Informe o período da meta.');
+    if (value.year === undefined) issue('year', 'Informe o ano da meta.');
+    if (value.target === undefined) issue('target', 'Informe o alvo da meta.');
+    if (value.period === 'MONTH' && value.month === undefined) issue('month', 'Informe o mês da meta mensal.');
+    if (value.period === 'YEAR' && value.month !== undefined) issue('month', 'Metas anuais não têm mês.');
+  } else if (value.kind === 'COMPLETE_LIST') {
+    if (!value.listId) issue('listId', 'Escolha a lista a zerar.');
+  } else if (value.kind === 'SESSION_HOURS') {
+    if (value.target === undefined) issue('target', 'Informe quantas horas seguidas.');
+  } else if (!value.title) {
+    issue('title', 'Informe o texto da meta.');
+  }
 });
+export const goalUpdateSchema = z.object({
+  target: z.number().int().min(1).max(100000).optional(),
+  title: goalTitle.optional(),
+  description: goalDescription.optional(),
+  dueDate: calendarDateSchema.nullable().optional(),
+  done: z.boolean().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
+/** Mantido por compatibilidade: atualizar só o alvo. */
 export const goalTargetSchema = z.object({ target: z.number().int().min(1).max(100000) }).strict();
 export const goalProgressSchema = z.object({
   id: z.string().uuid(),
@@ -992,7 +1021,13 @@ export const goalProgressSchema = z.object({
   period: goalPeriodSchema,
   year: z.number().int(),
   month: z.number().int().min(1).max(12).nullable(),
-  target: z.number().int().positive(),
+  title: z.string().nullable().default(null),
+  description: z.string().nullable().default(null),
+  listId: z.string().uuid().nullable().default(null),
+  listName: z.string().nullable().default(null),
+  dueDate: calendarDateSchema.nullable().default(null),
+  done: z.boolean().default(false),
+  target: z.number().positive(),
   current: z.number().nonnegative(),
   percent: z.number().min(0).max(100),
   elapsedPercent: z.number().min(0).max(100),
@@ -1001,6 +1036,7 @@ export const goalProgressSchema = z.object({
 }).strict();
 export const goalsQuerySchema = z.object({ timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0) }).strict();
 export type GoalInput = z.infer<typeof goalInputSchema>;
+export type GoalUpdate = z.infer<typeof goalUpdateSchema>;
 export type GoalProgress = z.infer<typeof goalProgressSchema>;
 
 export const mainChallengeInputSchema = z.object({
@@ -1017,6 +1053,68 @@ export const mainChallengeSchema = z.object({
 }).strict();
 export type MainChallengeInput = z.infer<typeof mainChallengeInputSchema>;
 export type MainChallenge = z.infer<typeof mainChallengeSchema>;
+
+// Missões (ADR-040): objetivos de médio prazo, mais de uma ativa e uma delas
+// principal. Não dependem de uma lista de jogos.
+export const missionKindSchema = z.enum(['LIST', 'GAMES_COUNT', 'HOURS', 'CUSTOM']);
+export const missionInputSchema = z.object({
+  title: goalTitle,
+  description: goalDescription.optional(),
+  kind: missionKindSchema,
+  listId: z.string().uuid().nullable().optional(),
+  target: z.number().int().min(1).max(100000).nullable().optional(),
+  startsOn: calendarDateSchema.optional(),
+  dueDate: calendarDateSchema.nullable().optional(),
+  isPrimary: z.boolean().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.kind === 'LIST' && !value.listId) context.addIssue({ code: 'custom', path: ['listId'], message: 'Escolha a lista da missão.' });
+  if ((value.kind === 'GAMES_COUNT' || value.kind === 'HOURS') && !value.target) context.addIssue({ code: 'custom', path: ['target'], message: 'Informe o alvo da missão.' });
+  if (value.startsOn && value.dueDate && value.dueDate < value.startsOn) context.addIssue({ code: 'custom', path: ['dueDate'], message: 'O prazo não pode ser anterior ao início.' });
+});
+export const missionUpdateSchema = z.object({
+  title: goalTitle.optional(),
+  description: goalDescription.optional(),
+  target: z.number().int().min(1).max(100000).nullable().optional(),
+  listId: z.string().uuid().nullable().optional(),
+  startsOn: calendarDateSchema.optional(),
+  dueDate: calendarDateSchema.nullable().optional(),
+  done: z.boolean().optional(),
+  isPrimary: z.boolean().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, { message: 'Informe ao menos um campo para atualizar.' });
+export const missionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  kind: missionKindSchema,
+  listId: z.string().uuid().nullable(),
+  listName: z.string().nullable(),
+  target: z.number().nonnegative(),
+  current: z.number().nonnegative(),
+  percent: z.number().min(0).max(100),
+  startsOn: calendarDateSchema,
+  dueDate: calendarDateSchema.nullable(),
+  done: z.boolean(),
+  achieved: z.boolean(),
+  isPrimary: z.boolean(),
+}).strict();
+export type MissionInput = z.infer<typeof missionInputSchema>;
+export type MissionUpdate = z.infer<typeof missionUpdateSchema>;
+export type Mission = z.infer<typeof missionSchema>;
+
+// Saúde das integrações (ADR-040): o que o usuário veria conferindo o .env,
+// sem expor segredos.
+export const integrationHealthSchema = z.object({
+  key: z.enum(['igdb', 'rawg', 'achievist']),
+  name: z.string(),
+  configured: z.boolean(),
+  lastCheckedAt: z.string().datetime().nullable(),
+  lastOk: z.boolean().nullable(),
+  lastSuccessAt: z.string().datetime().nullable(),
+  lastMessage: z.string().nullable(),
+  /** Variáveis de ambiente que ligam esta integração. */
+  envVars: z.array(z.string()),
+}).strict();
+export type IntegrationHealth = z.infer<typeof integrationHealthSchema>;
 
 // Backup completo (ADR-014). Usa as mesmas formas da API; a integridade entre coleções é
 // verificada à parte, em apps/api (findBackupIssues).
@@ -1040,9 +1138,18 @@ export const backupDataSchema = z.object({
     createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
   }).strict()),
   challenge: z.object({ title: z.string().trim().min(1).max(200), listId: z.string().uuid() }).strict().nullable(),
+  // Missões (ADR-040). Backups antigos só têm `challenge`, que vira a missão principal.
+  missions: z.array(z.object({
+    id: z.string().uuid(), title: z.string().trim().min(1).max(200), description: z.string().nullable().default(null), kind: missionKindSchema,
+    listId: z.string().uuid().nullable().default(null), target: z.number().int().min(1).max(100000).nullable().default(null),
+    startsOn: calendarDateSchema, dueDate: calendarDateSchema.nullable().default(null), done: z.boolean().default(false), isPrimary: z.boolean().default(false),
+    createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
+  }).strict()).default([]),
   goals: z.array(z.object({
     id: z.string().uuid(), kind: goalKindSchema, period: goalPeriodSchema,
     year: z.number().int().min(2000).max(2100), month: z.number().int().min(0).max(12), target: z.number().int().min(1).max(100000),
+    title: z.string().nullable().default(null), description: z.string().nullable().default(null), listId: z.string().uuid().nullable().default(null),
+    dueDate: calendarDateSchema.nullable().default(null), done: z.boolean().default(false), createdAt: z.string().datetime().optional(),
   }).strict()),
   weeklyMinutes: z.number().int().min(0).max(10080),
 }).strict();

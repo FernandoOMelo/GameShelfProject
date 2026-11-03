@@ -1,17 +1,20 @@
 import type { FastifyInstance } from 'fastify';
-import { goalInputSchema, goalProgressSchema, goalsQuerySchema, goalTargetSchema } from '@gameshelf/contracts';
+import { goalInputSchema, goalProgressSchema, goalsQuerySchema, goalUpdateSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
+import type { GameListRepository } from '../game-lists/repository.js';
 import type { SessionRepository } from '../sessions/repository.js';
 import { toGame, toSession } from '../shared/serialize.js';
 import type { GoalRepository } from './repository.js';
 import { buildGoalProgress } from './service.js';
 
-export async function registerGoalRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, goals: GoalRepository) {
+export async function registerGoalRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, goals: GoalRepository, lists?: GameListRepository) {
   async function progress(timezoneOffsetMinutes: number) {
-    const [goalRecords, gameRecords, sessionRecords] = await Promise.all([goals.list(), games.list(), sessions.listAll()]);
+    const [goalRecords, gameRecords, sessionRecords, listRecords] = await Promise.all([goals.list(), games.list(), sessions.listAll(), lists?.list() ?? Promise.resolve([])]);
     const today = new Date(Date.now() - timezoneOffsetMinutes * 60_000).toISOString().slice(0, 10);
-    return buildGoalProgress({ goals: goalRecords, games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), today, timezoneOffsetMinutes })
-      .map((item) => goalProgressSchema.parse(item));
+    return buildGoalProgress({
+      goals: goalRecords, games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession),
+      lists: listRecords.map((list) => ({ id: list.id, name: list.name, gameIds: list.gameIds })), today, timezoneOffsetMinutes,
+    }).map((item) => goalProgressSchema.parse(item));
   }
 
   app.get('/goals', async (request, reply) => {
@@ -23,6 +26,7 @@ export async function registerGoalRoutes(app: FastifyInstance, games: GameReposi
   app.post('/goals', async (request, reply) => {
     const parsed = goalInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Dados inválidos.', issues: parsed.error.issues });
+    if (parsed.data.kind === 'COMPLETE_LIST' && !await lists?.find(parsed.data.listId!)) return reply.code(404).send({ error: 'Lista não encontrada.' });
     let created;
     try {
       created = await goals.create(parsed.data);
@@ -35,9 +39,9 @@ export async function registerGoalRoutes(app: FastifyInstance, games: GameReposi
 
   app.patch<{ Params: { id: string } }>('/goals/:id', async (request, reply) => {
     if (!isUuid(request.params.id)) return reply.code(400).send({ error: 'ID de meta inválido.' });
-    const parsed = goalTargetSchema.safeParse(request.body);
+    const parsed = goalUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Dados inválidos.', issues: parsed.error.issues });
-    const updated = await goals.updateTarget(request.params.id, parsed.data.target);
+    const updated = await goals.update(request.params.id, parsed.data);
     if (!updated) return reply.code(404).send({ error: 'Meta não encontrada.' });
     return reply.send((await progress(0)).find((item) => item.id === updated.id));
   });

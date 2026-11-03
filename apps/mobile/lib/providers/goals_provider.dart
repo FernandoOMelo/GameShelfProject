@@ -10,20 +10,13 @@ class GoalsNotifier extends AsyncNotifier<List<GoalProgress>> {
     state = await AsyncValue.guard(GoalsApi.list);
   }
 
-  Future<void> create({
-    required String kind,
-    required String period,
-    required int year,
-    int? month,
-    required int target,
-  }) async {
-    await GoalsApi.create(
-      kind: kind,
-      period: period,
-      year: year,
-      month: month,
-      target: target,
-    );
+  Future<void> create(Map<String, dynamic> body) async {
+    await GoalsApi.create(body);
+    await refresh();
+  }
+
+  Future<void> setDone(String id, bool done) async {
+    await GoalsApi.setDone(id, done);
     await refresh();
   }
 

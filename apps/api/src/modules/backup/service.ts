@@ -5,6 +5,7 @@ import type { ScreenshotRecord } from '../sessions/screenshot-repository.js';
 import type { QueueRecord } from '../backlog/repository.js';
 import type { GameListRecord } from '../game-lists/repository.js';
 import type { GoalRecord } from '../goals/repository.js';
+import type { MissionRecord } from '../missions/repository.js';
 import type { GamePlatformRecord } from '../game-platforms/repository.js';
 import type { PlaythroughRecord } from '../playthroughs/repository.js';
 import { toGame, toGamePlatform, toPlaythrough } from '../shared/serialize.js';
@@ -20,6 +21,7 @@ export type BackupSources = {
   lists: GameListRecord[];
   challenge: { title: string; listId: string } | undefined;
   goals: GoalRecord[];
+  missions?: MissionRecord[];
   gamePlatforms: GamePlatformRecord[];
   playthroughs: PlaythroughRecord[];
   weeklyMinutes: number;
@@ -47,7 +49,12 @@ export function buildBackup(sources: BackupSources, exportedAt: Date = new Date(
         id: list.id, name: list.name, gameIds: list.gameIds, createdAt: list.createdAt.toISOString(), updatedAt: list.updatedAt.toISOString(),
       })),
       challenge: sources.challenge ?? null,
-      goals: sources.goals,
+      missions: (sources.missions ?? []).map((mission) => ({
+        id: mission.id, title: mission.title, description: mission.description, kind: mission.kind, listId: mission.listId,
+        target: mission.target, startsOn: mission.startsOn, dueDate: mission.dueDate, done: mission.done, isPrimary: mission.isPrimary,
+        createdAt: mission.createdAt.toISOString(), updatedAt: mission.updatedAt.toISOString(),
+      })),
+      goals: sources.goals.map((goal) => ({ ...goal, createdAt: goal.createdAt.toISOString() })),
       weeklyMinutes: sources.weeklyMinutes,
     },
   };
@@ -145,12 +152,16 @@ export function findBackupIssues(data: BackupData): string[] {
     for (const gameId of list.gameIds) if (!gameIds.has(gameId)) add(`Lista "${list.name}": jogo inexistente ${gameId}.`);
   }
   if (data.challenge && !listIds.has(data.challenge.listId)) add('Missão principal: lista inexistente.');
+  idSet('Missões', data.missions);
+  for (const mission of data.missions) if (mission.listId && !listIds.has(mission.listId)) add(`Missão ${mission.id}: lista inexistente.`);
+  if (data.missions.filter((mission) => mission.isPrimary).length > 1) add('Missões: só uma pode ser a principal.');
 
   const goalKeys = new Set<string>();
   for (const goal of data.goals) {
     const key = `${goal.kind}|${goal.period}|${goal.year}|${goal.month}`;
-    if (goalKeys.has(key)) add(`Metas: meta repetida (${goal.kind}, ${goal.period}, ${goal.year}).`);
+    if ((goal.kind === 'COMPLETED_GAMES' || goal.kind === 'PLAYED_HOURS') && goalKeys.has(key)) add(`Metas: meta repetida (${goal.kind}, ${goal.period}, ${goal.year}).`);
     goalKeys.add(key);
+    if (goal.listId && !listIds.has(goal.listId)) add(`Meta ${goal.id}: lista inexistente.`);
     const validMonth = goal.period === 'YEAR' ? goal.month === 0 : goal.month >= 1 && goal.month <= 12;
     if (!validMonth) add(`Meta ${goal.id}: mês incompatível com o período.`);
   }

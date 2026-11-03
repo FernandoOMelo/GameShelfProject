@@ -1,8 +1,9 @@
-import React, { useEffect, useState, type FormEvent } from 'react';
-import type { DashboardResponse, Game, GameListSummary, MainChallenge, QueueItem, Session } from '@gameshelf/contracts';
+import React from 'react';
+import type { DashboardResponse, Game, QueueItem, Session } from '@gameshelf/contracts';
 import { Button, Panel, StatCard } from '@gameshelf/ui';
 import { GoalsCard } from './goals-card';
-import { apiUrl, formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
+import { MissionsCard } from './missions-card';
+import { formatCompactHours, formatDateTime, formatElapsed, formatHours, statusColors } from './shared';
 
 export type DashboardPeriod = '7d' | 'month' | 'year' | 'custom' | 'all';
 export type LibraryFilter = { status?: Game['status']; completedYear?: string };
@@ -124,7 +125,7 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
       <div className="dashboard-bento">
         <BacklogForecast forecast={dashboard.backlogForecast} remainingHours={dashboard.backlogRemainingHours} onSelectGame={onSelectGame} />
         <GoalsCard />
-        <ChallengeCard />
+        <MissionsCard />
       </div>
 
       <section className="dashboard-bottom">
@@ -146,55 +147,5 @@ function BacklogForecast({ forecast, remainingHours, onSelectGame }: { forecast:
       ? <ul className="rank-list">{forecast.stalledGames.map((entry) => <li key={entry.game.id}><button type="button" onClick={() => onSelectGame(entry.game)}>{entry.game.title}</button><span>{entry.daysStalled} dias{entry.remainingHours === null ? '' : ` · faltam ${formatCompactHours(entry.remainingHours)}`}</span></li>)}</ul>
       : <p className="dashboard-empty">Nenhum jogo em andamento ou pausado parado há 30 dias ou mais.</p>}
     <small>Candidatos a pausar de vez ou abandonar: jogos em andamento ou pausados sem sessão recente.</small>
-  </Panel>;
-}
-
-function ChallengeCard() {
-  const [challenge, setChallenge] = useState<MainChallenge | null>(null);
-  const [lists, setLists] = useState<GameListSummary[]>([]);
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState('');
-  const [listId, setListId] = useState('');
-  const [message, setMessage] = useState('');
-
-  async function load() {
-    try {
-      const [challengeResponse, listsResponse] = await Promise.all([fetch(`${apiUrl}/challenge`), fetch(`${apiUrl}/lists`)]);
-      const body = challengeResponse.ok ? await challengeResponse.json() as MainChallenge | null : null;
-      setChallenge(body && typeof body === 'object' && 'title' in body ? body : null);
-      const items = listsResponse.ok ? await listsResponse.json() as GameListSummary[] : [];
-      setLists(Array.isArray(items) ? items : []);
-    } catch { setChallenge(null); }
-  }
-  useEffect(() => { void load(); }, []);
-
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const response = await fetch(`${apiUrl}/challenge`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title, listId }) });
-    if (!response.ok) { setMessage('Não foi possível salvar a missão.'); return; }
-    setMessage('');
-    setEditing(false);
-    await load();
-  }
-
-  async function clear() {
-    const response = await fetch(`${apiUrl}/challenge`, { method: 'DELETE' });
-    if (!response.ok) { setMessage('Não foi possível remover a missão.'); return; }
-    setEditing(false);
-    await load();
-  }
-
-  return <Panel className="challenge-card" title="Missão principal" titleId="challenge-title" actions={!editing ? <button type="button" className="session-edit" onClick={() => { setTitle(challenge?.title ?? ''); setListId(challenge?.listId ?? lists[0]?.id ?? ''); setEditing(true); }}>{challenge ? 'Editar missão' : 'Definir missão'}</button> : undefined}>
-    {editing ? <form className="challenge-form" onSubmit={(event) => void save(event)}>
-      <label className="form-field">Objetivo<input aria-label="Objetivo da missão" required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Zerar todos os clássicos do SNES" /></label>
-      <label className="form-field">Lista acompanhada<select aria-label="Lista da missão" required value={listId} onChange={(event) => setListId(event.target.value)}><option value="">Selecione uma lista</option>{lists.map((list) => <option key={list.id} value={list.id}>{list.name} ({list.gameCount})</option>)}</select></label>
-      <div className="challenge-actions"><Button type="submit" disabled={!listId}>Salvar missão</Button><button type="button" className="cancel-button" onClick={() => setEditing(false)}>Cancelar</button>{challenge && <button type="button" className="session-delete" onClick={() => void clear()}>Remover missão</button>}</div>
-      {lists.length === 0 && <small>Crie uma lista na aba Listas para acompanhá-la como missão.</small>}
-    </form> : challenge ? <>
-      <p className="challenge-title">{challenge.title}</p>
-      <p className="panel-figure"><strong>{challenge.completedGames} / {challenge.totalGames}</strong> zerados ({String(challenge.percent).replace('.', ',')}%) · lista {challenge.listName}</p>
-      <div className="progress-track progress-track-large" role="img" aria-label={`Missão ${challenge.percent}% completa`}><span style={{ width: `${challenge.percent}%` }} /></div>
-    </> : <p className="dashboard-empty">Defina um objetivo de longo prazo acompanhando uma lista de jogos.</p>}
-    {message && <p role="alert">{message}</p>}
   </Panel>;
 }

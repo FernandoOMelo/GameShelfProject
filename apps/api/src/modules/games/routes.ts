@@ -26,17 +26,20 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
   }
   async function recordChallengeCompletion(updated: { id: string; status: string; completedAt: string | null }) {
     if (!tracking) return;
-    const challenge = await tracking.challenge.get();
-    if (!challenge) return;
-    const list = await tracking.lists.find(challenge.listId);
-    if (!list) return;
+    // Toda missão baseada em lista pode ser concluída, não só a principal.
+    const challenges = await tracking.challenge.listAll?.() ?? [await tracking.challenge.get()];
     const stored = await repository.list();
     const gamesById = new Map<string, { status: string; completedAt: string | null }>(
       stored.map((game) => [game.id, { status: game.status, completedAt: game.completedAt }]),
     );
     gamesById.set(updated.id, { status: updated.status, completedAt: updated.completedAt });
-    const completion = detectChallengeCompletion(challenge, list.gameIds, gamesById);
-    if (completion) await tracking.completions.record(completion);
+    for (const challenge of challenges) {
+      if (!challenge) continue;
+      const list = await tracking.lists.find(challenge.listId);
+      if (!list) continue;
+      const completion = detectChallengeCompletion(challenge, list.gameIds, gamesById);
+      if (completion) await tracking.completions.record(completion);
+    }
   }
 
   // A plataforma principal do jogo e as associações são a mesma informação vista

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/settings_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/queue_provider.dart';
+import '../widgets/integration_health_card.dart';
 import 'achievist_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -93,6 +94,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 28),
             const Divider(),
+            const IntegrationHealthCard(),
+            const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.link_rounded, color: Color(0xFF6C63FF)),

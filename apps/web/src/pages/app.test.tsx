@@ -191,7 +191,7 @@ function mockApi(games: unknown[] = [], initialQueue: unknown[] = [], initialLis
       favorites: [{ id: '00000000-0000-4000-8000-000000000001', title: 'Hades', coverUrl: null, hours: 30, rating: 11 }], topGenres: [], topTypes: [],
       byReleaseYear: [{ year: 2020, count: 2 }], byDeveloper: [{ key: 'supergiant games', name: 'Supergiant Games', completedCount: 2, hours: 42, averageRating: 10 }],
     }), { status: 200 });
-    if (url === '/api/challenge' && method === 'GET') return new Response(JSON.stringify({ title: 'Zerar clássicos', listId: '00000000-0000-4000-8000-000000000050', listName: 'Clássicos', totalGames: 4, completedGames: 1, percent: 25 }), { status: 200 });
+    if (url === '/api/missions' && method === 'GET') return new Response(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000051', title: 'Zerar clássicos', description: null, kind: 'LIST', listId: '00000000-0000-4000-8000-000000000050', listName: 'Clássicos', target: 4, current: 1, percent: 25, startsOn: '2026-01-01', dueDate: null, done: false, achieved: false, isPrimary: true }]), { status: 200 });
     if (url.startsWith('/api/dashboard')) {
       const playingGames = games.filter((item) => (item as { status?: string }).status === 'PLAYING' && !(item as { archived?: boolean }).archived).map((item) => ({ game: item, playedHours: 0, progress: null, lastSession: null, activeSession: null, estimatedHours: null, remainingHours: null }));
       const yearCounts = games.reduce<Record<string, number>>((acc, item) => {

@@ -46,7 +46,8 @@ function validData(): BackupData {
     queue: [{ gameId: id(10), position: 0, addedAt: now.toISOString() }],
     lists: [{ id: id(40), name: 'Favoritos', gameIds: [id(10)], createdAt: now.toISOString(), updatedAt: now.toISOString() }],
     challenge: { title: 'Zerar tudo', listId: id(40) },
-    goals: [{ id: id(50), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 12 }],
+    missions: [],
+    goals: [{ id: id(50), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 12, title: null, description: null, listId: null, dueDate: null, done: false }],
     gamePlatforms: [{
       id: id(60), gameId: id(10), platformId: id(2), edition: null, format: 'DIGITAL', owned: true, isPrimary: true,
       externalSource: null, externalId: null, externalAccountLabel: null, externalPlaytimeMinutes: null,
@@ -79,7 +80,8 @@ describe('backup integrity', () => {
     data.queue.push({ gameId: id(10), position: 0, addedAt: now.toISOString() });
     data.lists[0]!.gameIds = [id(10), id(10), id(95)];
     data.challenge = { title: 'x', listId: id(94) };
-    data.goals.push({ id: id(51), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 5 }, { id: id(52), kind: 'PLAYED_HOURS', period: 'MONTH', year: 2026, month: 0, target: 5 });
+    const extra = { title: null, description: null, listId: null, dueDate: null, done: false };
+    data.goals.push({ id: id(51), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 5, ...extra }, { id: id(52), kind: 'PLAYED_HOURS', period: 'MONTH', year: 2026, month: 0, target: 5, ...extra });
     const issues = findBackupIssues(data).join('\n');
     for (const expected of ['Franquias: id repetido', 'Franquias: nome repetido', 'plataforma inexistente', 'gênero inexistente', 'Sessão', 'Imagem', 'Fila: jogo repetido', 'Fila: posição repetida', 'jogos repetidos', 'Missão principal', 'meta repetida', 'mês incompatível']) {
       expect(issues).toContain(expected);
@@ -121,7 +123,7 @@ describe('backup API', () => {
         create: async () => { throw new Error('unused'); }, rename: async () => undefined, delete: async () => false, addGame: async () => undefined, addGames: async () => undefined, removeGame: async () => false,
       },
       mainChallengeRepository: { get: async () => ({ title: 'Zerar tudo', listId: id(40) }), set: async () => undefined, clear: async () => undefined },
-      goalRepository: { list: async () => [{ id: id(50), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 12 }], create: async () => { throw new Error('unused'); }, updateTarget: async () => undefined, remove: async () => false },
+      goalRepository: { list: async () => [{ id: id(50), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 12, title: null, description: null, listId: null, dueDate: null, done: false, createdAt: now }], create: async () => { throw new Error('unused'); }, update: async () => undefined, remove: async () => false },
       planningSettingsRepository: { getWeeklyMinutes: async () => 360, setWeeklyMinutes: async () => undefined },
       gamePlatformRepository: {
         listAll: async () => [platformLinkRecord], listForGame: async () => [platformLinkRecord], find: async () => platformLinkRecord,

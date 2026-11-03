@@ -208,13 +208,16 @@ function createGoalRepository(): GoalRepository {
     create: async (input) => {
       const month = input.month ?? 0;
       if (records.some((item) => item.kind === input.kind && item.period === input.period && item.year === input.year && item.month === month)) throw { code: '23505' };
-      const record = { id: `00000000-0000-4000-8000-${String(900 + records.length).padStart(12, '0')}`, kind: input.kind, period: input.period, year: input.year, month, target: input.target };
+      const record: GoalRecord = {
+        id: `00000000-0000-4000-8000-${String(900 + records.length).padStart(12, '0')}`, kind: input.kind, period: input.period ?? 'YEAR', year: input.year ?? 2026, month, target: input.target ?? 1,
+        title: input.title ?? null, description: input.description ?? null, listId: input.listId ?? null, dueDate: input.dueDate ?? null, done: false, createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      };
       records.push(record);
       return record;
     },
-    updateTarget: async (id, target) => {
+    update: async (id, input) => {
       const record = records.find((item) => item.id === id);
-      if (record) record.target = target;
+      if (record) Object.assign(record, input);
       return record;
     },
     remove: async (id) => {

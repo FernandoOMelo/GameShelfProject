@@ -12,7 +12,8 @@ import 'package:gameshelf_mobile/models/queue_item.dart';
 import 'package:gameshelf_mobile/models/stats.dart';
 import 'package:gameshelf_mobile/models/suggestion.dart';
 import 'package:gameshelf_mobile/models/timeline.dart';
-import 'package:gameshelf_mobile/providers/challenge_provider.dart';
+import 'package:gameshelf_mobile/models/mission.dart';
+import 'package:gameshelf_mobile/providers/missions_provider.dart';
 import 'package:gameshelf_mobile/providers/dashboard_provider.dart';
 import 'package:gameshelf_mobile/providers/goals_provider.dart';
 import 'package:gameshelf_mobile/providers/queue_provider.dart';
@@ -68,13 +69,13 @@ class FakeQueueNotifier extends QueueNotifier {
   Future<List<QueueItem>> build() async => items;
 }
 
-class FakeChallengeNotifier extends ChallengeNotifier {
-  FakeChallengeNotifier(this.challenge);
+class FakeMissionsNotifier extends MissionsNotifier {
+  FakeMissionsNotifier(this.missions);
 
-  final MainChallenge? challenge;
+  final List<Mission> missions;
 
   @override
-  Future<MainChallenge?> build() async => challenge;
+  Future<List<Mission>> build() async => missions;
 }
 
 void main() {
@@ -371,24 +372,43 @@ void main() {
         overrides: [
           dashboardRangeProvider.overrideWith((ref, range) async => dashboard),
           queueProvider.overrideWith(() => FakeQueueNotifier(const [])),
-          challengeProvider.overrideWith(
-            () => FakeChallengeNotifier(const MainChallenge(
-              title: 'Saga Souls',
-              listId: 'l1',
-              listName: 'Clássicos',
-              totalGames: 5,
-              completedGames: 2,
-              percent: 40,
-            )),
+          missionsProvider.overrideWith(
+            () => FakeMissionsNotifier(const [
+              Mission(
+                id: 'm1',
+                title: 'Saga Souls',
+                kind: 'LIST',
+                listName: 'Clássicos',
+                target: 5,
+                current: 2,
+                percent: 40,
+                done: false,
+                achieved: false,
+                isPrimary: true,
+              ),
+              Mission(
+                id: 'm2',
+                title: 'Jogar 50 horas',
+                kind: 'HOURS',
+                target: 50,
+                current: 10,
+                percent: 20,
+                done: false,
+                achieved: false,
+                isPrimary: false,
+              ),
+            ]),
           ),
         ],
         child: const MaterialApp(home: ProgressScreen()),
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('Missão principal'), findsOneWidget);
+      expect(find.text('MISSÃO PRINCIPAL'), findsOneWidget);
       expect(find.text('Saga Souls'), findsOneWidget);
       expect(find.textContaining('2 / 5 zerados'), findsOneWidget);
+      expect(find.text('Jogar 50 horas'), findsOneWidget);
+      expect(find.textContaining('10,0 de 50 h'), findsOneWidget);
       expect(find.text('Minutos por semana'), findsOneWidget);
       expect(find.text('300'), findsOneWidget);
     });
@@ -404,19 +424,43 @@ void main() {
         overrides: [
           dashboardRangeProvider.overrideWith((ref, range) async => dashboard),
           queueProvider.overrideWith(() => FakeQueueNotifier(const [])),
-          challengeProvider.overrideWith(() => FakeChallengeNotifier(null)),
+          missionsProvider.overrideWith(() => FakeMissionsNotifier(const [])),
         ],
         child: const MaterialApp(home: ProgressScreen()),
       ));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Defina um objetivo'), findsOneWidget);
+      expect(find.textContaining('Defina objetivos de médio prazo'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'abc');
       await tester.tap(find.widgetWithText(FilledButton, 'Salvar'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('entre 0 e 10080'), findsOneWidget);
+    });
+  });
+
+  group('Metas flexíveis', () {
+    test('parseia uma meta de texto livre com data limite', () {
+      final goal = GoalProgress.fromJson({
+        'id': 'g1', 'kind': 'CUSTOM', 'period': 'YEAR', 'year': 2026, 'month': null,
+        'title': 'Platinar um jogo', 'listName': null, 'dueDate': '2026-12-31', 'done': true,
+        'target': 1, 'current': 1, 'percent': 100, 'elapsedPercent': 10, 'achieved': true, 'onTrack': true,
+      });
+      expect(goal.hasPeriod, isFalse);
+      expect(goal.title, 'Platinar um jogo');
+      expect(goal.dueDate, '2026-12-31');
+      expect(goal.done, isTrue);
+    });
+
+    test('metas antigas, sem os campos novos, continuam válidas', () {
+      final goal = GoalProgress.fromJson({
+        'id': 'g2', 'kind': 'COMPLETED_GAMES', 'period': 'YEAR', 'year': 2026, 'month': null,
+        'target': 12, 'current': 3, 'percent': 25, 'elapsedPercent': 50, 'achieved': false, 'onTrack': false,
+      });
+      expect(goal.hasPeriod, isTrue);
+      expect(goal.title, isNull);
+      expect(goal.kindLabel, 'Jogos zerados');
     });
   });
 }

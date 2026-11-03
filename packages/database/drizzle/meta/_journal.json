@@ -204,6 +204,13 @@
             "when": 1793400000000,
             "tag": "0029_dlc_linked_game",
             "breakpoints": true
+        },
+        {
+            "idx": 29,
+            "version": "7",
+            "when": 1793500000000,
+            "tag": "0030_flexible_goals_and_missions",
+            "breakpoints": true
         }
     ]
 }

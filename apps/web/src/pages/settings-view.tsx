@@ -3,6 +3,7 @@ import type { Game, Platform } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 import { AchievistSyncPanel } from './achievist-sync-panel';
 import { BackupCard } from './backup-card';
+import { IntegrationHealthPanel } from './integration-health-panel';
 import { apiUrl } from './shared';
 
 /**
@@ -19,6 +20,8 @@ export function SettingsView({ platforms, games, weeklyHours, onRefresh }: {
 }) {
   return <section className="settings-page" aria-labelledby="settings-title">
     <div><p className="eyebrow">CONFIGURAÇÕES</p><h1 id="settings-title">Configurações</h1><p className="library-subtitle">Integrações externas, backup e preferências.</p></div>
+
+    <IntegrationHealthPanel />
 
     <AchievistSyncPanel games={games} platforms={platforms} onLinked={() => void onRefresh()} />
 

@@ -1,5 +1,5 @@
 import {
-  franchises, gameGenres, gameListEntries, gameLists, gamePlatforms, games, genres, goals, mainChallenge, planningSettings,
+  franchises, gameGenres, gameListEntries, gameLists, gamePlatforms, games, genres, goals, missions, planningSettings,
   platforms, playthroughs, queueEntries, sessions, sessionScreenshots, type Database,
 } from '@gameshelf/database';
 import type { BackupData } from '@gameshelf/contracts';
@@ -13,7 +13,7 @@ export class DrizzleBackupImporter implements BackupImporter {
 
   async importAll(data: BackupData): Promise<void> {
     await this.db.transaction(async (tx) => {
-      for (const table of [games, franchises, platforms, genres, gameLists, goals]) {
+      for (const table of [games, franchises, platforms, genres, gameLists, goals, missions]) {
         const [existing] = await tx.select({ id: table.id }).from(table).limit(1);
         if (existing) throw new LibraryNotEmptyError();
       }
@@ -59,12 +59,17 @@ export class DrizzleBackupImporter implements BackupImporter {
         ...list, createdAt: date(list.createdAt), updatedAt: date(list.updatedAt),
       }))));
       await insert(data.lists.flatMap((list) => list.gameIds.map((gameId) => ({ listId: list.id, gameId }))), (rows) => tx.insert(gameListEntries).values(rows));
-      await insert(data.goals, (rows) => tx.insert(goals).values(rows));
+      await insert(data.goals, (rows) => tx.insert(goals).values(rows.map((goal) => ({
+        ...goal, createdAt: goal.createdAt ? date(goal.createdAt) : new Date(),
+      }))));
+      await insert(data.missions, (rows) => tx.insert(missions).values(rows.map((mission) => ({
+        ...mission, createdAt: date(mission.createdAt), updatedAt: date(mission.updatedAt),
+      }))));
       await tx.insert(planningSettings).values({ id: 1, weeklyMinutes: data.weeklyMinutes })
         .onConflictDoUpdate({ target: planningSettings.id, set: { weeklyMinutes: data.weeklyMinutes, updatedAt: new Date() } });
-      if (data.challenge) {
-        await tx.insert(mainChallenge).values({ id: 1, ...data.challenge })
-          .onConflictDoUpdate({ target: mainChallenge.id, set: { ...data.challenge, updatedAt: new Date() } });
+      // Backups anteriores às missões só têm o desafio único: ele vira a missão principal.
+      if (data.challenge && data.missions.length === 0) {
+        await tx.insert(missions).values({ title: data.challenge.title, kind: 'LIST', listId: data.challenge.listId, isPrimary: true });
       }
     });
   }

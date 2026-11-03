@@ -17,7 +17,10 @@ const session = (gameId: string, startedAt: string, minutes: number): Session =>
   id: id(900), gameId, startedAt, endedAt: new Date(Date.parse(startedAt) + minutes * 60_000).toISOString(), durationMinutes: minutes,
   progress: null, location: null, notes: null, keyDecisions: null, tips: null, playthroughId: null, platformId: null, createdAt: startedAt, updatedAt: startedAt,
 });
-const goal = (values: Partial<GoalRecord> = {}): GoalRecord => ({ id: id(500), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 10, ...values });
+const goal = (values: Partial<GoalRecord> = {}): GoalRecord => ({
+  id: id(500), kind: 'COMPLETED_GAMES', period: 'YEAR', year: 2026, month: 0, target: 10,
+  title: null, description: null, listId: null, dueDate: null, done: false, createdAt: new Date('2026-01-01T00:00:00.000Z'), ...values,
+});
 
 describe('goal progress', () => {
   it('counts completions in the year, including archived games, and ignores other years', () => {
@@ -55,5 +58,31 @@ describe('goal progress', () => {
   it('orders goals from the most recent period', () => {
     const goals = [goal({ id: id(1), year: 2025 }), goal({ id: id(2), period: 'MONTH', month: 3 }), goal({ id: id(3), period: 'MONTH', month: 5 })];
     expect(buildGoalProgress({ goals, games: [], sessions: [], today: '2026-06-01' }).map((item) => item.id)).toEqual([id(3), id(2), id(1)]);
+  });
+
+  describe('metas flexíveis', () => {
+    const created = new Date('2026-03-01T00:00:00.000Z');
+
+    it('zerar uma lista conta os jogos zerados da lista', () => {
+      const games = [make(1), make(2, { status: 'PLAYING' }), make(3)];
+      const [result] = buildGoalProgress({
+        goals: [goal({ kind: 'COMPLETE_LIST', listId: id(70), target: 1, createdAt: created })], games, sessions: [],
+        lists: [{ id: id(70), name: 'Clássicos', gameIds: [id(1), id(2), id(3)] }], today: '2026-03-10',
+      });
+      expect(result).toMatchObject({ kind: 'COMPLETE_LIST', listName: 'Clássicos', current: 2, target: 3, achieved: false, onTrack: true });
+    });
+
+    it('horas seguidas usam a maior sessão dentro da janela, não a soma', () => {
+      const sessions = [session(id(1), '2026-03-05T10:00:00.000Z', 120), session(id(1), '2026-03-06T10:00:00.000Z', 150), session(id(1), '2026-02-01T10:00:00.000Z', 600)];
+      const [result] = buildGoalProgress({ goals: [goal({ kind: 'SESSION_HOURS', target: 4, createdAt: created })], games: [make(1)], sessions, today: '2026-03-10' });
+      expect(result).toMatchObject({ current: 2.5, percent: 62.5, achieved: false });
+    });
+
+    it('texto livre só avança pela marcação manual, e a data limite define o ritmo', () => {
+      const open = buildGoalProgress({ goals: [goal({ kind: 'CUSTOM', title: 'Platinar um jogo', dueDate: '2026-03-11', createdAt: created })], games: [], sessions: [], today: '2026-03-10' })[0];
+      expect(open).toMatchObject({ title: 'Platinar um jogo', current: 0, achieved: false, onTrack: false });
+      const done = buildGoalProgress({ goals: [goal({ kind: 'CUSTOM', title: 'Platinar um jogo', done: true, createdAt: created })], games: [], sessions: [], today: '2026-03-10' })[0];
+      expect(done).toMatchObject({ achieved: true, percent: 100 });
+    });
   });
 });

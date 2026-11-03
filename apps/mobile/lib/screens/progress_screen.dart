@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/planning_api.dart';
-import '../models/challenge.dart';
 import '../models/dashboard.dart';
 import '../models/game.dart';
-import '../models/game_list.dart';
 import '../models/queue_item.dart';
 import '../models/suggestion.dart';
 import '../providers/active_session_provider.dart';
-import '../providers/challenge_provider.dart';
 import '../providers/dashboard_provider.dart';
-import '../providers/lists_provider.dart';
 import '../providers/queue_provider.dart';
 import '../providers/suggestions_provider.dart';
 import '../widgets/game_cover.dart';
+import '../widgets/missions_card.dart';
 import '../widgets/section.dart';
 import 'end_session_sheet.dart';
 import 'game_detail_screen.dart';
@@ -232,7 +229,7 @@ class _DashboardBody extends ConsumerWidget {
         const SizedBox(height: 20),
         const _GoalsEntry(),
         const SizedBox(height: 20),
-        const _ChallengeCard(),
+        const MissionsCard(),
         const SizedBox(height: 20),
         _ForecastPanel(dashboard: dashboard),
         const SizedBox(height: 20),
@@ -620,176 +617,6 @@ class _GoalsEntry extends StatelessWidget {
 }
 
 /// Missão principal (`/challenge`): uma lista acompanhada como objetivo.
-class _ChallengeCard extends ConsumerStatefulWidget {
-  const _ChallengeCard();
-
-  @override
-  ConsumerState<_ChallengeCard> createState() => _ChallengeCardState();
-}
-
-class _ChallengeCardState extends ConsumerState<_ChallengeCard> {
-  bool _busy = false;
-
-  void _snack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _edit(MainChallenge? challenge) async {
-    final List<GameListSummary> lists;
-    try {
-      lists = await ref.read(listsProvider.future);
-    } catch (_) {
-      _snack('Não foi possível carregar as listas.');
-      return;
-    }
-    if (!mounted) return;
-    if (lists.isEmpty) {
-      _snack('Crie uma lista na aba Mais para acompanhá-la como missão.');
-      return;
-    }
-
-    final titleController = TextEditingController(text: challenge?.title ?? '');
-    var listId = challenge?.listId ?? lists.first.id;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(challenge == null ? 'Definir missão' : 'Editar missão'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Objetivo'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: listId,
-                decoration: const InputDecoration(labelText: 'Lista acompanhada'),
-                items: [
-                  for (final list in lists)
-                    DropdownMenuItem(
-                      value: list.id,
-                      child: Text('${list.name} (${list.gameCount})'),
-                    ),
-                ],
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => listId = value);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Salvar'),
-            ),
-          ],
-        ),
-      ),
-    );
-    final title = titleController.text.trim();
-    titleController.dispose();
-    if (saved != true) return;
-
-    if (title.isEmpty) {
-      _snack('Informe o objetivo da missão.');
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await ref.read(challengeProvider.notifier).save(title: title, listId: listId);
-    } catch (_) {
-      _snack('Não foi possível salvar a missão.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _clear() async {
-    setState(() => _busy = true);
-    try {
-      await ref.read(challengeProvider.notifier).clear();
-    } catch (_) {
-      _snack('Não foi possível remover a missão.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final async = ref.watch(challengeProvider);
-    final challenge = async.valueOrNull;
-    final loading = async.isLoading && !async.hasValue;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2A),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text('Missão principal',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              ),
-              if (challenge != null)
-                IconButton(
-                  tooltip: 'Remover missão',
-                  onPressed: _busy ? null : _clear,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-              TextButton(
-                onPressed: _busy ? null : () => _edit(challenge),
-                child: Text(challenge == null ? 'Definir missão' : 'Editar missão'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          if (loading)
-            const Text('Carregando…',
-                style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 13))
-          else if (challenge == null)
-            const Text('Defina um objetivo de longo prazo acompanhando uma lista.',
-                style: TextStyle(color: Color(0xFF6B6B7E), fontSize: 13))
-          else ...[
-            Text(challenge.title,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: (challenge.percent / 100).clamp(0, 1),
-                minHeight: 8,
-                backgroundColor: const Color(0xFF2A2A3A),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF6C63FF)),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${challenge.completedGames} / ${challenge.totalGames} zerados '
-              '(${challenge.percent.toStringAsFixed(0)}%) · ${challenge.listName}',
-              style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// Meta semanal (`/planning/settings`), usada na previsão do backlog.
 class _WeeklyGoalCard extends ConsumerStatefulWidget {
   final int initialMinutes;

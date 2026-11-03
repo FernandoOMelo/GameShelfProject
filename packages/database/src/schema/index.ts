@@ -45,7 +45,7 @@ export const gameStatus = pgEnum('game_status', [
 
 export const gamePriority = pgEnum('game_priority', ['LOW', 'NORMAL', 'HIGH']);
 
-export const goalKind = pgEnum('goal_kind', ['COMPLETED_GAMES', 'PLAYED_HOURS']);
+export const goalKind = pgEnum('goal_kind', ['COMPLETED_GAMES', 'PLAYED_HOURS', 'COMPLETE_LIST', 'SESSION_HOURS', 'CUSTOM']);
 export const goalPeriod = pgEnum('goal_period', ['YEAR', 'MONTH']);
 export const gameDifficulty = pgEnum('game_difficulty', ['C', 'B', 'A', 'AA', 'AAA']);
 
@@ -185,12 +185,43 @@ export const goals = pgTable('goals', {
   year: integer('year').notNull(),
   month: integer('month').notNull().default(0),
   target: integer('target').notNull(),
+  // Metas flexíveis (ADR-040): texto livre, lista a zerar e data limite livre.
+  title: text('title'),
+  description: text('description'),
+  listId: uuid('list_id').references(() => gameLists.id, { onDelete: 'cascade' }),
+  dueDate: date('due_date'),
+  done: boolean('done').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  uniqueIndex('goals_kind_period_year_month_unique').on(table.kind, table.period, table.year, table.month),
+  // Só as metas por período são únicas; as demais podem se repetir.
+  uniqueIndex('goals_kind_period_year_month_unique').on(table.kind, table.period, table.year, table.month).where(sql`${table.kind} IN ('COMPLETED_GAMES', 'PLAYED_HOURS')`),
   check('goals_target_positive', sql`${table.target} > 0`),
   check('goals_period_month', sql`(${table.period} = 'YEAR' AND ${table.month} = 0) OR (${table.period} = 'MONTH' AND ${table.month} BETWEEN 1 AND 12)`),
+]);
+
+// Missões (ADR-040): várias ativas, uma delas principal. Substitui o desafio
+// único `main_challenge`, cujos dados foram copiados para cá como missão principal.
+export const missions = pgTable('missions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  kind: text('kind').notNull(),
+  listId: uuid('list_id').references(() => gameLists.id, { onDelete: 'cascade' }),
+  target: integer('target'),
+  startsOn: date('starts_on').notNull().defaultNow(),
+  dueDate: date('due_date'),
+  done: boolean('done').notNull().default(false),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('missions_single_primary').on(table.isPrimary).where(sql`${table.isPrimary}`),
+  check('missions_kind_valid', sql`${table.kind} IN ('LIST', 'GAMES_COUNT', 'HOURS', 'CUSTOM')`),
+  check('missions_title_not_blank', sql`length(trim(${table.title})) > 0`),
+  check('missions_target_positive', sql`${table.target} IS NULL OR ${table.target} > 0`),
+  check('missions_list_required', sql`${table.kind} <> 'LIST' OR ${table.listId} IS NOT NULL`),
+  check('missions_due_not_before_start', sql`${table.dueDate} IS NULL OR ${table.dueDate} >= ${table.startsOn}`),
 ]);
 
 export const sessionScreenshots = pgTable('session_screenshots', {

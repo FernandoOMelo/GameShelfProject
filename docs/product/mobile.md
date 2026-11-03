@@ -135,3 +135,7 @@ Para compilar sem acesso ao CDN do Google, ver
 ## Implementação inicial da PWA
 
 A interface adapta biblioteca, fila, painel e formulários para telas estreitas. O botão de registro no jogo atual abre os detalhes com início e término pré-preenchidos; o usuário pode alterar horários e informar progresso e os quatro campos do diário da sessão antes de salvar.
+
+## Metas, missões e integrações (ADR-040)
+
+O app tem as metas flexíveis (jogos zerados, horas, zerar uma lista, horas seguidas e texto livre, com data limite livre), a lista de missões com uma principal e, em Configurações, a saúde do IGDB, da RAWG e do Achievist com teste sob demanda. A biblioteca mostra horas e conquistas nos cartões e ordena por horas jogadas (ADR-039).
