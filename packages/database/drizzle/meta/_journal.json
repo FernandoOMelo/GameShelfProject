@@ -197,6 +197,13 @@
             "when": 1793300000000,
             "tag": "0028_platform_brand_color",
             "breakpoints": true
+        },
+        {
+            "idx": 28,
+            "version": "7",
+            "when": 1793400000000,
+            "tag": "0029_dlc_linked_game",
+            "breakpoints": true
         }
     ]
 }

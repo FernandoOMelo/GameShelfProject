@@ -7,7 +7,8 @@ import { registerDlcRoutes } from './routes.js';
 import type { RawgAchievementProvider } from '../game-platforms/rawg-achievements.js';
 
 const gameId = '00000000-0000-4000-8000-000000000001';
-const games = { find: async (id: string) => id === gameId ? { id: gameId, title: 'Final Fantasy VII Rebirth' } : undefined } as GameRepository;
+const otherGameId = '00000000-0000-4000-8000-000000000002';
+const games = { find: async (id: string) => id === gameId ? { id: gameId, title: 'Final Fantasy VII Rebirth' } : id === otherGameId ? { id: otherGameId, title: 'INTERmission' } : undefined } as GameRepository;
 
 function baseRecord(id: string, input: DlcInput): DlcRecord {
   return {
@@ -15,6 +16,7 @@ function baseRecord(id: string, input: DlcInput): DlcRecord {
     releaseDate: input.releaseDate ?? null, owned: input.owned ?? false, status: input.status ?? 'NOT_STARTED',
     estimatedHours: input.estimatedHours ?? null, playedHours: input.playedHours ?? 0,
     rawgId: input.rawgId ?? null, rawgSlug: input.rawgSlug ?? null, rawgName: input.rawgName ?? null,
+    linkedGameId: input.linkedGameId ?? null,
     createdAt: new Date('2026-10-01T00:00:00.000Z'), updatedAt: new Date('2026-10-01T00:00:00.000Z'),
   };
 }
@@ -98,5 +100,22 @@ describe('rotas de DLC', () => {
     const response = await app.inject(`/games/${gameId}/dlcs/${created.id}/achievements`);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([]);
+  });
+
+  it('vincula a DLC a um jogo cadastrado, recusando o próprio jogo base e jogos inexistentes', async () => {
+    const app = Fastify();
+    apps.push(app);
+    registerDlcRoutes(app, games, fakeDlcRepository());
+
+    const created = await app.inject({ method: 'POST', url: `/games/${gameId}/dlcs`, payload: { name: 'INTERmission', linkedGameId: otherGameId } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().linkedGameId).toBe(otherGameId);
+    const id = created.json().id as string;
+
+    expect((await app.inject({ method: 'PATCH', url: `/games/${gameId}/dlcs/${id}`, payload: { linkedGameId: gameId } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PATCH', url: `/games/${gameId}/dlcs/${id}`, payload: { linkedGameId: '00000000-0000-4000-8000-0000000000ff' } })).statusCode).toBe(400);
+    const unlinked = await app.inject({ method: 'PATCH', url: `/games/${gameId}/dlcs/${id}`, payload: { linkedGameId: null } });
+    expect(unlinked.statusCode).toBe(200);
+    expect(unlinked.json().linkedGameId).toBeNull();
   });
 });

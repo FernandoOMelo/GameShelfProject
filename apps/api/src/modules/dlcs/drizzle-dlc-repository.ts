@@ -21,6 +21,7 @@ export class DrizzleDlcRepository implements DlcRepository {
       estimatedHours: input.estimatedHours === undefined || input.estimatedHours === null ? null : String(input.estimatedHours),
       playedHours: input.playedHours === undefined ? '0' : String(input.playedHours),
       rawgId: input.rawgId ?? null, rawgSlug: input.rawgSlug ?? null, rawgName: input.rawgName ?? null,
+      linkedGameId: input.linkedGameId ?? null,
     }).returning();
     return row!;
   }
@@ -38,6 +39,7 @@ export class DrizzleDlcRepository implements DlcRepository {
       ...(input.rawgId !== undefined && { rawgId: input.rawgId }),
       ...(input.rawgSlug !== undefined && { rawgSlug: input.rawgSlug }),
       ...(input.rawgName !== undefined && { rawgName: input.rawgName }),
+      ...(input.linkedGameId !== undefined && { linkedGameId: input.linkedGameId }),
       updatedAt: new Date(),
     }).where(and(eq(dlcs.gameId, gameId), eq(dlcs.id, id))).returning();
     return row;

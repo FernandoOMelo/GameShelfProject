@@ -15,8 +15,10 @@ type Props = {
 };
 
 /**
- * Lista de conquistas do jogo: catálogo RAWG (vinculado automaticamente ao
- * salvar o jogo) cruzado com os desbloqueios do Achievist. Secretas ficam
+ * Lista de conquistas do jogo: catálogo RAWG (vinculado automaticamente) cruzado
+ * com os desbloqueios do Achievist. Cada plataforma tem o seu conjunto — os
+ * troféus do PlayStation não são as conquistas do Steam —, então um jogo
+ * multiplataforma mostra uma aba por plataforma. Secretas ficam
  * ocultas por padrão — o toggle só decide se a linha aparece na lista, o
  * nome/descrição continuam mascarados pelo backend até desbloquear.
  */
@@ -25,11 +27,13 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
   const [showSecrets, setShowSecrets] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'UNLOCKED' | 'LOCKED'>('ALL');
+  const [groupId, setGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setData('loading');
     setShowSecrets(false);
+    setGroupId(null);
     fetch(`${apiUrl}/games/${gameId}/achievements`)
       .then((response) => { if (!response.ok) throw new Error('falhou'); return response.json() as Promise<GameAchievementsResponse>; })
       .then((body) => { if (!active) return; setData(body); onDataChange?.(body); })
@@ -39,18 +43,25 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
 
   if (data === 'loading') return <p className="session-empty">Carregando conquistas…</p>;
   if (data === 'failed') return <p role="alert" className="session-feedback">Não foi possível carregar as conquistas.</p>;
-  if (!data.catalogAvailable) return <p className="session-empty">Ainda sem catálogo vinculado. Ele é buscado automaticamente na RAWG ao salvar o jogo — tente de novo em instantes, ou edite e salve o jogo outra vez para forçar uma nova busca.</p>;
+  if (!data.catalogAvailable) return <p className="session-empty">Ainda sem catálogo vinculado. A busca na RAWG é refeita automaticamente quando você abre esta aba (confira se a chave RAWG_API_KEY está configurada na API).</p>;
 
+  // Respostas em cache de antes do agrupamento por plataforma não trazem `groups`.
+  const groups = data.groups ?? (data.achievements.length === 0 ? [] : [{ id: 'all', platformId: null, name: 'Conquistas', total: data.total, unlockedCount: data.unlockedCount, percent: data.percent, completionTrophyId: data.completionTrophyId, achievements: data.achievements }]);
+  const group = groups.find((item) => item.id === groupId) ?? groups[0];
+  const groupAchievements = group?.achievements ?? [];
   const term = search.trim().toLowerCase();
-  const visible = data.achievements.filter((item) => (showSecrets || !item.secret)
+  const visible = groupAchievements.filter((item) => (showSecrets || !item.secret)
     && (filter === 'ALL' || (filter === 'UNLOCKED') === item.unlocked)
     && (!term || `${item.name ?? ''} ${item.description ?? ''}`.toLowerCase().includes(term)));
-  const hiddenCount = data.achievements.filter((item) => item.secret).length;
+  const hiddenCount = groupAchievements.filter((item) => item.secret).length;
 
   return <>
+    {groups.length > 1 && <div className="details-tabs ach-platform-tabs" role="tablist" aria-label="Plataformas com conquistas">
+      {groups.map((item) => <button key={item.id} type="button" role="tab" aria-selected={item.id === group?.id} className={item.id === group?.id ? 'is-active' : ''} onClick={() => setGroupId(item.id)}>{item.name}<span className="details-tab-count">{item.unlockedCount}/{item.total}</span></button>)}
+    </div>}
     <div className="ach-summary">
-      <span className="achievement-summary-badge">{data.unlockedCount}/{data.total} · {data.percent}%</span>
-      <div className="achievement-progress-wrap"><div className="achievement-progress-bar" style={{ width: `${data.percent}%` }} /></div>
+      <span className="achievement-summary-badge">{group?.unlockedCount ?? 0}/{group?.total ?? 0} · {group?.percent ?? 0}%</span>
+      <div className="achievement-progress-wrap"><div className="achievement-progress-bar" style={{ width: `${group?.percent ?? 0}%` }} /></div>
     </div>
     <div className="ach-toolbar">
       <input type="search" aria-label="Pesquisar conquistas" placeholder="Pesquisar" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -63,7 +74,7 @@ export function GameAchievementsPanel({ gameId, onDataChange }: Props) {
       </select>
     </div>
     {visible.length === 0
-      ? <p className="session-empty">{data.total === 0 ? 'A RAWG não informa conquistas para este jogo.' : 'Nenhuma conquista para mostrar com esses filtros.'}</p>
+      ? <p className="session-empty">{groupAchievements.length === 0 ? 'A RAWG não informa conquistas para este jogo.' : 'Nenhuma conquista para mostrar com esses filtros.'}</p>
       : <ul className="achievement-list achievement-list-rich">{visible.map((item) => <li key={item.id} className={`${item.unlocked ? 'achievement-unlocked' : 'achievement-locked'}${item.secret ? ' achievement-secret' : ''}`}>
         {item.secret
           ? <span className="achievement-icon achievement-icon-secret" aria-hidden="true"><i className="ach-eye-off" /></span>

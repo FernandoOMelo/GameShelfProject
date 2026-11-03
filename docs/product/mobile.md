@@ -90,6 +90,7 @@ Cinco abas, com paridade funcional em relação à web
   zerado sugeridas pelas conquistas do Achievist), **Conquistas** (busca, filtro e
   secretas ocultas por padrão), **Sessões** (totais, horas retroativas em horas e
   minutos, diário e histórico, com registrar, editar e excluir) e **DLC & Franquia**.
+  Quando aberto a partir da biblioteca ou de uma lista, o detalhe tem **Anterior/Próximo** na ordem e filtros da origem; o menu também tem **Mesclar duplicado** e, nas conquistas, uma aba por plataforma ([ADR-038](../decisions/ADR-038-multiplatform-achievements-merge-and-dlc-link.md)). Em **Agora jogando**, tocar no jogo abre o detalhe.
   Favorito e entrada/saída da fila ficam no menu. O ícone de relógio no card abre o **registro retroativo** — dia
   (Hoje, Ontem ou outra data) e duração em um toque, com a sessão terminando no
   horário atual;

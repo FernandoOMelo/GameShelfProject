@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { Dlc, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
+import type { Dlc, Game, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
 import { Button, Switch } from '@gameshelf/ui';
 import { apiUrl, formatHoursMinutes } from './shared';
 
@@ -7,9 +7,22 @@ const statusLabels: Record<Dlc['status'], string> = { NOT_STARTED: 'Não iniciad
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`));
 
-export function DlcPanel({ gameId }: { gameId: string }) {
+/** Estado da DLC quando ela é um jogo cadastrado: vem do ciclo de vida do jogo. */
+const linkedStatusLabel = (status: Game['status']) => status === 'COMPLETED' ? 'Concluída' : status === 'PLAYING' || status === 'PAUSED' ? 'Jogando' : 'Não iniciada';
+
+const gameOptionLabel = (game: Game) => game.releaseYear ? `${game.title} (${game.releaseYear})` : game.title;
+
+type Props = {
+  gameId: string;
+  /** Biblioteca, para vincular a DLC a um jogo já cadastrado (ADR-038). */
+  games?: Game[];
+  onOpenGame?: (gameId: string) => void;
+};
+
+export function DlcPanel({ gameId, games = [], onOpenGame }: Props) {
   const [dlcs, setDlcs] = useState<Dlc[] | null>(null);
   const [adding, setAdding] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [candidates, setCandidates] = useState<Record<string, RawgAchievementCandidate[] | 'loading' | 'failed'>>({});
@@ -25,19 +38,36 @@ export function DlcPanel({ gameId }: { gameId: string }) {
   async function createDlc(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') ?? '').trim();
+    const linkedLabel = String(form.get('linkedGame') ?? '').trim();
+    const linked = findGameByLabel(linkedLabel);
+    const name = String(form.get('name') ?? '').trim() || linked?.title || '';
     if (!name) { setMessage('Informe o nome da DLC.'); return; }
+    if (linkedLabel && !linked) { setMessage('Escolha um jogo da lista para vincular.'); return; }
     setBusy(true);
     setMessage('');
     try {
       const response = await fetch(`${apiUrl}/games/${gameId}/dlcs`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, releaseDate: String(form.get('releaseDate') ?? '') || null }),
+        body: JSON.stringify({ name, releaseDate: String(form.get('releaseDate') ?? '') || null, ...(linked && { linkedGameId: linked.id, owned: linked.owned }) }),
       });
       if (!response.ok) { setMessage('Não foi possível adicionar a DLC.'); return; }
       await load();
       setAdding(false);
     } finally { setBusy(false); }
+  }
+
+  const linkableGames = games.filter((game) => game.id !== gameId);
+  function findGameByLabel(label: string): Game | undefined {
+    const wanted = label.trim();
+    return wanted ? linkableGames.find((game) => gameOptionLabel(game) === wanted) ?? linkableGames.find((game) => game.title === wanted) : undefined;
+  }
+
+  async function linkGame(dlc: Dlc, label: string) {
+    const target = findGameByLabel(label);
+    if (!target) { setMessage('Escolha um jogo da lista para vincular.'); return; }
+    setMessage('');
+    await patch(dlc, { linkedGameId: target.id });
+    setLinking(null);
   }
 
   async function patch(dlc: Dlc, body: Record<string, unknown>) {
@@ -90,24 +120,36 @@ export function DlcPanel({ gameId }: { gameId: string }) {
 
   if (dlcs === null) return <p className="session-empty">Carregando DLCs…</p>;
 
+  const linkedGame = (dlc: Dlc) => dlc.linkedGameId ? games.find((game) => game.id === dlc.linkedGameId) : undefined;
+
   return <div className="dlc-panel">
+    <datalist id="dlc-link-games">{linkableGames.map((game) => <option key={game.id} value={gameOptionLabel(game)} />)}</datalist>
     {dlcs.length === 0 && !adding && <p className="session-empty">Nenhuma DLC cadastrada para este jogo.</p>}
     <ul className="dlc-list">{dlcs.map((dlc) => <li key={dlc.id} className="dlc-item">
       <div className="dlc-item-head">
         <div>
           <strong>{dlc.name}</strong>
-          <span>{[dlc.releaseDate ? formatDate(dlc.releaseDate) : null, statusLabels[dlc.status]].filter(Boolean).join(' · ')}</span>
+          <span>{[dlc.releaseDate ? formatDate(dlc.releaseDate) : null, linkedGame(dlc) ? linkedStatusLabel(linkedGame(dlc)!.status) : statusLabels[dlc.status]].filter(Boolean).join(' · ')}</span>
         </div>
-        <label className="form-field checkbox-field dlc-owned"><span>Possuo</span><Switch checked={dlc.owned} onChange={(event) => void patch(dlc, { owned: event.target.checked })} /></label>
+        {!dlc.linkedGameId && <label className="form-field checkbox-field dlc-owned"><span>Possuo</span><Switch checked={dlc.owned} onChange={(event) => void patch(dlc, { owned: event.target.checked })} /></label>}
       </div>
-      <div className="dlc-item-controls">
-        <select aria-label={`Status de ${dlc.name}`} value={dlc.status} disabled={busy} onChange={(event) => void patch(dlc, { status: event.target.value })}>
-          {(Object.keys(statusLabels) as Array<Dlc['status']>).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
-        </select>
-        <label>Estimativa (h)<input type="number" min="0" step="0.25" defaultValue={dlc.estimatedHours ?? ''} onBlur={(event) => { const value = event.target.value; void patch(dlc, { estimatedHours: value === '' ? null : Number(value) }); }} /></label>
-        <label>Jogadas (h)<input type="number" min="0" step="0.25" defaultValue={dlc.playedHours} onBlur={(event) => void patch(dlc, { playedHours: Number(event.target.value) || 0 })} /></label>
-      </div>
+      {dlc.linkedGameId
+        ? <p className="session-empty dlc-linked">Vinculada ao jogo cadastrado <strong>{linkedGame(dlc)?.title ?? 'jogo removido'}</strong>: o progresso e as horas vêm dele.{linkedGame(dlc) && onOpenGame && <> <button type="button" className="session-edit" onClick={() => onOpenGame(dlc.linkedGameId!)}>Abrir jogo</button></>}</p>
+        : <div className="dlc-item-controls">
+          <select aria-label={`Status de ${dlc.name}`} value={dlc.status} disabled={busy} onChange={(event) => void patch(dlc, { status: event.target.value })}>
+            {(Object.keys(statusLabels) as Array<Dlc['status']>).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+          </select>
+          <label>Estimativa (h)<input type="number" min="0" step="0.25" defaultValue={dlc.estimatedHours ?? ''} onBlur={(event) => { const value = event.target.value; void patch(dlc, { estimatedHours: value === '' ? null : Number(value) }); }} /></label>
+          <label>Jogadas (h)<input type="number" min="0" step="0.25" defaultValue={dlc.playedHours} onBlur={(event) => void patch(dlc, { playedHours: Number(event.target.value) || 0 })} /></label>
+        </div>}
+      {linking === dlc.id && <form className="dlc-link-form" onSubmit={(event) => { event.preventDefault(); void linkGame(dlc, String(new FormData(event.currentTarget).get('linkedGame') ?? '')); }}>
+        <label className="form-field">Jogo cadastrado<input name="linkedGame" list="dlc-link-games" autoFocus placeholder="Digite o título do jogo" /></label>
+        <div className="session-actions"><Button type="submit" disabled={busy}>Vincular</Button><button type="button" className="cancel-button" onClick={() => setLinking(null)}>Cancelar</button></div>
+      </form>}
       <div className="session-item-actions">
+        {dlc.linkedGameId
+          ? <button type="button" className="session-edit" disabled={busy} onClick={() => void patch(dlc, { linkedGameId: null })}>Desvincular jogo</button>
+          : games.length > 0 && <button type="button" className="session-edit" onClick={() => { setLinking(dlc.id); setMessage(''); }}>Vincular a jogo cadastrado</button>}
         {dlc.rawgId
           ? <button type="button" className="session-edit" onClick={() => void toggleAchievements(dlc)}>{achievements[dlc.id] ? 'Ocultar conquistas' : 'Ver conquistas'}</button>
           : <button type="button" className="session-edit" onClick={() => void searchRawg(dlc)}>Vincular catálogo RAWG</button>}
@@ -121,12 +163,13 @@ export function DlcPanel({ gameId }: { gameId: string }) {
       {Array.isArray(achievements[dlc.id]) && (achievements[dlc.id] as RawgAchievement[]).length === 0
         ? null
         : Array.isArray(achievements[dlc.id]) && <ul className="achievement-list">{(achievements[dlc.id] as RawgAchievement[]).map((achievement) => <li key={achievement.id}><span className="achievement-icon" aria-hidden="true">○</span><div className="achievement-body"><strong>{achievement.name}</strong>{achievement.description && <p>{achievement.description}</p>}</div>{achievement.percent !== null && <span className="achievement-rarity">{achievement.percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>}</li>)}</ul>}
-      {dlc.estimatedHours != null && dlc.playedHours > 0 && <p className="session-empty">{formatHoursMinutes(dlc.playedHours)} jogadas de {formatHoursMinutes(dlc.estimatedHours)} estimadas.</p>}
+      {!dlc.linkedGameId && dlc.estimatedHours != null && dlc.playedHours > 0 && <p className="session-empty">{formatHoursMinutes(dlc.playedHours)} jogadas de {formatHoursMinutes(dlc.estimatedHours)} estimadas.</p>}
     </li>)}</ul>
 
     {adding ? <form className="session-form" onSubmit={(event) => void createDlc(event)}>
-      <label className="form-field">Nome<input name="name" required maxLength={200} autoFocus /></label>
+      <label className="form-field">Nome<input name="name" maxLength={200} autoFocus /></label>
       <label className="form-field">Lançamento<input name="releaseDate" type="date" /></label>
+      {games.length > 0 && <label className="form-field form-wide">Jogo cadastrado (opcional)<input name="linkedGame" list="dlc-link-games" placeholder="Se esta DLC já está na biblioteca como jogo, escolha-o" /></label>}
       <div className="form-wide session-actions"><Button type="submit" disabled={busy}>Adicionar DLC</Button><button type="button" className="cancel-button" onClick={() => setAdding(false)}>Cancelar</button></div>
     </form> : <Button type="button" onClick={() => { setAdding(true); setMessage(''); }}>Adicionar DLC</Button>}
     {message && <p role="alert" className="session-feedback">{message}</p>}

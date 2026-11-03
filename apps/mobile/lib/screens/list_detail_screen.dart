@@ -54,6 +54,7 @@ class ListDetailScreen extends ConsumerWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (_, index) => _GameRow(
                     game: value.games[index],
+                    siblings: value.games,
                     onRemove: () => _removeGame(context, ref, value.games[index]),
                   ),
                 ),
@@ -128,9 +129,10 @@ class ListDetailScreen extends ConsumerWidget {
 
 class _GameRow extends StatelessWidget {
   final Game game;
+  final List<Game> siblings;
   final VoidCallback onRemove;
 
-  const _GameRow({required this.game, required this.onRemove});
+  const _GameRow({required this.game, required this.siblings, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +143,7 @@ class _GameRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => GameDetailScreen(game: game)),
+          MaterialPageRoute(builder: (_) => GameDetailScreen(game: game, siblings: siblings)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(10),

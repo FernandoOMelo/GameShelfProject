@@ -38,6 +38,8 @@ import { registerSavedFilterRoutes } from './modules/saved-filters/routes.js';
 import type { GamePlatformRepository } from './modules/game-platforms/repository.js';
 import type { ExternalAchievementRepository } from './modules/game-platforms/achievement-repository.js';
 import { registerGamePlatformRoutes } from './modules/game-platforms/routes.js';
+import { registerGameMergeRoutes } from './modules/games/merge-routes.js';
+import type { GameMergeRepository } from './modules/games/merge.js';
 import { registerRawgAchievementRoutes } from './modules/game-platforms/rawg-achievement-routes.js';
 import type { RawgAchievementRepository, RawgAchievementProvider } from './modules/game-platforms/rawg-achievements.js';
 import type { DlcRepository } from './modules/dlcs/repository.js';
@@ -50,9 +52,17 @@ import type { ExternalMatchQueueRepository } from './modules/integrations/match-
 import { registerIntegrationRoutes } from './modules/integrations/routes.js';
 import { ExternalSyncRunner } from './modules/integrations/sync-runner.js';
 
-export function buildApp(options: { rawgAchievementRepository?: RawgAchievementRepository; rawgAchievementProvider?: RawgAchievementProvider; dlcRepository?: DlcRepository; externalAchievementRepository?: ExternalAchievementRepository; externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { gameMergeRepository?: GameMergeRepository; rawgAchievementRepository?: RawgAchievementRepository; rawgAchievementProvider?: RawgAchievementProvider; dlcRepository?: DlcRepository; externalAchievementRepository?: ExternalAchievementRepository; externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
+  // Clientes como o app Flutter (Dio) enviam `Content-Type: application/json` em
+  // todas as requisições, inclusive DELETE sem corpo. O parser padrão do Fastify
+  // responde 400 a corpo vazio; aqui o corpo vazio vira "sem corpo".
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+    const text = typeof body === 'string' ? body : body.toString('utf8');
+    if (text.trim() === '') return done(null, undefined);
+    try { done(null, JSON.parse(text)); } catch (error) { (error as { statusCode?: number }).statusCode = 400; done(error as Error, undefined); }
+  });
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
     if (origin === webOrigin) {
@@ -86,7 +96,8 @@ export function buildApp(options: { rawgAchievementRepository?: RawgAchievementR
         : undefined,
       options.sessionRepository));
   }
-  if (options.gameRepository && options.rawgAchievementRepository) app.register((instance) => registerRawgAchievementRoutes(instance, options.gameRepository!, options.rawgAchievementRepository!, options.rawgAchievementProvider, options.gamePlatformRepository && options.externalAchievementRepository ? { gamePlatforms: options.gamePlatformRepository, externalAchievements: options.externalAchievementRepository } : undefined));
+  if (options.gameRepository && options.rawgAchievementRepository) app.register((instance) => registerRawgAchievementRoutes(instance, options.gameRepository!, options.rawgAchievementRepository!, options.rawgAchievementProvider, options.gamePlatformRepository && options.externalAchievementRepository ? { gamePlatforms: options.gamePlatformRepository, externalAchievements: options.externalAchievementRepository, platforms: options.platformRepository } : undefined));
+  if (options.gameRepository && options.gameMergeRepository) app.register((instance) => registerGameMergeRoutes(instance, options.gameRepository!, options.gameMergeRepository!, options.backlogRepository));
   if (options.gameRepository && options.dlcRepository) app.register((instance) => registerDlcRoutes(instance, options.gameRepository!, options.dlcRepository!, options.rawgAchievementProvider));
   if (options.gameRepository && options.platformRepository && options.playthroughRepository) {
     app.register((instance) => registerPlaythroughRoutes(instance, options.gameRepository!, options.platformRepository!, options.playthroughRepository!, options.sessionRepository));

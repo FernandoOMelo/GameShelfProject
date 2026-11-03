@@ -419,10 +419,16 @@ export const dlcs = pgTable('dlcs', {
   rawgId: integer('rawg_id'),
   rawgSlug: text('rawg_slug'),
   rawgName: text('rawg_name'),
+  // Jogo cadastrado que representa esta DLC (ADR-038). Metadados costumam trazer
+  // a DLC como jogo à parte, gerando um cadastro duplicado; com o vínculo, o
+  // progresso e as horas passam a vir desse jogo. Apagar o jogo só solta o vínculo.
+  linkedGameId: uuid('linked_game_id').references(() => games.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('dlcs_game_idx').on(table.gameId),
+  index('dlcs_linked_game_idx').on(table.linkedGameId),
+  check('dlcs_linked_game_not_base', sql`${table.linkedGameId} IS NULL OR ${table.linkedGameId} <> ${table.gameId}`),
   check('dlcs_name_not_blank', sql`length(trim(${table.name})) > 0`),
   check('dlcs_estimated_hours_nonnegative', sql`${table.estimatedHours} IS NULL OR ${table.estimatedHours} >= 0`),
   check('dlcs_played_hours_nonnegative', sql`${table.playedHours} >= 0`),

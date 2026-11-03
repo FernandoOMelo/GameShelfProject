@@ -86,8 +86,11 @@ class ApiClient {
   Future<Response<T>> patch<T>(String path, {dynamic data}) =>
       _dio.patch<T>(path, data: data);
 
+  // O Content-Type JSON é enviado em toda requisição; um DELETE sem corpo com
+  // esse cabeçalho era recusado pelo Fastify (400, corpo JSON vazio). Enviar
+  // `{}` mantém o cabeçalho coerente com o corpo em qualquer versão da API.
   Future<Response<T>> delete<T>(String path) =>
-      _dio.delete<T>(path);
+      _dio.delete<T>(path, data: const <String, dynamic>{});
 
   Future<Response<T>> put<T>(String path, {dynamic data}) =>
       _dio.put<T>(path, data: data);

@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
 import { GameAchievementsPanel } from './game-achievements-panel';
 import { DlcPanel } from './dlc-panel';
+import { GameMergeDialog } from './game-merge-dialog';
 import { FranchisePanel } from './franchise-panel';
 
 type DetailTab = 'resumo' | 'conquistas' | 'sessoes' | 'dlc-franquia';
@@ -177,6 +178,9 @@ export function App() {
   const [formStatus, setFormStatus] = useState<Game['status']>('BACKLOG');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('resumo');
+  const [mergingGame, setMergingGame] = useState(false);
+  /** Incrementa quando o jogo aberto muda por dentro (ex.: mesclagem), para recarregar o que depende dele. */
+  const [detailVersion, setDetailVersion] = useState(0);
   const [achievementsSummary, setAchievementsSummary] = useState<GameAchievementsResponse | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [playthroughs, setPlaythroughs] = useState<Playthrough[]>([]);
@@ -229,7 +233,7 @@ export function App() {
       .then((body) => { if (active && body) setAchievementsSummary(body); })
       .catch(() => undefined);
     return () => { active = false; };
-  }, [selectedGame?.id]);
+  }, [selectedGame?.id, detailVersion]);
 
   async function loadGames() {
     setLoading(true);
@@ -343,7 +347,7 @@ export function App() {
       setSessions([]);
       setSessionFeedback('Não foi possível carregar o histórico de sessões.');
     });
-  }, [selectedGame?.id, offline.syncs]);
+  }, [selectedGame?.id, offline.syncs, detailVersion]);
 
   // Jornadas do jogo aberto: alimentam o seletor do formulário de sessão. Uma
   // falha aqui deixa o seletor vazio e o registro manual continua funcionando.
@@ -353,7 +357,7 @@ export function App() {
       const response = await fetch(`${apiUrl}/games/${selectedGame.id}/playthroughs`);
       setPlaythroughs(response.ok ? await response.json() as Playthrough[] : []);
     } catch { setPlaythroughs([]); }
-  }, [selectedGame?.id]);
+  }, [selectedGame?.id, detailVersion]);
 
   useEffect(() => { void loadPlaythroughs(); }, [loadPlaythroughs]);
   useEffect(() => {
@@ -1172,7 +1176,7 @@ export function App() {
               </ProfileTabs>
             </>
           )}
-      {selectedGame ? <section className="details-page" aria-labelledby="details-title">
+      {selectedGame ? <section key={detailVersion} className="details-page" aria-labelledby="details-title">
         <button className="back-link" type="button" onClick={closeDetails}>← Voltar</button>
         <div className="details-navigation"><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) <= 0} onClick={() => navigateDetails(-1)}>← Jogo anterior</Button><Button type="button" disabled={visibleGames.findIndex((game) => game.id === selectedGame.id) < 0 || visibleGames.findIndex((game) => game.id === selectedGame.id) >= visibleGames.length - 1} onClick={() => navigateDetails(1)}>Próximo jogo →</Button></div>
         <header className="game-detail-hero" style={selectedGame.backgroundUrl ? { backgroundImage: `url("${selectedGame.backgroundUrl}")` } : undefined}>
@@ -1195,6 +1199,7 @@ export function App() {
               <Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button>
               <button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button>
               <button type="button" className="button-secondary" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button>
+              <button type="button" className="button-secondary" onClick={() => setMergingGame(true)}>Mesclar duplicado</button>
               <button type="button" className="session-delete" onClick={() => void deleteGame(selectedGame)}>Excluir jogo</button>
             </div>
           </div>
@@ -1296,7 +1301,7 @@ export function App() {
               </li>)}</ol>}
             </section>}
             {activeDetailTab === 'dlc-franquia' && <div className="dlc-franchise-grid">
-              <section className="details-section"><h2>DLC deste jogo</h2><DlcPanel gameId={selectedGame.id} /></section>
+              <section className="details-section"><h2>DLC deste jogo</h2><DlcPanel gameId={selectedGame.id} games={games} onOpenGame={(id) => { const target = games.find((item) => item.id === id); if (target) openGame(target); }} /></section>
               <section className="details-section"><h2>Franquia{franchises.find((franchise) => franchise.id === selectedGame.franchiseId) ? ` · ${franchises.find((franchise) => franchise.id === selectedGame.franchiseId)!.name}` : ''}</h2><FranchisePanel franchiseId={selectedGame.franchiseId} onAddGame={(title) => { openEditor(); setFormTitle(title); }} /></section>
             </div>}
           </div>
@@ -1396,6 +1401,7 @@ export function App() {
           </fieldset>
           <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={closeEditor}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
         </form></section></div>}
+        {mergingGame && selectedGame && <GameMergeDialog game={selectedGame} games={games} onClose={() => setMergingGame(false)} onMerged={(merged) => { setMergingGame(false); setSelectedGame(merged); setAchievementsSummary(null); setDetailVersion((version) => version + 1); void loadGames(); void refreshPlanningViews(); }} />}
         <ConfirmDialog open={pendingDelete !== null} title={pendingDelete?.title ?? ''} description={pendingDelete?.description} confirmLabel={pendingDelete?.confirmLabel} tone="danger" busy={deleting} onCancel={() => setPendingDelete(null)} onConfirm={() => void confirmPendingDelete()} />
         </main>
       </div>

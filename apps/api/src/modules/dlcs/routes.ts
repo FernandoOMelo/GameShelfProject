@@ -17,6 +17,13 @@ function toResponse(dlc: DlcRecord) {
 }
 
 export async function registerDlcRoutes(app: FastifyInstance, games: GameRepository, repository: DlcRepository, rawgProvider?: RawgAchievementProvider) {
+  // A DLC pode apontar para um jogo já cadastrado (ADR-038), nunca para o próprio jogo base.
+  async function checkLinkedGame(baseGameId: string, linkedGameId: string | null | undefined): Promise<string | null> {
+    if (!linkedGameId) return null;
+    if (linkedGameId === baseGameId) return 'A DLC não pode ser vinculada ao próprio jogo base.';
+    return await games.find(linkedGameId) ? null : 'Jogo vinculado não encontrado.';
+  }
+
   app.get<{ Params: { gameId: string } }>('/games/:gameId/dlcs', async (request, reply) => {
     if (!validId(request.params.gameId)) return reply.code(400).send({ error: 'ID inválido.' });
     if (!await games.find(request.params.gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
@@ -28,6 +35,8 @@ export async function registerDlcRoutes(app: FastifyInstance, games: GameReposit
     if (!await games.find(request.params.gameId)) return reply.code(404).send({ error: 'Jogo não encontrado.' });
     const parsed = dlcInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Dados inválidos.', issues: parsed.error.issues });
+    const invalidLink = await checkLinkedGame(request.params.gameId, parsed.data.linkedGameId);
+    if (invalidLink) return reply.code(400).send({ error: invalidLink });
     return reply.code(201).send(toResponse(await repository.create(request.params.gameId, parsed.data)));
   });
 
@@ -35,6 +44,8 @@ export async function registerDlcRoutes(app: FastifyInstance, games: GameReposit
     if (!validId(request.params.gameId) || !validId(request.params.id)) return reply.code(400).send({ error: 'ID inválido.' });
     const parsed = dlcUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Dados inválidos.', issues: parsed.error.issues });
+    const invalidLink = await checkLinkedGame(request.params.gameId, parsed.data.linkedGameId);
+    if (invalidLink) return reply.code(400).send({ error: invalidLink });
     const updated = await repository.update(request.params.gameId, request.params.id, parsed.data);
     if (!updated) return reply.code(404).send({ error: 'DLC não encontrada.' });
     return reply.send(toResponse(updated));

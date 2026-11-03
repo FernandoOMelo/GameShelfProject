@@ -97,6 +97,30 @@ void main() {
           ],
         );
 
+    testWidgets('separa as conquistas por plataforma em abas', (tester) async {
+      const groups = [
+        AchievementGroup(id: 'ps', name: 'PlayStation 5', total: 1, unlockedCount: 1, percent: 100, achievements: [
+          MergedAchievement(id: 'a', name: 'Troféu PSN', description: 'x', unlocked: true),
+        ]),
+        AchievementGroup(id: 'pc', name: 'PC', total: 1, unlockedCount: 0, percent: 0, achievements: [
+          MergedAchievement(id: 'b', name: 'Conquista Steam', description: 'y'),
+        ]),
+      ];
+      await tester.pumpWidget(wrap(const GameAchievementsPanel(gameId: gameId), overrides: [
+        gameAchievementsProvider(gameId).overrideWith((ref) async => const GameAchievements(
+              catalogAvailable: true, total: 2, unlockedCount: 1, percent: 50, achievements: [], groups: groups)),
+      ]));
+      await tester.pumpAndSettle();
+      expect(find.text('Troféu PSN'), findsOneWidget);
+      expect(find.text('Conquista Steam'), findsNothing);
+
+      await tester.tap(find.text('PC · 0/1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Conquista Steam'), findsOneWidget);
+      expect(find.text('Troféu PSN'), findsNothing);
+      expect(find.text('0/1 · 0%'), findsOneWidget);
+    });
+
     testWidgets('mantém a secreta oculta até o usuário ativar a opção', (tester) async {
       await tester.pumpWidget(wrap(const GameAchievementsPanel(gameId: gameId),
           overrides: [gameAchievementsProvider(gameId).overrideWith((ref) async => data())]));
@@ -225,6 +249,41 @@ void main() {
   });
 
   group('GameDetailScreen', () {
+    testWidgets('navega entre os jogos da lista com Anterior e Próximo', (tester) async {
+      const first = Game(id: 'game-1', title: 'Primeiro jogo', status: 'PLAYING');
+      const second = Game(id: 'game-2', title: 'Segundo jogo', status: 'BACKLOG');
+      List<Override> forGame(String id) => [
+            gamePlatformsProvider(id).overrideWith((ref) async => const <GamePlatform>[]),
+            playthroughsProvider(id).overrideWith((ref) async => const <Playthrough>[]),
+            playthroughMetricsProvider(id).overrideWith((ref) async => const PlaythroughMetrics()),
+            gameAchievementsProvider(id).overrideWith((ref) async =>
+                const GameAchievements(catalogAvailable: false, total: 0, unlockedCount: 0, percent: 0, achievements: [])),
+            dlcsProvider(id).overrideWith((ref) async => const <Dlc>[]),
+          ];
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          sessionsForGameProvider.overrideWith(FakeSessionsNotifier.new),
+          queueProvider.overrideWith(FakeQueueNotifier.new),
+          platformsProvider.overrideWith((ref) async => const <CatalogItem>[]),
+          franchisesProvider.overrideWith((ref) async => const <CatalogItem>[]),
+          ...forGame('game-1'),
+          ...forGame('game-2'),
+        ],
+        child: const MaterialApp(home: GameDetailScreen(game: first, siblings: [first, second])),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Primeiro jogo'), findsWidgets);
+      expect(find.text('1/2'), findsOneWidget);
+      expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Anterior')).onPressed, isNull);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Próximo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Segundo jogo'), findsWidgets);
+      expect(find.text('2/2'), findsOneWidget);
+      expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Próximo')).onPressed, isNull);
+    });
+
     testWidgets('mostra o hero com a plataforma e troca entre as abas', (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [

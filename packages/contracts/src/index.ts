@@ -57,6 +57,8 @@ export const dlcInputSchema = z.object({
   rawgId: z.number().int().positive().nullable().optional(),
   rawgSlug: z.string().min(1).nullable().optional(),
   rawgName: z.string().min(1).nullable().optional(),
+  /** Jogo cadastrado que representa esta DLC (ADR-038); progresso e horas passam a vir dele. */
+  linkedGameId: z.string().uuid().nullable().optional(),
 }).strict();
 export const dlcUpdateSchema = dlcInputSchema.partial();
 export const dlcSchema = dlcInputSchema.extend({
@@ -69,6 +71,17 @@ export const dlcSchema = dlcInputSchema.extend({
 export type DlcInput = z.infer<typeof dlcInputSchema>;
 export type DlcUpdate = z.infer<typeof dlcUpdateSchema>;
 export type Dlc = z.infer<typeof dlcSchema>;
+// Mesclar jogos duplicados (ADR-038): o jogo da rota permanece e absorve o
+// jogo de origem, que deixa de existir. Sessões, plataformas, jornadas, DLCs,
+// fila e listas passam para o jogo que permanece.
+export const gameMergeInputSchema = z.object({ sourceGameId: z.string().uuid() }).strict();
+export const duplicateGameGroupSchema = z.object({
+  key: z.string().min(1),
+  gameIds: z.array(z.string().uuid()).min(2),
+}).strict();
+export type GameMergeInput = z.infer<typeof gameMergeInputSchema>;
+export type DuplicateGameGroup = z.infer<typeof duplicateGameGroupSchema>;
+
 // Plataformas têm dois níveis (ADR-025): sem `parentId` é um grupo (PC,
 // PlayStation); com `parentId` é uma loja ou variante dentro dele (Steam, GOG).
 // O padrão nulo mantém backups anteriores importáveis.
@@ -422,6 +435,21 @@ export const mergedAchievementSchema = z.object({
   secret: z.boolean(),
   isCompletionTrophy: z.boolean(),
 }).strict();
+// Um jogo multiplataforma tem um conjunto de conquistas por plataforma: os
+// troféus do PlayStation não são as conquistas do Steam. `groups` separa cada
+// uma (ou o catálogo RAWG, quando não há fonte pessoal); `achievements` e os
+// totais da raiz continuam sendo o agregado de todos os grupos.
+export const achievementGroupSchema = z.object({
+  id: z.string().min(1),
+  /** Plataforma de origem; nulo no grupo do catálogo RAWG. */
+  platformId: z.string().uuid().nullable(),
+  name: z.string().min(1),
+  total: z.number().int().nonnegative(),
+  unlockedCount: z.number().int().nonnegative(),
+  percent: z.number().min(0).max(100),
+  completionTrophyId: z.string().nullable(),
+  achievements: z.array(mergedAchievementSchema),
+}).strict();
 export const gameAchievementsResponseSchema = z.object({
   catalogAvailable: z.boolean(),
   linkedGame: rawgAchievementCandidateSchema.nullable(),
@@ -429,11 +457,13 @@ export const gameAchievementsResponseSchema = z.object({
   unlockedCount: z.number().int().nonnegative(),
   percent: z.number().min(0).max(100),
   achievements: z.array(mergedAchievementSchema),
+  groups: z.array(achievementGroupSchema),
   completionTrophyId: z.string().nullable(),
   rarityBreakdown: z.object({ common: z.number().int().nonnegative(), uncommon: z.number().int().nonnegative(), rare: z.number().int().nonnegative(), ultraRare: z.number().int().nonnegative() }),
 }).strict();
 export type AchievementRarityTier = z.infer<typeof achievementRarityTierSchema>;
 export type MergedAchievement = z.infer<typeof mergedAchievementSchema>;
+export type AchievementGroup = z.infer<typeof achievementGroupSchema>;
 export type GameAchievementsResponse = z.infer<typeof gameAchievementsResponseSchema>;
 
 // ── Jornadas e fator replay (ADR-023) ───────────────────────────────────────

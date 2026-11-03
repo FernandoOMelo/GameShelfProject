@@ -8,13 +8,12 @@ import type { GameListRepository } from '../game-lists/repository.js';
 import type { ChallengeCompletionRepository, MainChallengeRepository } from '../challenge/repository.js';
 import { detectChallengeCompletion } from '../challenge/service.js';
 import type { GamePlatformRepository } from '../game-platforms/repository.js';
-import type { RawgAchievementProvider, RawgAchievementRepository } from '../game-platforms/rawg-achievements.js';
+import { linkRawgCatalog, type RawgAchievementProvider, type RawgAchievementRepository } from '../game-platforms/rawg-achievements.js';
 
 type ChallengeTracking = { lists: GameListRepository; challenge: MainChallengeRepository; completions: ChallengeCompletionRepository };
 type RawgAutoLink = { store: RawgAchievementRepository; provider: RawgAchievementProvider };
 
 export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking, gamePlatforms?: GamePlatformRepository, rawg?: RawgAutoLink) {
-  const normalizeTitle = (value: string) => value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
   // Melhor esforço: ao cadastrar um jogo, já tenta vincular o catálogo de
   // conquistas da RAWG por título (e ano, quando ajuda a desempatar). Nunca
@@ -22,18 +21,8 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
   // vínculo continua disponível para o usuário fazer manualmente depois.
   function autoLinkRawgCatalog(gameId: string, title: string, releaseYear: number | null) {
     if (!rawg) return;
-    void (async () => {
-      try {
-        const candidates = await rawg.provider.search(title);
-        if (candidates.length === 0) return;
-        const target = normalizeTitle(title);
-        const candidate = candidates.find((item) => normalizeTitle(item.name) === target)
-          ?? (releaseYear ? candidates.find((item) => item.released?.slice(0, 4) === String(releaseYear)) : undefined)
-          ?? candidates[0]!;
-        const achievements = await rawg.provider.achievements(candidate.id);
-        await rawg.store.replace(gameId, candidate, achievements);
-      } catch { /* melhor esforço — o usuário ainda pode vincular manualmente */ }
-    })();
+    void linkRawgCatalog(rawg.provider, rawg.store, { id: gameId, title, releaseYear })
+      .catch(() => { /* melhor esforço — a leitura de conquistas tenta de novo depois */ });
   }
   async function recordChallengeCompletion(updated: { id: string; status: string; completedAt: string | null }) {
     if (!tracking) return;
@@ -188,7 +177,7 @@ function parseId(id: string): string | undefined {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : undefined;
 }
 
-function toResponse(game: Awaited<ReturnType<GameRepository['find']>> extends infer T ? Exclude<T, undefined> : never) {
+export function toResponse(game: Awaited<ReturnType<GameRepository['find']>> extends infer T ? Exclude<T, undefined> : never) {
   return {
     ...game,
     status: game.status,

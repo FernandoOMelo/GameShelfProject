@@ -7,6 +7,48 @@ export type RawgAchievementRepository = {
   replace(gameId: string, candidate: RawgAchievementCandidate, achievements: RawgAchievement[]): Promise<{ linkedGame: RawgAchievementCandidate | null; achievements: RawgAchievement[]; refreshedAt: string | null }>;
 };
 
+const normalizeTitle = (value: string) => value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Procura o jogo na RAWG por título (e ano, quando ajuda a desempatar) e grava
+ * o catálogo de conquistas. Devolve `false` quando nada foi encontrado. Falhas
+ * de rede sobem para quem chamou decidir se importam.
+ */
+export async function linkRawgCatalog(
+  provider: RawgAchievementProvider,
+  store: RawgAchievementRepository,
+  game: { id: string; title: string; releaseYear: number | null },
+): Promise<boolean> {
+  const candidates = await provider.search(game.title);
+  if (candidates.length === 0) return false;
+  const target = normalizeTitle(game.title);
+  const candidate = candidates.find((item) => normalizeTitle(item.name) === target)
+    ?? (game.releaseYear ? candidates.find((item) => item.released?.slice(0, 4) === String(game.releaseYear)) : undefined)
+    ?? candidates[0]!;
+  await store.replace(game.id, candidate, await provider.achievements(candidate.id));
+  return true;
+}
+
+/**
+ * Vincula o catálogo RAWG sob demanda, no máximo uma vez por janela por jogo e
+ * sem duplicar tentativas simultâneas: abrir a ficha dispara mais de uma
+ * leitura de conquistas ao mesmo tempo, e a RAWG tem cota.
+ */
+export function createRawgLinkAttempts(provider: RawgAchievementProvider, store: RawgAchievementRepository, cooldownMs = 10 * 60_000) {
+  const lastAttempt = new Map<string, number>();
+  const inFlight = new Map<string, Promise<boolean>>();
+  return (game: { id: string; title: string; releaseYear: number | null }): Promise<boolean> => {
+    const running = inFlight.get(game.id);
+    if (running) return running;
+    const previous = lastAttempt.get(game.id);
+    if (previous !== undefined && Date.now() - previous < cooldownMs) return Promise.resolve(false);
+    lastAttempt.set(game.id, Date.now());
+    const attempt = linkRawgCatalog(provider, store, game).catch(() => false).finally(() => { inFlight.delete(game.id); });
+    inFlight.set(game.id, attempt);
+    return attempt;
+  };
+}
+
 export class RawgClient implements RawgAchievementProvider {
   constructor(private readonly key: string, private readonly fetcher: typeof fetch = fetch) {}
   async search(query: string) {

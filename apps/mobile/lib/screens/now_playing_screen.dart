@@ -5,6 +5,7 @@ import '../providers/dashboard_provider.dart';
 import '../widgets/game_cover.dart';
 import '../widgets/session_timer.dart';
 import 'end_session_sheet.dart';
+import 'game_detail_screen.dart';
 
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key});
@@ -45,14 +46,19 @@ class _ActiveSessionView extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            if (game.backgroundUrl != null)
-              _BackgroundHeader(
-                backgroundUrl: game.backgroundUrl!,
-                coverUrl: game.coverUrl,
-                title: game.title,
-              )
-            else
-              _SimpleHeader(game: game),
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => GameDetailScreen(game: game)),
+              ),
+              child: game.backgroundUrl != null
+                  ? _BackgroundHeader(
+                      backgroundUrl: game.backgroundUrl!,
+                      coverUrl: game.coverUrl,
+                      title: game.title,
+                    )
+                  : _SimpleHeader(game: game),
+            ),
             const SizedBox(height: 32),
             const Text(
               'Em sessão',
@@ -228,7 +234,13 @@ class _PlayingGameCard extends ConsumerWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => GameDetailScreen(game: game)),
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
@@ -273,6 +285,7 @@ class _PlayingGameCard extends ConsumerWidget {
               _StartButton(game: game),
           ],
         ),
+      ),
       ),
     );
   }

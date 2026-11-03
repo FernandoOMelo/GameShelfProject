@@ -416,6 +416,15 @@ describe('games API', () => {
     expect(deleted.statusCode).toBe(204);
     expect(missing.statusCode).toBe(404);
   });
+
+  it('aceita DELETE com content-type JSON e corpo vazio, como o app Flutter envia', async () => {
+    const app = buildApp({ gameRepository: createRepository() });
+    apps.push(app);
+    const deleted = await app.inject({ method: 'DELETE', url: `/games/${game.id}`, headers: { 'content-type': 'application/json' } });
+    expect(deleted.statusCode).toBe(204);
+    const malformed = await app.inject({ method: 'PATCH', url: `/games/${game.id}`, headers: { 'content-type': 'application/json' }, payload: '{oops' });
+    expect(malformed.statusCode).toBe(400);
+  });
 });
 
 describe('franchises API', () => {

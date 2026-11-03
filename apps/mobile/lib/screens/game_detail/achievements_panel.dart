@@ -28,6 +28,7 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
   _Filter _filter = _Filter.all;
   bool _showSecrets = false;
   int _visible = _pageSize;
+  String? _groupId;
 
   @override
   void dispose() {
@@ -57,13 +58,16 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
         if (!data.catalogAvailable) {
           return const MessageState(
             icon: Icons.emoji_events_outlined,
-            message: 'Ainda sem catálogo vinculado. Salve o jogo com uma plataforma sincronizada pelo Achievist '
-                'ou vincule o catálogo na web.',
+            message: 'Ainda sem catálogo vinculado. A API busca na RAWG ao abrir esta aba '
+                '(confira a chave RAWG_API_KEY) ou a plataforma pode ser sincronizada pelo Achievist.',
           );
         }
         final query = _search.text.trim().toLowerCase();
-        final secretCount = data.achievements.where((item) => item.secret).length;
-        final filtered = data.achievements.where((item) {
+        final groups = data.platformGroups;
+        final group = groups.where((item) => item.id == _groupId).firstOrNull ?? (groups.isEmpty ? null : groups.first);
+        final achievements = group?.achievements ?? const <MergedAchievement>[];
+        final secretCount = achievements.where((item) => item.secret).length;
+        final filtered = achievements.where((item) {
           if (item.secret && !_showSecrets) return false;
           if (_filter == _Filter.unlocked && !item.unlocked) return false;
           if (_filter == _Filter.locked && item.unlocked) return false;
@@ -74,6 +78,24 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (groups.length > 1) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final item in groups)
+                    ChoiceChip(
+                      label: Text('${item.name} · ${item.unlockedCount}/${item.total}'),
+                      selected: item.id == group?.id,
+                      onSelected: (_) => setState(() {
+                        _groupId = item.id;
+                        _visible = _pageSize;
+                      }),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(14)),
@@ -83,13 +105,13 @@ class _GameAchievementsPanelState extends ConsumerState<GameAchievementsPanel> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${data.unlockedCount}/${data.total} · ${data.percent.round()}%',
+                        Text('${group?.unlockedCount ?? 0}/${group?.total ?? 0} · ${(group?.percent ?? 0).round()}%',
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: (data.percent / 100).clamp(0.0, 1.0),
+                            value: ((group?.percent ?? 0) / 100).clamp(0.0, 1.0),
                             minHeight: 6,
                             backgroundColor: const Color(0xFF2A2A3A),
                           ),

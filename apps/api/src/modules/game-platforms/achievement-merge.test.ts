@@ -10,6 +10,9 @@ const external = (overrides: Partial<ExternalAchievement>): ExternalAchievement 
   rarityPercent: null, unlocked: true, unlockedAt: '2026-10-09T12:21:00.000Z', syncedAt: '2026-10-28T00:00:00.000Z', ...overrides,
 });
 
+const psId = '00000000-0000-4000-8000-0000000000a1';
+const pcId = '00000000-0000-4000-8000-0000000000a2';
+
 describe('rarityTier', () => {
   it('classifica pelas faixas de percentual', () => {
     expect(rarityTier(null)).toBe('COMMON');
@@ -63,7 +66,7 @@ describe('buildAchievementsResponse', () => {
         rawg({ name: 'Platina', description: 'Conquiste todas as conquistas.', percent: 2.3 }),
         rawg({ name: 'Capítulo 1', percent: 85.9 }),
       ],
-      [external({ name: 'capítulo 1', unlocked: true, rarityPercent: null }), external({ name: 'Platina', description: 'Conquiste todas as conquistas.', unlocked: false, unlockedAt: null, rarityPercent: null })],
+      [{ id: 'gp-1', platformId: psId, name: 'PlayStation 5', items: [external({ name: 'capítulo 1', unlocked: true, rarityPercent: null }), external({ name: 'Platina', description: 'Conquiste todas as conquistas.', unlocked: false, unlockedAt: null, rarityPercent: null })] }],
     );
     expect(response.catalogAvailable).toBe(true);
     expect(response.total).toBe(2);
@@ -71,5 +74,25 @@ describe('buildAchievementsResponse', () => {
     expect(response.percent).toBe(50);
     expect(response.completionTrophyId).toBe(response.achievements[1]!.id);
     expect(response.rarityBreakdown).toEqual({ common: 1, uncommon: 0, rare: 0, ultraRare: 1 });
+    expect(response.groups).toHaveLength(1);
+    expect(response.groups[0]).toMatchObject({ id: 'gp-1', platformId: psId, name: 'PlayStation 5', total: 2, unlockedCount: 1 });
+  });
+
+  it('mantém um grupo por plataforma: o mesmo troféu em duas plataformas não se funde', () => {
+    const response = buildAchievementsResponse(null, [], [
+      { id: 'gp-ps', platformId: psId, name: 'PlayStation 5', items: [external({ name: 'Primeiro passo', unlocked: true }), external({ name: 'Platina', unlocked: false, unlockedAt: null })] },
+      { id: 'gp-pc', platformId: pcId, name: 'PC', items: [external({ name: 'Primeiro passo', unlocked: false, unlockedAt: null })] },
+    ]);
+    expect(response.groups.map((group) => [group.name, group.total, group.unlockedCount])).toEqual([['PlayStation 5', 2, 1], ['PC', 1, 0]]);
+    expect(response.total).toBe(3);
+    expect(response.unlockedCount).toBe(1);
+    expect(response.achievements).toHaveLength(3);
+  });
+
+  it('sem fonte pessoal, o catálogo RAWG forma um único grupo', () => {
+    const response = buildAchievementsResponse({ id: 1, slug: 'x', name: 'X', released: null, backgroundImage: null }, [rawg({ name: 'A' }), rawg({ name: 'B' })], [
+      { id: 'gp-ps', platformId: psId, name: 'PlayStation 5', items: [] },
+    ]);
+    expect(response.groups).toMatchObject([{ id: 'catalog', platformId: null, total: 2 }]);
   });
 });

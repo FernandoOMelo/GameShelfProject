@@ -14,6 +14,7 @@ export type DlcRecord = {
   rawgId: number | null;
   rawgSlug: string | null;
   rawgName: string | null;
+  linkedGameId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

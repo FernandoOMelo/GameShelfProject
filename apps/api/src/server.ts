@@ -9,6 +9,7 @@ import { DrizzleGenreRepository } from './modules/genres/drizzle-genre-repositor
 import { DrizzleSessionRepository } from './modules/sessions/drizzle-session-repository.js';
 import { DrizzleGamePlatformRepository } from './modules/game-platforms/drizzle-game-platform-repository.js';
 import { DrizzleExternalAchievementRepository } from './modules/game-platforms/drizzle-achievement-repository.js';
+import { DrizzleGameMergeRepository } from './modules/games/drizzle-game-merge-repository.js';
 import { DrizzleRawgAchievementRepository, RawgClient } from './modules/game-platforms/rawg-achievements.js';
 import { DrizzlePlaythroughRepository } from './modules/playthroughs/drizzle-playthrough-repository.js';
 import { DrizzleBacklogRepository } from './modules/backlog/drizzle-backlog-repository.js';
@@ -38,6 +39,7 @@ if (!env.DATABASE_URL) {
 const database = createDatabase(env.DATABASE_URL);
 const app = buildApp({
   gameRepository: new DrizzleGameRepository(database.db),
+  gameMergeRepository: new DrizzleGameMergeRepository(database.db),
   franchiseRepository: new DrizzleFranchiseRepository(database.db),
   platformRepository: new DrizzlePlatformRepository(database.db),
   genreRepository: new DrizzleGenreRepository(database.db),

@@ -214,6 +214,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     separatorBuilder: (_, _) => SizedBox(height: _compact ? 6 : 10),
                     itemBuilder: (_, index) => _GameTile(
                       game: visible[index],
+                      siblings: visible,
                       compact: _compact,
                       onEdit: () => _openEditor(visible[index]),
                       onDelete: () => _confirmDelete(visible[index]),
@@ -418,12 +419,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
 class _GameTile extends StatelessWidget {
   final Game game;
+
+  /// Jogos na ordem e filtro da lista, para navegar Anterior/Próximo no detalhe.
+  final List<Game> siblings;
   final bool compact;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _GameTile({
     required this.game,
+    required this.siblings,
     required this.compact,
     required this.onEdit,
     required this.onDelete,
@@ -438,7 +443,7 @@ class _GameTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => GameDetailScreen(game: game)),
+          MaterialPageRoute(builder: (_) => GameDetailScreen(game: game, siblings: siblings)),
         ),
         child: Padding(
           padding: EdgeInsets.all(compact ? 8 : 10),

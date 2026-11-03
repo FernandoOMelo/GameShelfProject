@@ -32,4 +32,24 @@ class GamesApi {
   static Future<void> delete(String id) async {
     await ApiClient.instance.delete('/games/$id');
   }
+
+  /// Ids de jogos que parecem duplicatas de [gameId] (mesmo título normalizado).
+  static Future<List<String>> duplicatesOf(String gameId) async {
+    final response = await ApiClient.instance.get<List<dynamic>>('/games/duplicates');
+    final ids = <String>[];
+    for (final group in response.data ?? const []) {
+      final groupIds = ((group as Map<String, dynamic>)['gameIds'] as List<dynamic>).cast<String>();
+      if (groupIds.contains(gameId)) ids.addAll(groupIds.where((id) => id != gameId));
+    }
+    return ids;
+  }
+
+  /// Absorve [sourceId] em [targetId]; o jogo de origem deixa de existir.
+  static Future<Game> merge(String targetId, String sourceId) async {
+    final response = await ApiClient.instance.post<Map<String, dynamic>>(
+      '/games/$targetId/merge',
+      data: {'sourceGameId': sourceId},
+    );
+    return Game.fromJson(response.data!);
+  }
 }

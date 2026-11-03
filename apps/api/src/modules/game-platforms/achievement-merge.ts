@@ -1,4 +1,4 @@
-import type { ExternalAchievement, GameAchievementsResponse, MergedAchievement, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
+import type { AchievementGroup, ExternalAchievement, GameAchievementsResponse, MergedAchievement, RawgAchievement, RawgAchievementCandidate } from '@gameshelf/contracts';
 
 /** Heurísticas pt/en para a conquista que representa "terminei o jogo": platina,
  * zerar todos os troféus/conquistas, ou 100% de conclusão. */
@@ -70,10 +70,40 @@ export function mergeAchievements(catalog: RawgAchievement[], external: External
   });
 }
 
-export function buildAchievementsResponse(linkedGame: RawgAchievementCandidate | null, catalog: RawgAchievement[], external: ExternalAchievement[]): GameAchievementsResponse {
-  const achievements = mergeAchievements(catalog, external);
+export type ExternalAchievementGroup = {
+  /** Id da associação de plataforma (game_platforms). */
+  id: string;
+  platformId: string;
+  name: string;
+  items: ExternalAchievement[];
+};
+
+function summarize(achievements: MergedAchievement[]) {
   const unlockedCount = achievements.filter((item) => item.unlocked).length;
-  const completionTrophy = achievements.find((item) => item.isCompletionTrophy) ?? null;
+  return {
+    total: achievements.length,
+    unlockedCount,
+    percent: achievements.length === 0 ? 0 : Math.round((unlockedCount / achievements.length) * 1000) / 10,
+    completionTrophyId: achievements.find((item) => item.isCompletionTrophy)?.id ?? null,
+  };
+}
+
+/**
+ * Monta a resposta de conquistas do jogo. Cada plataforma com conquistas
+ * espelhadas vira um grupo próprio — a mesma conquista do mesmo jogo em duas
+ * plataformas são dois troféus distintos e nunca se fundem. Sem nenhuma fonte
+ * pessoal, o catálogo RAWG forma um único grupo. Os totais da raiz somam os
+ * grupos.
+ */
+export function buildAchievementsResponse(linkedGame: RawgAchievementCandidate | null, catalog: RawgAchievement[], externalGroups: ExternalAchievementGroup[]): GameAchievementsResponse {
+  const populated = externalGroups.filter((group) => group.items.length > 0);
+  const groups: AchievementGroup[] = populated.length === 0
+    ? (catalog.length === 0 ? [] : [{ id: 'catalog', platformId: null, name: 'Catálogo RAWG', ...summarize(mergeAchievements(catalog, [])), achievements: mergeAchievements(catalog, []) }])
+    : populated.map((group) => {
+      const achievements = mergeAchievements(catalog, group.items);
+      return { id: group.id, platformId: group.platformId, name: group.name, ...summarize(achievements), achievements };
+    });
+  const achievements = groups.flatMap((group) => group.achievements);
   const rarityBreakdown = achievements.reduce(
     (acc, item) => {
       if (item.rarityTier === 'COMMON') acc.common += 1;
@@ -85,13 +115,11 @@ export function buildAchievementsResponse(linkedGame: RawgAchievementCandidate |
     { common: 0, uncommon: 0, rare: 0, ultraRare: 0 },
   );
   return {
-    catalogAvailable: linkedGame !== null || external.length > 0,
+    catalogAvailable: linkedGame !== null || populated.length > 0,
     linkedGame,
-    total: achievements.length,
-    unlockedCount,
-    percent: achievements.length === 0 ? 0 : Math.round((unlockedCount / achievements.length) * 1000) / 10,
+    ...summarize(achievements),
     achievements,
-    completionTrophyId: completionTrophy?.id ?? null,
+    groups,
     rarityBreakdown,
   };
 }

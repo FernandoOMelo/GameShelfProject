@@ -40,6 +40,12 @@ class GamesNotifier extends AsyncNotifier<List<Game>> {
         if (game.id != id) game,
     ]);
   }
+
+  Future<Game> merge(String targetId, String sourceId) async {
+    final merged = await GamesApi.merge(targetId, sourceId);
+    await reload();
+    return merged;
+  }
 }
 
 final gamesProvider = AsyncNotifierProvider<GamesNotifier, List<Game>>(GamesNotifier.new);

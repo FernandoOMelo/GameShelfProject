@@ -7,7 +7,11 @@ import '../providers/active_session_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../providers/games_provider.dart';
 import '../providers/queue_provider.dart';
+import '../core/games_api.dart';
+import '../core/platforms_api.dart';
+import '../providers/game_extras_provider.dart';
 import '../widgets/game_cover.dart';
+import '../widgets/game_picker.dart';
 import '../widgets/platform_logo.dart';
 import '../widgets/section.dart';
 import '../widgets/status.dart';
@@ -25,7 +29,11 @@ import 'session_editor_sheet.dart';
 class GameDetailScreen extends ConsumerStatefulWidget {
   final Game game;
 
-  const GameDetailScreen({super.key, required this.game});
+  /// Jogos na ordem da tela de origem (biblioteca filtrada, lista...). Com mais
+  /// de um, o detalhe ganha Anterior/Próximo, como na web.
+  final List<Game> siblings;
+
+  const GameDetailScreen({super.key, required this.game, this.siblings = const []});
 
   @override
   ConsumerState<GameDetailScreen> createState() => _GameDetailScreenState();
@@ -43,6 +51,7 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
     final inQueue = queue.any((item) => item.game.id == _game.id);
     final sessionState = ref.watch(activeSessionProvider);
     final isActive = sessionState.hasActive && sessionState.game?.id == _game.id;
+    final position = widget.siblings.indexWhere((game) => game.id == _game.id);
 
     return DefaultTabController(
       length: _tabs.length,
@@ -63,6 +72,7 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'edit', child: Text('Editar')),
                 const PopupMenuItem(value: 'retro', child: Text('Registrar sessão retroativa')),
+                const PopupMenuItem(value: 'merge', child: Text('Mesclar duplicado')),
                 PopupMenuItem(
                   value: inQueue ? 'unqueue' : 'queue',
                   enabled: _game.owned && !_game.archived,
@@ -77,7 +87,36 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
             ),
           ],
         ),
+        bottomNavigationBar: position < 0 || widget.siblings.length < 2
+            ? null
+            : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: position > 0 ? () => _goTo(widget.siblings[position - 1]) : null,
+                          icon: const Icon(Icons.chevron_left_rounded),
+                          label: const Text('Anterior'),
+                        ),
+                      ),
+                      Text('${position + 1}/${widget.siblings.length}',
+                          style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: position < widget.siblings.length - 1 ? () => _goTo(widget.siblings[position + 1]) : null,
+                          iconAlignment: IconAlignment.end,
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          label: const Text('Próximo'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
         body: NestedScrollView(
+          key: ValueKey(_game.id),
           headerSliverBuilder: (context, _) => [
             SliverToBoxAdapter(
               child: Padding(
@@ -249,12 +288,62 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
       case 'retro':
         await showQuickLogSheet(context, _game);
         ref.invalidate(sessionsForGameProvider(_game.id));
+      case 'merge':
+        await _mergeDuplicate();
       case 'queue':
         await _queue(add: true);
       case 'unqueue':
         await _queue(add: false);
       case 'delete':
         await _confirmDelete();
+    }
+  }
+
+  void _goTo(Game game) => setState(() => _game = game);
+
+  /// Mescla um cadastro duplicado neste jogo: ele permanece e absorve o outro.
+  Future<void> _mergeDuplicate() async {
+    final library = ref.read(gamesProvider).valueOrNull ?? const <Game>[];
+    var suggested = <String>{};
+    try {
+      suggested = (await GamesApi.duplicatesOf(_game.id)).toSet();
+    } catch (_) {
+      // Sem sugestões, a busca manual continua disponível.
+    }
+    if (!mounted) return;
+    final source = await pickGame(
+      context,
+      title: 'Mesclar duplicado em "${_game.title}"',
+      games: library,
+      excludeIds: {_game.id},
+      suggestedIds: suggested,
+    );
+    if (source == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mesclar jogos'),
+        content: Text(
+          'Mesclar "${source.title}" em "${_game.title}"? Sessões, plataformas, conquistas, jornadas, '
+          'DLCs, fila e listas passam para "${_game.title}", as horas lançadas são somadas e '
+          '"${source.title}" é removido. Esta ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Mesclar')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final merged = await ref.read(gamesProvider.notifier).merge(_game.id, source.id);
+      ref.invalidate(sessionsForGameProvider(_game.id));
+      ref.invalidate(gameAchievementsProvider(_game.id));
+      ref.invalidate(dlcsProvider(_game.id));
+      if (mounted) setState(() => _game = merged);
+      _snack('Jogos mesclados.');
+    } catch (error) {
+      _snack(PlatformsApi.errorMessage(error, 'Não foi possível mesclar os jogos.'));
     }
   }
 

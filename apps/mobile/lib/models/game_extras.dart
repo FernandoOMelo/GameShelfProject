@@ -182,12 +182,45 @@ const rarityTierLabels = {
   'ULTRA_RARE': 'Ultra raro',
 };
 
+/// Conquistas de uma plataforma (ou do catálogo RAWG, sem fonte pessoal). Um
+/// jogo multiplataforma tem um grupo por plataforma: os troféus do PlayStation
+/// não são as conquistas do Steam.
+class AchievementGroup {
+  final String id;
+  final String name;
+  final int total;
+  final int unlockedCount;
+  final double percent;
+  final List<MergedAchievement> achievements;
+
+  const AchievementGroup({
+    required this.id,
+    required this.name,
+    required this.total,
+    required this.unlockedCount,
+    required this.percent,
+    required this.achievements,
+  });
+
+  factory AchievementGroup.fromJson(Map<String, dynamic> json) => AchievementGroup(
+        id: json['id'] as String,
+        name: json['name'] as String? ?? 'Conquistas',
+        total: json['total'] as int? ?? 0,
+        unlockedCount: json['unlockedCount'] as int? ?? 0,
+        percent: (json['percent'] as num?)?.toDouble() ?? 0,
+        achievements: ((json['achievements'] as List<dynamic>?) ?? const [])
+            .map((e) => MergedAchievement.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 class GameAchievements {
   final bool catalogAvailable;
   final int total;
   final int unlockedCount;
   final double percent;
   final List<MergedAchievement> achievements;
+  final List<AchievementGroup> groups;
   final Map<String, int> rarityBreakdown;
 
   const GameAchievements({
@@ -196,19 +229,41 @@ class GameAchievements {
     required this.unlockedCount,
     required this.percent,
     required this.achievements,
+    this.groups = const [],
     this.rarityBreakdown = const {},
   });
 
+  /// Um grupo por plataforma. Respostas em cache de antes do agrupamento não
+  /// trazem `groups`: nesse caso a lista inteira vira um grupo só.
+  List<AchievementGroup> get platformGroups => groups.isNotEmpty || achievements.isEmpty
+      ? groups
+      : [
+          AchievementGroup(
+            id: 'all',
+            name: 'Conquistas',
+            total: total,
+            unlockedCount: unlockedCount,
+            percent: percent,
+            achievements: achievements,
+          ),
+        ];
+
   factory GameAchievements.fromJson(Map<String, dynamic> json) {
     final breakdown = (json['rarityBreakdown'] as Map<String, dynamic>?) ?? const {};
+    final achievements = ((json['achievements'] as List<dynamic>?) ?? const [])
+        .map((e) => MergedAchievement.fromJson(e as Map<String, dynamic>))
+        .toList();
+    final total = json['total'] as int? ?? 0;
+    final unlocked = json['unlockedCount'] as int? ?? 0;
+    final percent = (json['percent'] as num?)?.toDouble() ?? 0;
+    final rawGroups = json['groups'] as List<dynamic>?;
     return GameAchievements(
       catalogAvailable: json['catalogAvailable'] as bool? ?? false,
-      total: json['total'] as int? ?? 0,
-      unlockedCount: json['unlockedCount'] as int? ?? 0,
-      percent: (json['percent'] as num?)?.toDouble() ?? 0,
-      achievements: ((json['achievements'] as List<dynamic>?) ?? const [])
-          .map((e) => MergedAchievement.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      total: total,
+      unlockedCount: unlocked,
+      percent: percent,
+      achievements: achievements,
+      groups: rawGroups?.map((e) => AchievementGroup.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
       rarityBreakdown: {for (final entry in breakdown.entries) entry.key: entry.value as int},
     );
   }
@@ -228,6 +283,9 @@ class Dlc {
   final int? rawgId;
   final String? rawgName;
 
+  /// Jogo cadastrado que representa esta DLC: o progresso passa a vir dele.
+  final String? linkedGameId;
+
   const Dlc({
     required this.id,
     required this.gameId,
@@ -241,6 +299,7 @@ class Dlc {
     this.playedHours = 0,
     this.rawgId,
     this.rawgName,
+    this.linkedGameId,
   });
 
   factory Dlc.fromJson(Map<String, dynamic> json) => Dlc(
@@ -256,6 +315,7 @@ class Dlc {
         playedHours: (json['playedHours'] as num?)?.toDouble() ?? 0,
         rawgId: json['rawgId'] as int?,
         rawgName: json['rawgName'] as String?,
+        linkedGameId: json['linkedGameId'] as String?,
       );
 }
 

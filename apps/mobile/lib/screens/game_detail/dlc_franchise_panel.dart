@@ -7,7 +7,9 @@ import '../../models/game_extras.dart';
 import '../../providers/game_extras_provider.dart';
 import '../../providers/games_provider.dart';
 import '../../widgets/game_cover.dart';
+import '../../widgets/game_picker.dart';
 import '../../widgets/section.dart';
+import '../game_detail_screen.dart';
 import '../game_editor_screen.dart';
 
 const _card = Color(0xFF1E1E2A);
@@ -68,6 +70,7 @@ class _DlcSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dlcs = ref.watch(dlcsProvider(gameId));
+    final library = ref.watch(gamesProvider).valueOrNull ?? const <Game>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -112,13 +115,24 @@ class _DlcSection extends ConsumerWidget {
                                       Text(dlc.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                                       const SizedBox(height: 4),
                                       Text(
-                                        [
-                                          dlcStatusLabels[dlc.status] ?? dlc.status,
-                                          if (dlc.playedHours > 0) '${formatHours(dlc.playedHours)} jogadas',
-                                          if (dlc.estimatedHours != null) '${formatHours(dlc.estimatedHours)} estimadas',
-                                        ].join(' · '),
+                                        linked(dlc, library) != null
+                                            ? 'Vinculada a ${linked(dlc, library)!.title} · ${_linkedStatus(linked(dlc, library)!.status)}'
+                                            : [
+                                                dlcStatusLabels[dlc.status] ?? dlc.status,
+                                                if (dlc.playedHours > 0) '${formatHours(dlc.playedHours)} jogadas',
+                                                if (dlc.estimatedHours != null) '${formatHours(dlc.estimatedHours)} estimadas',
+                                              ].join(' · '),
                                         style: const TextStyle(color: _muted, fontSize: 12),
                                       ),
+                                      if (linked(dlc, library) != null)
+                                        TextButton(
+                                          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
+                                          onPressed: () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => GameDetailScreen(game: linked(dlc, library)!)),
+                                          ),
+                                          child: const Text('Abrir jogo'),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -127,6 +141,22 @@ class _DlcSection extends ConsumerWidget {
                                   onSelected: (value) async {
                                     if (value == 'edit') {
                                       await _openForm(context, ref, editing: dlc);
+                                    } else if (value == 'link') {
+                                      final chosen = await pickGame(
+                                        context,
+                                        title: 'Vincular a um jogo cadastrado',
+                                        games: library,
+                                        excludeIds: {gameId},
+                                      );
+                                      if (chosen != null && context.mounted) {
+                                        await _run(context, ref,
+                                            () => GameExtrasApi.updateDlc(gameId, dlc.id, {'linkedGameId': chosen.id}),
+                                            'Não foi possível vincular o jogo.');
+                                      }
+                                    } else if (value == 'unlink') {
+                                      await _run(context, ref,
+                                          () => GameExtrasApi.updateDlc(gameId, dlc.id, {'linkedGameId': null}),
+                                          'Não foi possível desvincular o jogo.');
                                     } else {
                                       final confirmed = await showDialog<bool>(
                                         context: context,
@@ -148,9 +178,13 @@ class _DlcSection extends ConsumerWidget {
                                       }
                                     }
                                   },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(value: 'edit', child: Text('Editar')),
-                                    PopupMenuItem(value: 'delete', child: Text('Excluir', style: TextStyle(color: _danger))),
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                                    if (dlc.linkedGameId == null)
+                                      const PopupMenuItem(value: 'link', child: Text('Vincular a jogo cadastrado'))
+                                    else
+                                      const PopupMenuItem(value: 'unlink', child: Text('Desvincular jogo')),
+                                    const PopupMenuItem(value: 'delete', child: Text('Excluir', style: TextStyle(color: _danger))),
                                   ],
                                 ),
                               ],
@@ -176,6 +210,16 @@ class _DlcSection extends ConsumerWidget {
     );
   }
 }
+
+Game? linked(Dlc dlc, List<Game> library) =>
+    dlc.linkedGameId == null ? null : library.where((game) => game.id == dlc.linkedGameId).firstOrNull;
+
+/// Estado da DLC quando ela é um jogo cadastrado: vem do ciclo de vida do jogo.
+String _linkedStatus(String status) => switch (status) {
+      'COMPLETED' => 'Concluída',
+      'PLAYING' || 'PAUSED' => 'Jogando',
+      _ => 'Não iniciada',
+    };
 
 class _DlcSheet extends StatefulWidget {
   final String gameId;
