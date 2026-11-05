@@ -46,7 +46,19 @@ Jornadas só planejadas não contam como iniciadas.
 - jornadas por plataforma, jogos com mais jornadas abandonadas e histórico completo
   dos jogos mais rejogados (plataforma, início, situação, dias, horas).
 
+## Biblioteca e backlog (`GET /reports/backlog`)
+
+Sem parâmetros: é um retrato do estado atual e o período não se aplica. Backlog são
+os jogos com status Backlog, sem os arquivados.
+
+- totais: jogos no backlog, nunca iniciados (sem data de início, sessões nem horas
+  retroativas), idade média desde o cadastro, horas que faltam (estimativa pessoal,
+  senão a da história principal; jogos sem estimativa são contados à parte) e jogos
+  desejados contra jogos que você possui;
+- envelhecimento: menos de 30 dias, 30–90 dias, 3–6 meses, 6 meses–1 ano, mais de 1 ano;
+- backlog por ano de lançamento, gênero e plataforma (jogos e horas que faltam);
+- os 10 jogos esperando há mais tempo.
+
 ## Próximas etapas
 
-Biblioteca e backlog (envelhecimento), conquistas e comparativos; filtros salvos e
-exportação em PDF.
+Conquistas e comparativos; filtros salvos e exportação em PDF.

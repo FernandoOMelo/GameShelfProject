@@ -1293,3 +1293,25 @@ export const playthroughsReportSchema = z.object({
   mostAbandoned: z.array(z.object({ gameId: z.string().uuid(), title: z.string(), abandoned: z.number().int().positive(), journeys: z.number().int().positive() }).strict()),
 }).strict();
 export type PlaythroughsReport = z.infer<typeof playthroughsReportSchema>;
+
+const backlogCountSchema = z.object({ id: z.string().nullable(), name: z.string(), games: z.number().int().positive(), estimatedHours: z.number().nonnegative() }).strict();
+/** Retrato do estado atual da biblioteca (sem período): backlog = jogos em Backlog não arquivados. */
+export const backlogReportSchema = z.object({
+  totals: z.object({
+    backlogCount: z.number().int().nonnegative(),
+    neverStarted: z.number().int().nonnegative(),
+    averageAgeDays: z.number().nonnegative().nullable(),
+    estimatedRemainingHours: z.number().nonnegative(),
+    withoutEstimate: z.number().int().nonnegative(),
+    desiredCount: z.number().int().nonnegative(),
+    ownedCount: z.number().int().nonnegative(),
+  }).strict(),
+  aging: z.array(z.object({ key: z.enum(['UP_TO_30', 'UP_TO_90', 'UP_TO_180', 'UP_TO_365', 'OVER_365']), games: z.number().int().nonnegative() }).strict()),
+  byReleaseYear: z.array(z.object({ year: z.number().int(), games: z.number().int().positive() }).strict()),
+  byGenre: z.array(backlogCountSchema),
+  byPlatform: z.array(backlogCountSchema),
+  oldest: z.array(z.object({
+    gameId: z.string().uuid(), title: z.string(), addedAt: z.string().datetime(), ageDays: z.number().int().nonnegative(), estimatedHours: z.number().nonnegative().nullable(),
+  }).strict()),
+}).strict();
+export type BacklogReport = z.infer<typeof backlogReportSchema>;

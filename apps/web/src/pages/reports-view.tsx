@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
+import type { BacklogReport, CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
 import { EmptyState, ErrorState, LoadingState, Panel, StatCard } from '@gameshelf/ui';
 import { apiUrl, formatHoursMinutes } from './shared';
 
-type Category = 'playtime' | 'completions' | 'playthroughs';
+type Category = 'playtime' | 'completions' | 'playthroughs' | 'backlog';
 type Range = { from: string; to: string };
 type Reference = CompletionsReport['estimates']['reference'];
 type Sort = 'DIFFERENCE_DESC' | 'DIFFERENCE_ASC' | 'PLAYED_DESC' | 'TITLE';
@@ -13,6 +13,7 @@ const categories: Array<{ key: Category; title: string; description: string }> =
   { key: 'playtime', title: 'Tempo de jogo', description: 'Sessões, horas, períodos e plataformas.' },
   { key: 'completions', title: 'Conclusões', description: 'Jogos zerados, estimativas e abandonos.' },
   { key: 'playthroughs', title: 'Jornadas e replays', description: 'Rejogabilidade e evolução por jornada.' },
+  { key: 'backlog', title: 'Biblioteca e backlog', description: 'Acervo, envelhecimento e pendências.' },
 ];
 const weekdayNames = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const lengthLabels: Record<PlaytimeReport['sessionLengths'][number]['key'], string> = {
@@ -82,6 +83,7 @@ export function ReportsView({ onOpenGame }: { onOpenGame: (gameId: string) => vo
     {category === null && <EmptyState title="Escolha um relatório" description="Selecione uma categoria para explorar os dados com filtros e detalhes." />}
     {category === 'playtime' && <PlaytimeReportView range={range} onOpenGame={onOpenGame} />}
     {category === 'completions' && <CompletionsReportView range={range} onOpenGame={onOpenGame} />}
+    {category === 'backlog' && <BacklogReportView onOpenGame={onOpenGame} />}
     {category === 'playthroughs' && <PlaythroughsReportView range={range} onOpenGame={onOpenGame} />}
   </section>;
 }
@@ -276,5 +278,36 @@ function PlaythroughsReportView({ range, onOpenGame }: { range: Range; onOpenGam
           </tr>)}</tbody>
         </table>
       </div>)}</Panel>
+  </div>;
+}
+
+const agingLabels: Record<BacklogReport['aging'][number]['key'], string> = {
+  UP_TO_30: 'Menos de 30 dias', UP_TO_90: '30 a 90 dias', UP_TO_180: '3 a 6 meses', UP_TO_365: '6 meses a 1 ano', OVER_365: 'Mais de 1 ano',
+};
+
+function BacklogReportView({ onOpenGame }: { onOpenGame: (gameId: string) => void }) {
+  const { data, failed } = useReport<BacklogReport>('/reports/backlog');
+  if (failed) return <ErrorState>Não foi possível carregar o relatório de biblioteca e backlog.</ErrorState>;
+  if (!data) return <LoadingState>Carregando relatório…</LoadingState>;
+  const { totals } = data;
+  const hoursLabel = (hours: number) => formatHoursMinutes(hours);
+  const rank = (entries: BacklogReport['byGenre']) => entries.map((entry) => ({ key: entry.id ?? entry.name, label: entry.name, value: entry.games, display: `${entry.games} · ${hoursLabel(entry.estimatedHours)}` }));
+  if (totals.backlogCount === 0) return <EmptyState title="Backlog vazio" description="Nenhum jogo com status Backlog." />;
+  return <div className="report-body">
+    <div className="stats-grid">
+      <StatCard label="Jogos no backlog" value={String(totals.backlogCount)} detail={`${totals.neverStarted} nunca iniciados`} accent />
+      <StatCard label="Horas que faltam" value={hoursLabel(totals.estimatedRemainingHours)} detail={totals.withoutEstimate > 0 ? `${totals.withoutEstimate} jogos sem estimativa` : 'Estimativa pessoal ou da história principal'} />
+      <StatCard label="Idade média" value={totals.averageAgeDays === null ? '—' : `${decimal(totals.averageAgeDays)} dias`} detail="Desde o cadastro do jogo" />
+      <StatCard label="Desejados x biblioteca" value={`${totals.desiredCount} / ${totals.ownedCount}`} detail="Desejados / jogos que você possui" />
+    </div>
+    <small className="stats-note">Retrato do estado atual da biblioteca: o período não se aplica a este relatório. Jogos arquivados ficam de fora.</small>
+    <div className="stats-pair">
+      <Panel title="Envelhecimento do backlog"><Bars label="Jogos por tempo de espera" entries={data.aging.map((entry) => ({ key: entry.key, label: agingLabels[entry.key], value: entry.games, display: String(entry.games) }))} /></Panel>
+      <Panel title="Por ano de lançamento">{data.byReleaseYear.length === 0 ? <p className="library-subtitle">Nenhum jogo com ano de lançamento.</p>
+        : <Bars label="Backlog por ano de lançamento" entries={data.byReleaseYear.map((entry) => ({ key: entry.year, label: String(entry.year), value: entry.games, display: String(entry.games) }))} />}</Panel>
+      <Panel title="Por gênero"><Bars label="Backlog por gênero" entries={rank(data.byGenre)} /><small className="stats-note">Jogos e horas que faltam; um jogo com vários gêneros conta em cada um.</small></Panel>
+      <Panel title="Por plataforma"><Bars label="Backlog por plataforma" entries={rank(data.byPlatform)} /></Panel>
+    </div>
+    <Panel title="Esperando há mais tempo"><Bars label="Dias no backlog" entries={data.oldest.map((entry) => ({ key: entry.gameId, label: entry.title, value: entry.ageDays, display: `${entry.ageDays} dias`, onOpen: () => onOpenGame(entry.gameId) }))} /></Panel>
   </div>;
 }

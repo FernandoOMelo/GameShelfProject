@@ -23,10 +23,17 @@ const playthroughs = {
   ] }],
 };
 
+const backlog = {
+  totals: { backlogCount: 3, neverStarted: 1, averageAgeDays: 216, estimatedRemainingHours: 15, withoutEstimate: 1, desiredCount: 1, ownedCount: 4 },
+  aging: [{ key: 'UP_TO_30', games: 1 }, { key: 'UP_TO_90', games: 0 }, { key: 'UP_TO_180', games: 1 }, { key: 'UP_TO_365', games: 0 }, { key: 'OVER_365', games: 1 }],
+  byReleaseYear: [{ year: 2020, games: 2 }], byGenre: [{ id: null, name: 'Sem gênero', games: 2, estimatedHours: 5 }], byPlatform: [],
+  oldest: [{ gameId: '00000000-0000-4000-8000-000000000002', title: 'Antigo', addedAt: '2025-01-01T00:00:00.000Z', ageDays: 516, estimatedHours: 5 }],
+};
+
 function mockApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const body = url.includes('/reports/playtime') ? playtime : url.includes('/reports/playthroughs') ? playthroughs : [];
+    const body = url.includes('/reports/backlog') ? backlog : url.includes('/reports/playtime') ? playtime : url.includes('/reports/playthroughs') ? playthroughs : [];
     return new Response(JSON.stringify(body), { status: 200 });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -41,6 +48,17 @@ describe('ReportsView', () => {
     render(<ReportsView onOpenGame={() => undefined} />);
     expect(screen.getByText('Escolha um relatório')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('mostra o envelhecimento do backlog e abre o jogo mais antigo', async () => {
+    mockApi();
+    const onOpenGame = vi.fn();
+    render(<ReportsView onOpenGame={onOpenGame} />);
+    fireEvent.click(screen.getByRole('button', { name: /Biblioteca e backlog/ }));
+    expect(await screen.findByText('Mais de 1 ano')).toBeInTheDocument();
+    expect(screen.getByText('216 dias')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Antigo' }));
+    expect(onOpenGame).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000002');
   });
 
   it('mostra o histórico de jornadas dos jogos rejogados', async () => {

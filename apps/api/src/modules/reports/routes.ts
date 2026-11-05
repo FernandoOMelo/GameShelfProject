@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { completionsReportQuerySchema, completionsReportSchema, playtimeReportQuerySchema, playtimeReportSchema, playthroughsReportQuerySchema, playthroughsReportSchema } from '@gameshelf/contracts';
+import { backlogReportSchema, completionsReportQuerySchema, completionsReportSchema, playtimeReportQuerySchema, playtimeReportSchema, playthroughsReportQuerySchema, playthroughsReportSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { SessionRepository } from '../sessions/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
 import type { GenreRepository } from '../genres/repository.js';
 import type { PlaythroughRepository } from '../playthroughs/repository.js';
 import { toGame, toPlaythrough, toSession } from '../shared/serialize.js';
+import { buildBacklogReport } from './backlog.js';
 import { buildCompletionsReport } from './completions.js';
 import { buildPlaythroughsReport } from './playthroughs.js';
 import { buildPlaytimeReport } from './playtime.js';
@@ -30,6 +31,11 @@ export async function registerReportRoutes(app: FastifyInstance, games: GameRepo
       games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), reference, sort, page, pageSize,
       ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }),
     })));
+  });
+
+  app.get('/reports/backlog', async (_request, reply) => {
+    const [gameRecords, sessionRecords, platformItems, genreItems] = await Promise.all([games.list(), sessions.listAll(), platforms.list(), genres.list()]);
+    return reply.send(backlogReportSchema.parse(buildBacklogReport({ games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), platforms: platformItems, genres: genreItems })));
   });
 
   if (playthroughs) {
