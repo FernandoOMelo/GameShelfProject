@@ -5,6 +5,7 @@ import '../models/game.dart';
 import '../models/game_list.dart';
 import '../models/queue_item.dart';
 import '../providers/active_session_provider.dart';
+import 'journey_start_sheet.dart';
 import '../providers/games_provider.dart';
 import '../providers/lists_provider.dart';
 import '../providers/queue_provider.dart';
@@ -521,7 +522,7 @@ class _StartButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final loading = ref.watch(activeSessionProvider).loading;
     return IconButton(
-      onPressed: loading ? null : () => ref.read(activeSessionProvider.notifier).start(game),
+      onPressed: loading ? null : () => startSessionWithJourney(context, ref, game),
       icon: const Icon(Icons.play_arrow_rounded),
       color: const Color(0xFF6C63FF),
       padding: EdgeInsets.zero,

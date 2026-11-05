@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/active_session_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/session_timer.dart';
+import 'finish_game_sheet.dart';
 
 class EndSessionSheet extends ConsumerStatefulWidget {
   const EndSessionSheet({super.key});
@@ -37,6 +38,8 @@ class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
 
   Future<void> _end() async {
     setState(() => _ending = true);
+    final game = ref.read(activeSessionProvider).game;
+    final progress = _progress.round();
     await ref
         .read(activeSessionProvider.notifier)
         .end(
@@ -47,6 +50,21 @@ class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
           tips: _tipsController.text.trim(),
         );
     ref.invalidate(dashboardProvider);
+    // Progresso em 100%: pergunta se terminou o jogo antes de fechar (ADR-042).
+    if (progress >= 100 && game != null && canFinish(game) && mounted) {
+      final finished = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Terminou o jogo?'),
+          content: Text('O progresso chegou a 100%. Quer zerar ${game.title} agora?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Ainda não')),
+            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Zerar agora')),
+          ],
+        ),
+      );
+      if (finished == true && mounted) await finishGame(context, ref, game);
+    }
     if (mounted) Navigator.pop(context, true);
   }
 

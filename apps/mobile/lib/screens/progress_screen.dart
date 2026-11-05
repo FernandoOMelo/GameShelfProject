@@ -6,6 +6,7 @@ import '../models/game.dart';
 import '../models/queue_item.dart';
 import '../models/suggestion.dart';
 import '../providers/active_session_provider.dart';
+import 'journey_start_sheet.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/queue_provider.dart';
 import '../providers/suggestions_provider.dart';
@@ -460,7 +461,7 @@ class _StartButton extends ConsumerWidget {
     return IconButton.filled(
       onPressed: state.hasActive || state.loading
           ? null
-          : () => ref.read(activeSessionProvider.notifier).start(game),
+          : () => startSessionWithJourney(context, ref, game),
       icon: const Icon(Icons.play_arrow_rounded),
       style: IconButton.styleFrom(backgroundColor: const Color(0xFF6C63FF)),
     );

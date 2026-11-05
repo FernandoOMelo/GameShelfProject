@@ -20,7 +20,9 @@ import 'game_detail/achievements_panel.dart';
 import 'game_detail/dlc_franchise_panel.dart';
 import 'game_detail/journey_panel.dart';
 import 'game_detail/sessions_panel.dart';
+import 'finish_game_sheet.dart';
 import 'game_editor_screen.dart';
+import 'journey_start_sheet.dart';
 import 'quick_log_sheet.dart';
 import 'session_editor_sheet.dart';
 
@@ -71,6 +73,7 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
               onSelected: _onMenu,
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                if (canFinish(_game)) const PopupMenuItem(value: 'finish', child: Text('Zerar')),
                 const PopupMenuItem(value: 'retro', child: Text('Registrar sessão retroativa')),
                 const PopupMenuItem(value: 'merge', child: Text('Mesclar duplicado')),
                 PopupMenuItem(
@@ -129,10 +132,19 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
                     _ActionBar(
                       isActive: isActive,
                       hasActiveElsewhere: sessionState.hasActive && !isActive,
-                      onStart: () => ref.read(activeSessionProvider.notifier).start(_game),
+                      onStart: () => startSessionWithJourney(context, ref, _game),
                       onEnd: _endActiveSession,
                       onLog: () => _openSessionEditor(null),
                     ),
+                    if (canFinish(_game))
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _finish,
+                          icon: const Icon(Icons.flag_rounded),
+                          label: const Text('Zerar'),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -285,6 +297,8 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
           MaterialPageRoute(builder: (_) => GameEditorScreen(game: _game)),
         );
         if (saved != null) setState(() => _game = saved);
+      case 'finish':
+        await _finish();
       case 'retro':
         await showQuickLogSheet(context, _game);
         ref.invalidate(sessionsForGameProvider(_game.id));
@@ -297,6 +311,16 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
       case 'delete':
         await _confirmDelete();
     }
+  }
+
+  /// Zera o jogo (ADR-042) e recarrega a ficha, que a API alterou.
+  Future<void> _finish() async {
+    await finishGame(context, ref, _game);
+    try {
+      final fresh = await GamesApi.get(_game.id);
+      if (mounted) setState(() => _game = fresh);
+    } catch (_) {/* a ficha atualiza na próxima abertura */}
+    ref.invalidate(sessionsForGameProvider(_game.id));
   }
 
   void _goTo(Game game) => setState(() => _game = game);

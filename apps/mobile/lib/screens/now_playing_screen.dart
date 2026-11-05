@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/active_session_provider.dart';
+import 'journey_start_sheet.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/game_cover.dart';
 import '../widgets/session_timer.dart';
@@ -300,7 +301,7 @@ class _StartButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final loading = ref.watch(activeSessionProvider).loading;
     return IconButton.filled(
-      onPressed: loading ? null : () => ref.read(activeSessionProvider.notifier).start(game),
+      onPressed: loading ? null : () => startSessionWithJourney(context, ref, game),
       icon: loading
           ? const SizedBox(
               width: 18,

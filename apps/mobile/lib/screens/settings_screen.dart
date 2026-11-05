@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/journey_prompt_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/queue_provider.dart';
@@ -104,6 +105,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
               trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF6B6B7E)),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievistScreen())),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Perguntar sobre a jornada', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Ao iniciar uma sessão, oferece criar ou retomar a jornada do jogo.',
+                  style: TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+              value: ref.watch(journeyPromptProvider),
+              onChanged: (value) => ref.read(journeyPromptProvider.notifier).setAsk(value),
             ),
           ],
         ),
