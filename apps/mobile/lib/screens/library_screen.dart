@@ -15,6 +15,7 @@ import '../widgets/status.dart';
 import '../core/lists_api.dart';
 import 'game_detail_screen.dart';
 import 'game_editor_screen.dart';
+import 'quick_add_game_sheet.dart';
 import 'quick_log_sheet.dart';
 
 /// Estado dos filtros da biblioteca no app (espelha `LibraryFilterState`).
@@ -147,7 +148,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(null),
+        onPressed: _quickAdd,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Jogo'),
       ),
@@ -386,6 +387,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         );
       }
     }
+  }
+
+  /// Cadastro rápido: título e plataforma; o resto vem da captura automática (ADR-043).
+  Future<void> _quickAdd() async {
+    final result = await showModalBottomSheet<QuickAddResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E1E2A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => const QuickAddGameSheet(),
+    );
+    if (result == null || !mounted) return;
+    if (result.moreDetailsTitle != null) {
+      final saved = await Navigator.push<Game>(
+        context,
+        MaterialPageRoute(builder: (_) => GameEditorScreen(initialTitle: result.moreDetailsTitle)),
+      );
+      if (saved != null) await ref.read(gamesProvider.notifier).reload();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${result.game!.title} adicionado. Os metadados chegam sozinhos.')));
   }
 
   Future<void> _openEditor(Game? game) async {

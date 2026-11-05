@@ -13,6 +13,7 @@ import 'package:gameshelf_mobile/models/stats.dart';
 import 'package:gameshelf_mobile/models/suggestion.dart';
 import 'package:gameshelf_mobile/models/timeline.dart';
 import 'package:gameshelf_mobile/models/mission.dart';
+import 'package:gameshelf_mobile/providers/metadata_sync_provider.dart';
 import 'package:gameshelf_mobile/providers/missions_provider.dart';
 import 'package:gameshelf_mobile/providers/dashboard_provider.dart';
 import 'package:gameshelf_mobile/providers/goals_provider.dart';
@@ -278,12 +279,16 @@ void main() {
 
   group('MoreScreen', () {
     testWidgets('oferece os destinos secundários', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: MoreScreen()));
+      await tester.pumpWidget(ProviderScope(
+        overrides: [metadataReviewCountProvider.overrideWith((ref) async => 2)],
+        child: const MaterialApp(home: MoreScreen()),
+      ));
       await tester.pumpAndSettle();
 
-      for (final label in ['Listas', 'Estatísticas', 'Atividade', 'Metas', 'Configurações']) {
+      for (final label in ['Listas', 'Estatísticas', 'Atividade', 'Metas', 'Metadados a revisar', 'Configurações']) {
         expect(find.text(label), findsOneWidget);
       }
+      expect(find.text('2 jogo(s) pedem sua atenção'), findsOneWidget);
     });
   });
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/active_session_provider.dart';
+import '../providers/metadata_sync_provider.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/session_timer.dart';
 import 'end_session_sheet.dart';
@@ -33,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final sessionState = ref.watch(activeSessionProvider);
     final hasActive = sessionState.hasActive;
+    final pendingMetadata = ref.watch(metadataReviewCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       body: Column(
@@ -78,9 +80,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             selectedIcon: Icon(Icons.bar_chart_rounded),
             label: 'Progresso',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.more_horiz_outlined),
-            selectedIcon: Icon(Icons.more_horiz_rounded),
+          NavigationDestination(
+            icon: Badge(isLabelVisible: pendingMetadata > 0, label: Text('$pendingMetadata'), child: const Icon(Icons.more_horiz_outlined)),
+            selectedIcon: Badge(isLabelVisible: pendingMetadata > 0, label: Text('$pendingMetadata'), child: const Icon(Icons.more_horiz_rounded)),
             label: 'Mais',
           ),
         ],

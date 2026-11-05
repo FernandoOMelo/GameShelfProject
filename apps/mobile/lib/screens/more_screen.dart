@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/metadata_sync_provider.dart';
+import 'metadata_review_screen.dart';
 import 'settings_screen.dart';
 import 'goals_screen.dart';
 import 'lists_screen.dart';
@@ -10,11 +13,12 @@ import 'timeline_screen.dart';
 ///
 /// Espelha os destinos secundários da web (Listas, Estatísticas, Atividade e
 /// Metas) e mantém as Configurações acessíveis sem poluir a navegação principal.
-class MoreScreen extends StatelessWidget {
+class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pending = ref.watch(metadataReviewCountProvider).valueOrNull ?? 0;
     return Scaffold(
       appBar: AppBar(title: const Text('Mais')),
       body: ListView(
@@ -51,6 +55,13 @@ class MoreScreen extends StatelessWidget {
             onTap: () => _push(context, const GoalsScreen()),
           ),
           _MoreTile(
+            icon: Icons.auto_fix_high_rounded,
+            title: 'Metadados a revisar',
+            subtitle: pending == 0 ? 'Capas e dados que a API busca sozinha' : '$pending jogo(s) pedem sua atenção',
+            badge: pending,
+            onTap: () => _push(context, const MetadataReviewScreen()),
+          ),
+          _MoreTile(
             icon: Icons.settings_rounded,
             title: 'Configurações',
             subtitle: 'Endereço do servidor',
@@ -71,8 +82,10 @@ class _MoreTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final int badge;
 
   const _MoreTile({
+    this.badge = 0,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -115,6 +128,8 @@ class _MoreTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (badge > 0) Badge(label: Text('$badge')),
+                const SizedBox(width: 8),
                 const Icon(Icons.chevron_right_rounded, color: Color(0xFF6B6B7E)),
               ],
             ),
