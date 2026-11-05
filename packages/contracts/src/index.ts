@@ -1345,3 +1345,21 @@ export const achievementsReportSchema = z.object({
   perfect: z.array(huntGameSchema),
 }).strict();
 export type AchievementsReport = z.infer<typeof achievementsReportSchema>;
+
+export const comparisonReportQuerySchema = z.object({
+  aFrom: calendarDateSchema, aTo: calendarDateSchema, bFrom: calendarDateSchema, bTo: calendarDateSchema,
+  timezoneOffsetMinutes: reportRangeQuery.timezoneOffsetMinutes,
+}).strict()
+  .refine((value) => value.aFrom <= value.aTo, { path: ['aTo'], message: 'O fim do período A não pode ser anterior ao início.' })
+  .refine((value) => value.bFrom <= value.bTo, { path: ['bTo'], message: 'O fim do período B não pode ser anterior ao início.' });
+
+export const comparisonMetricKeySchema = z.enum(['TOTAL_MINUTES', 'SESSIONS', 'ACTIVE_DAYS', 'AVERAGE_SESSION_MINUTES', 'GAMES_COMPLETED', 'JOURNEYS_STARTED', 'ACHIEVEMENTS']);
+/** Compara dois períodos com as mesmas definições dos demais relatórios. `differencePercent` é de B em relação a A; nulo quando A é zero. */
+export const comparisonReportSchema = z.object({
+  metrics: z.array(z.object({
+    key: comparisonMetricKeySchema, a: z.number().nonnegative(), b: z.number().nonnegative(), differencePercent: z.number().nullable(),
+  }).strict()),
+  topGame: z.object({ a: z.string().nullable(), b: z.string().nullable() }).strict(),
+}).strict();
+export type ComparisonReport = z.infer<typeof comparisonReportSchema>;
+export type ComparisonMetricKey = z.infer<typeof comparisonMetricKeySchema>;

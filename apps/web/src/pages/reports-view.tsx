@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { AchievementsReport, BacklogReport, CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
+import type { AchievementsReport, BacklogReport, ComparisonReport, CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
 import { EmptyState, ErrorState, LoadingState, Panel, StatCard } from '@gameshelf/ui';
 import { apiUrl, formatHoursMinutes } from './shared';
 
-type Category = 'playtime' | 'completions' | 'playthroughs' | 'backlog' | 'achievements';
+type Category = 'playtime' | 'completions' | 'playthroughs' | 'backlog' | 'achievements' | 'comparison';
 type Range = { from: string; to: string };
 type Reference = CompletionsReport['estimates']['reference'];
 type Sort = 'DIFFERENCE_DESC' | 'DIFFERENCE_ASC' | 'PLAYED_DESC' | 'TITLE';
@@ -15,6 +15,7 @@ const categories: Array<{ key: Category; title: string; description: string }> =
   { key: 'playthroughs', title: 'Jornadas e replays', description: 'Rejogabilidade e evolução por jornada.' },
   { key: 'backlog', title: 'Biblioteca e backlog', description: 'Acervo, envelhecimento e pendências.' },
   { key: 'achievements', title: 'Conquistas', description: 'Desbloqueios, raridade e conclusão.' },
+  { key: 'comparison', title: 'Comparativos', description: 'Ano contra ano e período contra período.' },
 ];
 const weekdayNames = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const lengthLabels: Record<PlaytimeReport['sessionLengths'][number]['key'], string> = {
@@ -61,17 +62,19 @@ export function ReportsView({ onOpenGame }: { onOpenGame: (gameId: string) => vo
   const [category, setCategory] = useState<Category | null>(null);
   const [range, setRange] = useState<Range>({ from: '', to: '' });
 
+  // Biblioteca e backlog é um retrato atual e Comparativos tem dois períodos próprios.
+  const usesRange = category !== 'backlog' && category !== 'comparison';
   return <section className="stats-page reports-page">
     <div className="stats-head">
       <h1>Relatórios</h1>
-      <div className="ach-filters" role="group" aria-label="Período">
+      {usesRange && <div className="ach-filters" role="group" aria-label="Período">
         {quickRanges().map(({ label, range: option }) => <button key={label} type="button" className={`ach-filter${option.from === range.from && option.to === range.to ? ' is-active' : ''}`} onClick={() => setRange(option)}>{label}</button>)}
-      </div>
+      </div>}
     </div>
-    <div className="report-range">
+    {usesRange && <div className="report-range">
       <label>De <input type="date" value={range.from} max={range.to || undefined} onChange={(event) => setRange({ ...range, from: event.target.value })} /></label>
       <label>Até <input type="date" value={range.to} min={range.from || undefined} onChange={(event) => setRange({ ...range, to: event.target.value })} /></label>
-    </div>
+    </div>}
 
     <ul className="report-categories" aria-label="Categorias de relatório">
       {categories.map((item) => <li key={item.key}>
@@ -84,6 +87,7 @@ export function ReportsView({ onOpenGame }: { onOpenGame: (gameId: string) => vo
     {category === null && <EmptyState title="Escolha um relatório" description="Selecione uma categoria para explorar os dados com filtros e detalhes." />}
     {category === 'playtime' && <PlaytimeReportView range={range} onOpenGame={onOpenGame} />}
     {category === 'completions' && <CompletionsReportView range={range} onOpenGame={onOpenGame} />}
+    {category === 'comparison' && <ComparisonReportView />}
     {category === 'achievements' && <AchievementsReportView range={range} onOpenGame={onOpenGame} />}
     {category === 'backlog' && <BacklogReportView onOpenGame={onOpenGame} />}
     {category === 'playthroughs' && <PlaythroughsReportView range={range} onOpenGame={onOpenGame} />}
@@ -348,6 +352,62 @@ function AchievementsReportView({ range, onOpenGame }: { range: Range; onOpenGam
           <td>{decimal(entry.rarityPercent)}%</td><td>{brDate(entry.unlockedAt.slice(0, 10))}</td>
         </tr>)}</tbody>
       </table>
+    </Panel>}
+  </div>;
+}
+
+const metricLabels: Record<ComparisonReport['metrics'][number]['key'], string> = {
+  TOTAL_MINUTES: 'Horas jogadas', SESSIONS: 'Sessões', ACTIVE_DAYS: 'Dias com sessão', AVERAGE_SESSION_MINUTES: 'Média por sessão',
+  GAMES_COMPLETED: 'Jogos zerados', JOURNEYS_STARTED: 'Jornadas iniciadas', ACHIEVEMENTS: 'Conquistas',
+};
+const isMinutes = (key: ComparisonReport['metrics'][number]['key']) => key === 'TOTAL_MINUTES' || key === 'AVERAGE_SESSION_MINUTES';
+
+function comparisonPresets(): Array<{ label: string; a: Range; b: Range }> {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const monthRange = (y: number, m: number): Range => {
+    const first = new Date(Date.UTC(y, m, 1));
+    return { from: isoDay(first), to: isoDay(new Date(Date.UTC(y, m + 1, 0))) };
+  };
+  const previous = new Date(Date.UTC(year, month - 1, 1));
+  return [
+    { label: `${year - 1} × ${year}`, a: { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` }, b: { from: `${year}-01-01`, to: `${year}-12-31` } },
+    { label: 'Mês passado × este mês', a: monthRange(previous.getUTCFullYear(), previous.getUTCMonth()), b: monthRange(year, month) },
+  ];
+}
+
+function ComparisonReportView() {
+  const presets = comparisonPresets();
+  const [a, setA] = useState<Range>(presets[0]!.a);
+  const [b, setB] = useState<Range>(presets[0]!.b);
+  const { data, failed } = useReport<ComparisonReport>(`/reports/comparison${query({ aFrom: a.from, aTo: a.to, bFrom: b.from, bTo: b.to, timezoneOffsetMinutes: new Date().getTimezoneOffset() })}`);
+  const valid = Boolean(a.from && a.to && b.from && b.to && a.from <= a.to && b.from <= b.to);
+  const show = (key: ComparisonReport['metrics'][number]['key'], value: number) => isMinutes(key) ? minutesLabel(value) : String(value);
+
+  return <div className="report-body">
+    <div className="ach-filters" role="group" aria-label="Comparações prontas">
+      {presets.map((preset) => <button key={preset.label} type="button" className="ach-filter" onClick={() => { setA(preset.a); setB(preset.b); }}>{preset.label}</button>)}
+    </div>
+    <div className="report-range">
+      <label>Período A: de <input type="date" aria-label="Início do período A" value={a.from} onChange={(event) => setA({ ...a, from: event.target.value })} /></label>
+      <label>até <input type="date" aria-label="Fim do período A" value={a.to} onChange={(event) => setA({ ...a, to: event.target.value })} /></label>
+      <label>Período B: de <input type="date" aria-label="Início do período B" value={b.from} onChange={(event) => setB({ ...b, from: event.target.value })} /></label>
+      <label>até <input type="date" aria-label="Fim do período B" value={b.to} onChange={(event) => setB({ ...b, to: event.target.value })} /></label>
+    </div>
+    {!valid && <EmptyState title="Informe os dois períodos" description="Preencha início e fim de A e de B, com o fim depois do início." />}
+    {valid && failed && <ErrorState>Não foi possível carregar o comparativo.</ErrorState>}
+    {valid && !failed && !data && <LoadingState>Carregando relatório…</LoadingState>}
+    {valid && data && <Panel title="Período A contra período B">
+      <table className="stats-table">
+        <thead><tr><th>Métrica</th><th>A</th><th>B</th><th>Variação</th></tr></thead>
+        <tbody>{data.metrics.map((metric) => <tr key={metric.key}>
+          <th scope="row">{metricLabels[metric.key]}</th><td>{show(metric.key, metric.a)}</td><td>{show(metric.key, metric.b)}</td>
+          <td>{metric.differencePercent === null ? '—' : signed(metric.differencePercent)}</td>
+        </tr>)}
+        <tr><th scope="row">Jogo mais jogado</th><td>{data.topGame.a ?? '—'}</td><td>{data.topGame.b ?? '—'}</td><td>—</td></tr></tbody>
+      </table>
+      <small className="stats-note">A variação é de B em relação a A; fica em branco quando A é zero. Tempo e sessões usam o dia local de início; zerados, a data de conclusão; jornadas, a data de início.</small>
     </Panel>}
   </div>;
 }

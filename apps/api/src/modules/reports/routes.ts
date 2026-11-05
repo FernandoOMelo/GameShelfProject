@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { achievementsReportQuerySchema, achievementsReportSchema, backlogReportSchema, completionsReportQuerySchema, completionsReportSchema, playtimeReportQuerySchema, playtimeReportSchema, playthroughsReportQuerySchema, playthroughsReportSchema } from '@gameshelf/contracts';
+import { comparisonReportQuerySchema, comparisonReportSchema, achievementsReportQuerySchema, achievementsReportSchema, backlogReportSchema, completionsReportQuerySchema, completionsReportSchema, playtimeReportQuerySchema, playtimeReportSchema, playthroughsReportQuerySchema, playthroughsReportSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { SessionRepository } from '../sessions/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
@@ -10,6 +10,7 @@ import type { ExternalAchievementRepository } from '../game-platforms/achievemen
 import { buildAchievementsReport } from './achievements.js';
 import { toGame, toPlaythrough, toSession } from '../shared/serialize.js';
 import { buildBacklogReport } from './backlog.js';
+import { buildComparisonReport } from './comparison.js';
 import { buildCompletionsReport } from './completions.js';
 import { buildPlaythroughsReport } from './playthroughs.js';
 import { buildPlaytimeReport } from './playtime.js';
@@ -39,6 +40,19 @@ export async function registerReportRoutes(app: FastifyInstance, games: GameRepo
   app.get('/reports/backlog', async (_request, reply) => {
     const [gameRecords, sessionRecords, platformItems, genreItems] = await Promise.all([games.list(), sessions.listAll(), platforms.list(), genres.list()]);
     return reply.send(backlogReportSchema.parse(buildBacklogReport({ games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), platforms: platformItems, genres: genreItems })));
+  });
+
+  app.get('/reports/comparison', async (request, reply) => {
+    const parsed = comparisonReportQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ message: 'Parâmetros do comparativo inválidos.', issues: parsed.error.issues });
+    const { aFrom, aTo, bFrom, bTo, timezoneOffsetMinutes } = parsed.data;
+    const [gameRecords, sessionRecords, journeyRecords, unlocks] = await Promise.all([
+      games.list(), sessions.listAll(), playthroughs?.listAll() ?? Promise.resolve([]), achievements?.store.listUnlocks() ?? Promise.resolve(undefined),
+    ]);
+    return reply.send(comparisonReportSchema.parse(buildComparisonReport({
+      games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), playthroughs: journeyRecords.map(toPlaythrough), timezoneOffsetMinutes,
+      a: { from: aFrom, to: aTo }, b: { from: bFrom, to: bTo }, ...(unlocks === undefined ? {} : { unlocks }),
+    })));
   });
 
   if (achievements) {

@@ -72,6 +72,18 @@ o progresso por jogo é o estado atual.
   perto de 100% (a partir de 50%, por menos conquistas faltando) e jogos completos;
 - um jogo em várias plataformas soma as conquistas de cada associação.
 
+## Comparativos (`GET /reports/comparison`)
+
+Parâmetros: `aFrom`, `aTo`, `bFrom`, `bTo` (obrigatórios) e `timezoneOffsetMinutes`. A
+tela traz atalhos (ano passado × este ano, mês passado × este mês) e datas livres; o
+período global da tela não vale aqui.
+
+Métricas lado a lado, com a variação de B em relação a A (vazia quando A é zero):
+horas, sessões, dias com sessão, média por sessão, jogos zerados, jornadas iniciadas e
+conquistas (só com o espelho de conquistas), mais o jogo mais jogado de cada período.
+Cada métrica usa a definição do relatório de origem.
+
 ## Próximas etapas
 
-Comparativos (ano contra ano e período contra período); filtros salvos e exportação em PDF.
+Filtros salvos de relatório e exportação em PDF; migrar os cálculos para agregações
+em SQL se o volume de dados crescer (ADR-041).

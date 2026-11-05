@@ -9,8 +9,8 @@ gêneros e estimativas e responder perguntas como "em que jogos gastei essas hor
 ## Decisão
 
 1. Nova view `reports` (`/relatorios`), uma central com categorias. Nesta etapa:
-   **Tempo de jogo** e **Conclusões**. Jornadas e replays, Biblioteca e backlog,
-   Conquistas e Comparativos ficam para as próximas etapas.
+   **Tempo de jogo**, **Conclusões**, **Jornadas e replays**, **Biblioteca e backlog**,
+   **Conquistas** e **Comparativos**, entregues em etapas.
 2. Cada relatório tem **rota e consulta próprias** (`GET /reports/playtime`,
    `GET /reports/completions`), com filtros validados por Zod nas fronteiras. Não
    existe endpoint único que devolve tudo para o frontend calcular.

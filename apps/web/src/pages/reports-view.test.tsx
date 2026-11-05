@@ -38,10 +38,18 @@ const achievements = {
   closeToPerfect: [{ gameId: '00000000-0000-4000-8000-000000000001', title: 'Hades', unlocked: 9, total: 10, remaining: 1, percent: 90 }], perfect: [],
 };
 
+const comparison = {
+  metrics: [
+    { key: 'TOTAL_MINUTES', a: 120, b: 240, differencePercent: 100 },
+    { key: 'GAMES_COMPLETED', a: 0, b: 2, differencePercent: null },
+  ],
+  topGame: { a: 'Hades', b: null },
+};
+
 function mockApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const body = url.includes('/reports/achievements') ? achievements : url.includes('/reports/backlog') ? backlog : url.includes('/reports/playtime') ? playtime : url.includes('/reports/playthroughs') ? playthroughs : [];
+    const body = url.includes('/reports/comparison') ? comparison : url.includes('/reports/achievements') ? achievements : url.includes('/reports/backlog') ? backlog : url.includes('/reports/playtime') ? playtime : url.includes('/reports/playthroughs') ? playthroughs : [];
     return new Response(JSON.stringify(body), { status: 200 });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -56,6 +64,17 @@ describe('ReportsView', () => {
     render(<ReportsView onOpenGame={() => undefined} />);
     expect(screen.getByText('Escolha um relatório')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('compara dois períodos e esconde o período global', async () => {
+    const fetchMock = mockApi();
+    render(<ReportsView onOpenGame={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: /Comparativos/ }));
+    expect(await screen.findByText('+100%')).toBeInTheDocument();
+    expect(screen.getByText('Jogos zerados')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Período' })).not.toBeInTheDocument();
+    const url = fetchMock.mock.calls.map(([input]) => String(input)).find((item) => item.includes('/reports/comparison'))!;
+    expect(url).toMatch(/aFrom=\d{4}-01-01&aTo=\d{4}-12-31&bFrom=\d{4}-01-01&bTo=\d{4}-12-31/);
   });
 
   it('mostra a caça às conquistas e as mais raras', async () => {
