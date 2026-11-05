@@ -6,6 +6,7 @@ import '../models/game.dart';
 import '../models/metadata.dart';
 import '../providers/catalog_provider.dart';
 import '../providers/games_provider.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/section.dart';
 import '../widgets/status.dart';
 
@@ -68,9 +69,26 @@ class _GameEditorScreenState extends ConsumerState<GameEditorScreen> {
 
   bool get _isEditing => widget.game != null;
 
+  /// Retrato dos campos logo depois de abrir; comparado ao sair (proteção de descarte).
+  String? _initialSignature;
+
+  String _signature() => [
+        for (final controller in [
+          _title, _description, _coverUrl, _backgroundUrl, _releaseYear, _developer, _publisher, _franchiseName,
+          _gameType, _completionCondition, _estimatedMainHours, _estimatedCompletionistHours, _personalEstimatedHours,
+          _retroactiveHours, _notes,
+        ])
+          controller.text,
+        _status, _priority, _difficulty, _platformId, (_genreIds.toList()..sort()).join(','), _favorite, _gameOfYear, _owned,
+        _archived, _excludedFromSuggestions, _startedAt, _completedAt, _rating,
+      ].join('|');
+
+  bool _isDirty() => _initialSignature != null && _initialSignature != _signature();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialSignature = _signature());
     final game = widget.game;
     if (game == null) {
       _title.text = widget.initialTitle ?? '';
@@ -297,7 +315,9 @@ class _GameEditorScreenState extends ConsumerState<GameEditorScreen> {
     final platforms = ref.watch(platformsProvider);
     final genres = ref.watch(genresProvider);
 
-    return Scaffold(
+    return DiscardGuard(
+      isDirty: _isDirty,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Editar jogo' : 'Novo jogo'),
         actions: [
@@ -566,7 +586,7 @@ class _GameEditorScreenState extends ConsumerState<GameEditorScreen> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _dateField(

@@ -136,15 +136,22 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
                       onEnd: _endActiveSession,
                       onLog: () => _openSessionEditor(null),
                     ),
-                    if (canFinish(_game))
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: _finish,
-                          icon: const Icon(Icons.flag_rounded),
-                          label: const Text('Zerar'),
-                        ),
-                      ),
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        if (canFinish(_game))
+                          TextButton.icon(
+                            onPressed: _finish,
+                            icon: const Icon(Icons.flag_rounded),
+                            label: const Text('Zerar'),
+                          ),
+                        for (final action in quickStatusActions(_game.status))
+                          TextButton(
+                            onPressed: () => _quickStatus(action.status, action.message),
+                            child: Text(action.label),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -311,6 +318,23 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
       case 'delete':
         await _confirmDelete();
     }
+  }
+
+  /// Muda o status em um toque, sem abrir o formulário, e oferece Desfazer.
+  Future<void> _quickStatus(String status, String message) async {
+    final previous = _game.status;
+    try {
+      await _patch({'status': status});
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        action: SnackBarAction(label: 'Desfazer', onPressed: () => _patch({'status': previous})),
+      ));
   }
 
   /// Zera o jogo (ADR-042) e recarrega a ficha, que a API alterou.
@@ -624,3 +648,21 @@ class _Tag extends StatelessWidget {
     );
   }
 }
+
+/// Ação de status em um toque: rótulo do botão, status novo e aviso exibido.
+class QuickStatusAction {
+  final String label;
+  final String status;
+  final String message;
+
+  const QuickStatusAction(this.label, this.status, this.message);
+}
+
+/// Quais mudanças de status em um toque fazem sentido para o status atual.
+List<QuickStatusAction> quickStatusActions(String status) => [
+      if (status == 'PLAYING') const QuickStatusAction('Pausar', 'PAUSED', 'Jogo pausado.'),
+      if (status == 'PAUSED' || status == 'ABANDONED') const QuickStatusAction('Retomar', 'PLAYING', 'Jogo retomado.'),
+      if (status == 'BACKLOG') const QuickStatusAction('Marcar como jogando', 'PLAYING', 'Jogo marcado como jogando.'),
+      if (status == 'PLAYING' || status == 'PAUSED' || status == 'BACKLOG')
+        const QuickStatusAction('Abandonar', 'ABANDONED', 'Jogo abandonado.'),
+    ];

@@ -205,6 +205,9 @@ export function App() {
   const [finishNotice, setFinishNotice] = useState<{ title: string; gameId: string; undo: FinishResult['undo'] } | null>(null);
   const [finishPrompt, setFinishPrompt] = useState<Game | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<{ message: string; gameId: string; previous: Game['status'] } | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [metadataCount, setMetadataCount] = useState(0);
   const refreshMetadataCount = useCallback(() => { void fetchMetadataReviewCount().then(setMetadataCount); }, []);
   useEffect(() => { refreshMetadataCount(); }, [refreshMetadataCount]);
@@ -945,13 +948,29 @@ export function App() {
   function closeEditor() {
     setDialogOpen(false);
     setEditing(null);
+    setEditorDirty(false);
+    setConfirmingDiscard(false);
   }
+
+  /** Fechar sem salvar: com alterações, pede confirmação antes de descartar. */
+  function requestCloseEditor() {
+    if (editorDirty) setConfirmingDiscard(true);
+    else closeEditor();
+  }
+
+  // O navegador avisa antes de recarregar ou fechar a aba com o editor sujo.
+  useEffect(() => {
+    if (!dialogOpen || !editorDirty) return undefined;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dialogOpen, editorDirty]);
 
   /** Esc fecha os resultados primeiro e o modal depois; Tab fica preso no diálogo. */
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape') {
       if (showResults) { event.stopPropagation(); setResultsDismissed(true); return; }
-      closeEditor();
+      requestCloseEditor();
       return;
     }
     if (event.key !== 'Tab') return;
@@ -967,6 +986,7 @@ export function App() {
   function openEditor(game: Game | null = null) {
     const title = game?.title ?? '';
     appliedFranchiseIgdbIdRef.current = null;
+    setEditorDirty(false);
     setEditing(game);
     setFormStatus(game?.status ?? 'BACKLOG');
     setFormTitle(title);
@@ -1108,6 +1128,20 @@ export function App() {
       await loadGames();
       await refreshPlanningViews();
     } catch { setError('Não foi possível zerar o jogo agora.'); }
+  }
+
+  /** Muda o status em um toque, sem abrir o formulário, e oferece Desfazer. */
+  async function quickStatus(game: Game, status: Game['status'], message: string) {
+    await updateGame(game, { status });
+    setStatusNotice({ message, gameId: game.id, previous: game.status });
+  }
+
+  async function undoStatus() {
+    if (!statusNotice) return;
+    const { gameId, previous } = statusNotice;
+    setStatusNotice(null);
+    const target = games.find((item) => item.id === gameId);
+    if (target) await updateGame(target, { status: previous });
   }
 
   async function undoFinish() {
@@ -1276,6 +1310,10 @@ export function App() {
             <div className="gd-hero-actions">
               <Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button>
               {canFinishGame(selectedGame.status) && <button type="button" className="button-secondary" onClick={() => void beginFinish(selectedGame)}>Zerar</button>}
+              {selectedGame.status === 'PLAYING' && <button type="button" className="button-secondary" onClick={() => void quickStatus(selectedGame, 'PAUSED', 'Jogo pausado.')}>Pausar</button>}
+              {(selectedGame.status === 'PAUSED' || selectedGame.status === 'ABANDONED') && <button type="button" className="button-secondary" onClick={() => void quickStatus(selectedGame, 'PLAYING', 'Jogo retomado.')}>Retomar</button>}
+              {selectedGame.status === 'BACKLOG' && <button type="button" className="button-secondary" onClick={() => void quickStatus(selectedGame, 'PLAYING', 'Jogo marcado como jogando.')}>Marcar como jogando</button>}
+              {(selectedGame.status === 'PLAYING' || selectedGame.status === 'PAUSED' || selectedGame.status === 'BACKLOG') && <button type="button" className="button-secondary" onClick={() => void quickStatus(selectedGame, 'ABANDONED', 'Jogo abandonado.')}>Abandonar</button>}
               <button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button>
               <button type="button" className="button-secondary" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button>
               <button type="button" className="button-secondary" onClick={() => setMergingGame(true)}>Mesclar duplicado</button>
@@ -1445,8 +1483,8 @@ export function App() {
         </button><button type="button" className="game-card-quick" aria-label={`Editar ${game.title}`} onClick={() => openEditor(game)}><span aria-hidden="true">✎</span></button><button type="button" className="queue-toggle" disabled={!game.owned || game.archived || game.status === 'COMPLETED' || game.status === 'ABANDONED'} onClick={() => void (queue.some((item) => item.game.id === game.id) ? removeFromQueue(game.id) : addToQueue(game))}>{queue.some((item) => item.game.id === game.id) ? 'Na fila · Remover' : '＋ Adicionar à fila'}</button></div>)}</section>
       )}
       </>}
-      {dialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}><section ref={dialogRef} className="game-dialog" role="dialog" aria-modal="true" aria-labelledby="game-dialog-title" onKeyDown={handleDialogKeyDown}><header><div><p className="eyebrow">BIBLIOTECA</p><h2 id="game-dialog-title">{editing ? 'Editar jogo' : 'Adicionar jogo'}</h2></div><button className="dialog-close" type="button" aria-label="Fechar" onClick={closeEditor}>×</button></header>
-        <form ref={gameFormRef} onSubmit={submitGame}><label className="form-field form-wide">Título<input name="title" required maxLength={200} value={formTitle} onChange={(event) => setFormTitle(event.target.value)} aria-expanded={showResults} aria-controls="title-results" aria-autocomplete="list" autoFocus /></label>
+      {dialogOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) requestCloseEditor(); }}><section ref={dialogRef} className="game-dialog" role="dialog" aria-modal="true" aria-labelledby="game-dialog-title" onKeyDown={handleDialogKeyDown}><header><div><p className="eyebrow">BIBLIOTECA</p><h2 id="game-dialog-title">{editing ? 'Editar jogo' : 'Adicionar jogo'}</h2></div><button className="dialog-close" type="button" aria-label="Fechar" onClick={closeEditor}>×</button></header>
+        <form ref={gameFormRef} onSubmit={submitGame} onChange={() => setEditorDirty(true)}><label className="form-field form-wide">Título<input name="title" required maxLength={200} value={formTitle} onChange={(event) => setFormTitle(event.target.value)} aria-expanded={showResults} aria-controls="title-results" aria-autocomplete="list" autoFocus /></label>
           {searchMessage && <p role="status" className="form-wide search-status">{searchMessage}</p>}
           {showResults && <div className="form-wide search-results-wrap"><section className="search-results" id="title-results" aria-label="Resultados da busca">
             <div className="search-results-head"><strong>{searching ? 'Buscando…' : `${resultCount} ${resultCount === 1 ? 'resultado' : 'resultados'}`}</strong><div><button type="button" className="session-edit" disabled={searching} onClick={() => void retrySearch()}>Buscar novamente</button><button type="button" className="session-edit" onClick={() => setResultsDismissed(true)}>Fechar</button></div></div>
@@ -1482,7 +1520,7 @@ export function App() {
             <label className="form-field form-wide">Descrição<textarea name="description" rows={2} maxLength={10000} defaultValue={editing?.description ?? ''} /></label>
             <label className="form-field form-wide">Notas<textarea name="notes" rows={2} maxLength={10000} defaultValue={editing?.notes ?? ''} /></label>
           </fieldset>
-          <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={closeEditor}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
+          <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={requestCloseEditor}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
         </form></section></div>}
         {mergingGame && selectedGame && <GameMergeDialog game={selectedGame} games={games} onClose={() => setMergingGame(false)} onMerged={(merged) => { setMergingGame(false); setSelectedGame(merged); setAchievementsSummary(null); setDetailVersion((version) => version + 1); void loadGames(); void refreshPlanningViews(); }} />}
         {journeyOffer && <JourneyStartDialog gameTitle={journeyOffer.game.title} hint={journeyOffer.hint} onAccept={() => void acceptJourney()} onDismiss={() => setJourneyOffer(null)} />}
@@ -1491,6 +1529,8 @@ export function App() {
           onSave={async (values) => { await updateGame(finishFlow.game, values); }}
           onClose={(result) => { setFinishNotice({ title: finishFlow.game.title, gameId: finishFlow.game.id, undo: result.undo }); setFinishFlow(null); void loadGames(); }} />}
         {finishNotice && <section className="journey-offer" role="status"><p>{finishNotice.title} zerado.</p><div className="journey-offer-actions"><button type="button" className="session-edit" onClick={() => void undoFinish()}>Desfazer</button><button type="button" className="cancel-button" onClick={() => setFinishNotice(null)}>Fechar</button></div></section>}
+        {statusNotice && <section className="journey-offer" role="status"><p>{statusNotice.message}</p><div className="journey-offer-actions"><button type="button" className="session-edit" onClick={() => void undoStatus()}>Desfazer</button><button type="button" className="cancel-button" onClick={() => setStatusNotice(null)}>Fechar</button></div></section>}
+        <ConfirmDialog open={confirmingDiscard} title="Descartar alterações?" description="O que você preencheu neste jogo ainda não foi salvo." confirmLabel="Descartar" tone="danger" onCancel={() => setConfirmingDiscard(false)} onConfirm={closeEditor} />
         <ConfirmDialog open={finishPrompt !== null} title="Terminou o jogo?" description={finishPrompt ? `O progresso chegou a 100%. Quer zerar ${finishPrompt.title} agora?` : ''} confirmLabel="Zerar agora" onCancel={() => setFinishPrompt(null)} onConfirm={() => { if (finishPrompt) void beginFinish(finishPrompt); }} />
         {quickAddOpen && <QuickAddDialog platforms={platforms} onClose={() => setQuickAddOpen(false)}
           onCreated={(game) => { setQuickAddOpen(false); void loadGames(); void refreshPlanningViews(); setSessionFeedback(`${game.title} adicionado. Os metadados chegam sozinhos.`); window.setTimeout(refreshMetadataCount, 8000); }}

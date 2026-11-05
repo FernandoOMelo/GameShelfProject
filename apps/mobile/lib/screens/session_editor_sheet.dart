@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../models/session.dart';
 import '../providers/games_provider.dart';
+import '../widgets/discard_guard.dart';
 
 /// Registra ou edita uma sessão com horários e os quatro campos do diário.
 ///
@@ -40,7 +41,14 @@ class _SessionEditorSheetState extends ConsumerState<SessionEditorSheet> {
     _notes.text = session?.notes ?? '';
     _keyDecisions.text = session?.keyDecisions ?? '';
     _tips.text = session?.tips ?? '';
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialSignature = _signature());
   }
+
+  String? _initialSignature;
+
+  String _signature() => [_location.text, _notes.text, _keyDecisions.text, _tips.text, _startedAt, _endedAt, _progress].join('|');
+
+  bool _isDirty() => _initialSignature != null && _initialSignature != _signature();
 
   @override
   void dispose() {
@@ -112,7 +120,9 @@ class _SessionEditorSheetState extends ConsumerState<SessionEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return DiscardGuard(
+      isDirty: _isDirty,
+      child: Padding(
       padding: EdgeInsets.only(
         left: 20, right: 20, top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
@@ -188,7 +198,7 @@ class _SessionEditorSheetState extends ConsumerState<SessionEditorSheet> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _dateTile(String label, DateTime? value, VoidCallback onTap, {VoidCallback? onClear}) {

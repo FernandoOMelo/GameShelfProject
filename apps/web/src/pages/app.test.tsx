@@ -365,8 +365,41 @@ describe('library page', () => {
     expect(screen.queryByRole('list', { name: 'Resultados de metadata' })).toBeNull();
     expect(screen.queryByRole('dialog')).not.toBeNull();
 
+    // Com o título digitado há alterações: Esc pede confirmação antes de descartar.
     fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(await screen.findByText('Descartar alterações?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+    await waitFor(() => expect(screen.queryByLabelText('Título')).toBeNull());
+  });
+
+  it('closes an untouched editor without asking and keeps a dirty one on "cancel"', async () => {
+    mockApi();
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
+    fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByText('Descartar alterações?')).toBeNull();
+    expect(screen.queryByLabelText('Título')).toBeNull();
+
+    fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(await screen.findByText('Descartar alterações?')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancelar' }).at(-1)!);
+    expect(screen.getByLabelText('Título')).toHaveValue('Hades');
+  });
+
+  it('changes status in one tap from the details and can undo it', async () => {
+    const game = makeGame('00000000-0000-4000-8000-000000000005', 'Hades', 'PLAYING');
+    mockApi([game]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes de Hades' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }));
+    expect(await screen.findByText('Jogo pausado.')).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH' && String(init.body).includes('"PAUSED"'))).toBe(true));
   });
 
   it('keeps quiet when opening a game that already has all estimates', async () => {
