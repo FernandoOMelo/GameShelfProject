@@ -1424,3 +1424,30 @@ export const finishResultSchema = z.object({
 }).strict();
 export type FinishResult = z.infer<typeof finishResultSchema>;
 export type FinishUndo = z.infer<typeof finishUndoSchema>;
+
+// Captura automática de metadados (ADR-043).
+export const metadataSyncStatusSchema = z.enum(['APPLIED_AUTO', 'NEEDS_REVIEW', 'NOT_FOUND', 'CONFIRMED', 'IGNORED']);
+export type MetadataSyncStatus = z.infer<typeof metadataSyncStatusSchema>;
+export const metadataSyncItemSchema = z.object({
+  gameId: z.string().uuid(),
+  title: z.string(),
+  coverUrl: z.string().nullable(),
+  status: metadataSyncStatusSchema,
+  /** Campos que a captura preencheu sozinha; vazio quando só há candidatos. */
+  appliedFields: z.array(z.string()),
+  candidates: z.array(gameMetadataCandidateSchema),
+  checkedAt: z.string().datetime(),
+}).strict();
+export type MetadataSyncItem = z.infer<typeof metadataSyncItemSchema>;
+/** Jogos que pedem atenção: aplicados sozinhos (confirmar ou desfazer), a revisar e não encontrados. */
+export const metadataReviewResponseSchema = z.object({
+  count: z.number().int().nonnegative(),
+  items: z.array(metadataSyncItemSchema),
+}).strict();
+export type MetadataReviewResponse = z.infer<typeof metadataReviewResponseSchema>;
+export const metadataSyncRunResultSchema = z.object({
+  checked: z.number().int().nonnegative(), applied: z.number().int().nonnegative(), review: z.number().int().nonnegative(),
+  notFound: z.number().int().nonnegative(), failed: z.boolean(),
+}).strict();
+export type MetadataSyncRunResult = z.infer<typeof metadataSyncRunResultSchema>;
+export const metadataUseCandidateInputSchema = z.object({ providerId: z.string().min(1) }).strict();

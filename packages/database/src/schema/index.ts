@@ -464,3 +464,22 @@ export const dlcs = pgTable('dlcs', {
   check('dlcs_estimated_hours_nonnegative', sql`${table.estimatedHours} IS NULL OR ${table.estimatedHours} >= 0`),
   check('dlcs_played_hours_nonnegative', sql`${table.playedHours} >= 0`),
 ]);
+
+// Captura automática de metadados (ADR-043). Uma linha por jogo já consultado:
+// guarda o resultado da última busca no provedor para a tela de revisão e para
+// não repetir a consulta. Apagar o jogo apaga a linha.
+export const gameMetadataSync = pgTable('game_metadata_sync', {
+  gameId: uuid('game_id').primaryKey().references(() => games.id, { onDelete: 'cascade' }),
+  status: text('status').notNull(),
+  providerId: text('provider_id'),
+  // Título usado na busca: se o usuário o editar, a busca é refeita.
+  checkedTitle: text('checked_title').notNull(),
+  checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+  // Campos que a captura preencheu (para o Desfazer) e candidatos para a revisão.
+  appliedFields: jsonb('applied_fields').notNull().default(sql`'[]'::jsonb`),
+  candidates: jsonb('candidates').notNull().default(sql`'[]'::jsonb`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('game_metadata_sync_status_idx').on(table.status),
+  check('game_metadata_sync_status_valid', sql`${table.status} IN ('APPLIED_AUTO', 'NEEDS_REVIEW', 'NOT_FOUND', 'CONFIRMED', 'IGNORED')`),
+]);

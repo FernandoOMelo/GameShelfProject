@@ -32,6 +32,8 @@ import type { BackupImporter } from './modules/backup/importer.js';
 import { registerBackupRoutes } from './modules/backup/routes.js';
 import { registerStatsRoutes } from './modules/stats/routes.js';
 import { registerReportRoutes } from './modules/reports/routes.js';
+import type { MetadataSyncService } from './modules/metadata-sync/service.js';
+import { registerMetadataSyncRoutes } from './modules/metadata-sync/routes.js';
 import { registerLifecycleRoutes } from './modules/lifecycle/routes.js';
 import type { ChallengeCompletionRepository, MainChallengeRepository } from './modules/challenge/repository.js';
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
@@ -59,8 +61,13 @@ import type { ExternalMatchQueueRepository } from './modules/integrations/match-
 import { registerIntegrationRoutes } from './modules/integrations/routes.js';
 import { ExternalSyncRunner } from './modules/integrations/sync-runner.js';
 
-export function buildApp(options: { integrationHealth?: IntegrationHealthTracker; missionRepository?: MissionRepository; gameMergeRepository?: GameMergeRepository; rawgAchievementRepository?: RawgAchievementRepository; rawgAchievementProvider?: RawgAchievementProvider; dlcRepository?: DlcRepository; externalAchievementRepository?: ExternalAchievementRepository; externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
+export function buildApp(options: { metadataSyncService?: MetadataSyncService; integrationHealth?: IntegrationHealthTracker; missionRepository?: MissionRepository; gameMergeRepository?: GameMergeRepository; rawgAchievementRepository?: RawgAchievementRepository; rawgAchievementProvider?: RawgAchievementProvider; dlcRepository?: DlcRepository; externalAchievementRepository?: ExternalAchievementRepository; externalLibraryProvider?: ExternalLibraryProvider; externalMatchQueueRepository?: ExternalMatchQueueRepository; externalSyncRunner?: ExternalSyncRunner; gamePlatformRepository?: GamePlatformRepository; playthroughRepository?: PlaythroughRepository; gameRepository?: GameRepository; gameListRepository?: GameListRepository; mainChallengeRepository?: MainChallengeRepository; challengeCompletionRepository?: ChallengeCompletionRepository; savedFilterRepository?: SavedFilterRepository; goalRepository?: GoalRepository; screenshotRepository?: ScreenshotRepository; backupImporter?: BackupImporter; franchiseRepository?: FranchiseRepository; platformRepository?: PlatformRepository; genreRepository?: GenreRepository; sessionRepository?: SessionRepository; backlogRepository?: BacklogRepository; planningSettingsRepository?: PlanningSettingsRepository; metadataProvider?: GameMetadataProvider; timeEstimateProvider?: GameTimeEstimateProvider; imageStorage?: GameImageStorage; webOrigin?: string } = {}) {
   const app = Fastify({ logger: true });
+  // Jogo novo ou importado entra na captura automática de metadados (ADR-043), sem atrasar a resposta.
+  const onGameCreated = options.metadataSyncService
+    ? (gameId: string) => { void options.metadataSyncService!.syncGame(gameId).catch(() => undefined); }
+    : undefined;
+  if (options.metadataSyncService) app.register((instance) => registerMetadataSyncRoutes(instance, options.metadataSyncService!));
   const webOrigin = options.webOrigin ?? 'http://localhost:5173';
   // Clientes como o app Flutter (Dio) enviam `Content-Type: application/json` em
   // todas as requisições, inclusive DELETE sem corpo. O parser padrão do Fastify
@@ -95,7 +102,7 @@ export function buildApp(options: { integrationHealth?: IntegrationHealthTracker
     ? { lists: options.gameListRepository, challenge: options.mainChallengeRepository, completions: options.challengeCompletionRepository }
     : undefined, options.gamePlatformRepository, options.rawgAchievementRepository && options.rawgAchievementProvider
     ? { store: options.rawgAchievementRepository, provider: options.rawgAchievementProvider }
-    : undefined));
+    : undefined, onGameCreated));
   if (options.gameRepository && options.platformRepository && options.gamePlatformRepository) {
     app.register((instance) => registerGamePlatformRoutes(instance, options.gameRepository!, options.platformRepository!, options.gamePlatformRepository!,
       options.externalAchievementRepository
@@ -185,7 +192,7 @@ export function buildApp(options: { integrationHealth?: IntegrationHealthTracker
     : undefined;
   const checkConnection = integration?.provider.ping?.bind(integration.provider);
   app.register((instance) => registerIntegrationRoutes(instance, integration?.provider.source ?? ACHIEVIST_SOURCE,
-    integration ? { deps: integration, runner: options.externalSyncRunner ?? new ExternalSyncRunner(integration), checkConnection } : undefined));
+    integration ? { deps: integration, runner: options.externalSyncRunner ?? new ExternalSyncRunner(integration), checkConnection } : undefined, onGameCreated));
 
   return app;
 }

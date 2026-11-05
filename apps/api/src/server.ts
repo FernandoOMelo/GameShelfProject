@@ -29,6 +29,8 @@ import { IgdbMetadataProvider } from './modules/games/igdb-metadata-provider.js'
 import { HltbTimeEstimateProvider } from './modules/games/hltb-time-estimate-provider.js';
 import { LocalImageStorage } from './modules/games/image-storage.js';
 import { DrizzleDlcRepository } from './modules/dlcs/drizzle-dlc-repository.js';
+import { MetadataSyncService } from './modules/metadata-sync/service.js';
+import { DrizzleMetadataSyncRepository } from './modules/metadata-sync/drizzle-repository.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,7 +64,18 @@ health.register({
   check: externalProvider?.ping ? async () => `Autenticou com ${(await externalProvider.ping!()).accounts} conta(s).` : undefined,
 });
 
+// Captura automática de metadados (ADR-043): só existe com o IGDB configurado.
+const imageStorage = new LocalImageStorage(resolve(apiDirectory, env.MEDIA_STORAGE_PATH));
+const timeEstimateProvider = new HltbTimeEstimateProvider();
+const metadataSyncService = metadataProvider
+  ? new MetadataSyncService({
+    games: new DrizzleGameRepository(database.db), genres: new DrizzleGenreRepository(database.db), franchises: new DrizzleFranchiseRepository(database.db),
+    provider: metadataProvider, store: new DrizzleMetadataSyncRepository(database.db), timeEstimates: timeEstimateProvider, images: imageStorage,
+  })
+  : undefined;
+
 const app = buildApp({
+  ...(metadataSyncService && { metadataSyncService }),
   integrationHealth: health,
   missionRepository: new DrizzleMissionRepository(database.db),
   gameRepository: new DrizzleGameRepository(database.db),
@@ -85,13 +98,13 @@ const app = buildApp({
   backupImporter: new DrizzleBackupImporter(database.db),
   screenshotRepository: new DrizzleScreenshotRepository(database.db),
   planningSettingsRepository: new DrizzlePlanningSettingsRepository(database.db),
-  imageStorage: new LocalImageStorage(resolve(apiDirectory, env.MEDIA_STORAGE_PATH)),
+  imageStorage,
   ...(metadataProvider && { metadataProvider }),
   ...(rawgProvider && { rawgAchievementProvider: rawgProvider }),
   externalMatchQueueRepository: new DrizzleExternalMatchQueueRepository(database.db),
   // Sem as credenciais do Achievist a integração fica desligada (ADR-024).
   ...(externalProvider && { externalLibraryProvider: externalProvider }),
-  timeEstimateProvider: new HltbTimeEstimateProvider(),
+  timeEstimateProvider,
   webOrigin: env.WEB_ORIGIN,
 });
 
@@ -103,6 +116,12 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 try {
   await app.listen({ host: env.API_HOST, port: env.API_PORT });
+  if (metadataSyncService) {
+    // Varredura de metadados pendentes: 30 s depois de subir e de hora em hora, 25 jogos por rodada.
+    const sweep = () => { void metadataSyncService.sweep(25).catch((error: unknown) => app.log.warn({ err: error }, 'Varredura de metadados falhou')); };
+    setTimeout(sweep, 30_000).unref();
+    setInterval(sweep, 3_600_000).unref();
+  }
 } catch (error) {
   app.log.error(error);
   await database?.close();

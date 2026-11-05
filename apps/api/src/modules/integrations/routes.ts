@@ -20,7 +20,7 @@ export type IntegrationContext = {
  * configuradas, `context` é indefinido: a consulta de estado responde
  * `disabled` e as ações respondem 503, enquanto o resto da API segue normal.
  */
-export async function registerIntegrationRoutes(app: FastifyInstance, source: string, context?: IntegrationContext) {
+export async function registerIntegrationRoutes(app: FastifyInstance, source: string, context?: IntegrationContext, onGameCreated?: (gameId: string) => void) {
   const base = `/integrations/${source}`;
   const disabled = () => externalSyncStateSchema.parse({
     source, status: 'disabled', startedAt: null, finishedAt: null, summary: null,
@@ -101,6 +101,7 @@ export async function registerIntegrationRoutes(app: FastifyInstance, source: st
     if (!outcome.ok) return reply.code(outcome.status).send({ error: outcome.error });
     const created = await context.deps.games.find(outcome.gameId);
     if (!created) return reply.code(404).send({ error: 'Jogo não encontrado após o cadastro.' });
+    onGameCreated?.(created.id);
     return reply.code(201).send(externalMatchCreatedSchema.parse({
       game: toGame(created), platform: toGamePlatform(outcome.record),
     }));

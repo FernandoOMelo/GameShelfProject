@@ -13,7 +13,7 @@ import { linkRawgCatalog, type RawgAchievementProvider, type RawgAchievementRepo
 type ChallengeTracking = { lists: GameListRepository; challenge: MainChallengeRepository; completions: ChallengeCompletionRepository };
 type RawgAutoLink = { store: RawgAchievementRepository; provider: RawgAchievementProvider };
 
-export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking, gamePlatforms?: GamePlatformRepository, rawg?: RawgAutoLink) {
+export async function registerGameRoutes(app: FastifyInstance, repository: GameRepository, imageStorage?: GameImageStorage, backlog?: BacklogRepository, screenshots?: ScreenshotRepository, tracking?: ChallengeTracking, gamePlatforms?: GamePlatformRepository, rawg?: RawgAutoLink, onCreated?: (gameId: string) => void) {
 
   // Melhor esforço: ao cadastrar um jogo, já tenta vincular o catálogo de
   // conquistas da RAWG por título (e ano, quando ajuda a desempatar). Nunca
@@ -73,6 +73,7 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
     }
     if (localized.input.platformId !== undefined) await syncPrimaryPlatform(game.id, game.platformId, game.owned);
     autoLinkRawgCatalog(game.id, game.title, game.releaseYear ?? null);
+    onCreated?.(game.id);
     return reply.code(201).send(gameSchema.parse(toResponse({ ...game, platformIds: game.platformId ? [game.platformId] : [] })));
   });
 

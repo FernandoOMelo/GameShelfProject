@@ -28,6 +28,23 @@ IGDB.
 - plataformas;
 - franquia.
 
+## Captura automática (ADR-043)
+
+Com o IGDB configurado, a API busca sozinha os metadados dos jogos que não os têm
+(capa, descrição, ano, desenvolvedora, publicadora, gêneros, franquia e, como melhor
+esforço, tempos do HowLongToBeat). Ela roda ao cadastrar um jogo, ao criar um jogo
+pela fila do Achievist, de hora em hora (25 jogos por rodada) e sob demanda.
+
+- Aplica sozinha só com título exato e único (e ano igual, se o jogo tem ano) e só em
+  campos vazios: nunca sobrescreve o que você preencheu.
+- Sem correspondência exata, o jogo vai para **Metadados a revisar** com os candidatos;
+  nada encontrado também aparece lá. Dá para usar um candidato, buscar outro título,
+  ignorar, e, para o que foi aplicado sozinho, confirmar ou desfazer.
+- Falha do provedor não marca nada como "não encontrado"; o jogo é tentado depois.
+  "Não encontrado" só é refeito após 30 dias ou se o título mudar.
+- API: `GET /metadata-sync/review`, `POST /metadata-sync/run` e
+  `POST /metadata-sync/:gameId/{sync,use,search,ignore,confirm,undo}`.
+
 ## Catálogo de conquistas (RAWG)
 
 Com `RAWG_API_KEY` configurada, o detalhe do jogo permite buscar candidatos pelo
