@@ -33,7 +33,20 @@ Parâmetros: `from`, `to`, `reference` (`MAIN`, `COMPLETIONIST`, `PERSONAL`), `s
   quantos ficaram abaixo, diferença média e tabela paginada, com exportação CSV;
 - jogos pausados há mais tempo (última sessão ou última atualização).
 
+## Jornadas e replays (`GET /reports/playthroughs`)
+
+Parâmetros: `from`, `to` (data de início da jornada). Usa as jornadas, não o status
+atual do jogo, então conclusões antigas de um jogo rejogado continuam contadas.
+Jornadas só planejadas não contam como iniciadas.
+
+- totais: jornadas iniciadas, jogos com jornadas, média por jogo, taxa de conclusão,
+  replays, dias médios para zerar e intervalo médio entre a conclusão e a jornada seguinte;
+- primeira jornada contra as seguintes: horas médias das jornadas zeradas com horas
+  (sessões vinculadas à jornada);
+- jornadas por plataforma, jogos com mais jornadas abandonadas e histórico completo
+  dos jogos mais rejogados (plataforma, início, situação, dias, horas).
+
 ## Próximas etapas
 
-Jornadas e replays, biblioteca e backlog (envelhecimento), conquistas e
-comparativos; filtros salvos e exportação em PDF.
+Biblioteca e backlog (envelhecimento), conquistas e comparativos; filtros salvos e
+exportação em PDF.

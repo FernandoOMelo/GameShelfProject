@@ -1255,3 +1255,41 @@ export const completionsReportSchema = z.object({
   stalled: z.array(z.object({ gameId: z.string().uuid(), title: z.string(), lastActivityAt: z.string().datetime(), daysIdle: z.number().int().nonnegative() }).strict()),
 }).strict();
 export type CompletionsReport = z.infer<typeof completionsReportSchema>;
+
+export const playthroughsReportQuerySchema = z.object({
+  from: calendarDateSchema.optional(),
+  to: calendarDateSchema.optional(),
+}).strict().refine(validReportRange, reportRangeMessage);
+
+const journeySchema = z.object({
+  id: z.string().uuid(), sequence: z.number().int().positive(), label: z.string().nullable(), status: playthroughStatusSchema,
+  platformName: z.string().nullable(), startedAt: calendarDateSchema.nullable(), completedAt: calendarDateSchema.nullable(),
+  days: z.number().int().nonnegative().nullable(), hours: z.number().nonnegative(),
+}).strict();
+
+export const playthroughsReportSchema = z.object({
+  /** Jornadas iniciadas = qualquer uma que não seja só planejada. */
+  totals: z.object({
+    gamesWithJourneys: z.number().int().nonnegative(),
+    journeysStarted: z.number().int().nonnegative(),
+    journeysCompleted: z.number().int().nonnegative(),
+    journeysAbandoned: z.number().int().nonnegative(),
+    replaysStarted: z.number().int().nonnegative(),
+    averageJourneysPerGame: z.number().nonnegative(),
+    completionRate: z.number().min(0).max(100),
+    averageDaysToComplete: z.number().nonnegative().nullable(),
+    averageDaysBetweenReplays: z.number().nonnegative().nullable(),
+  }).strict(),
+  /** Horas médias das jornadas zeradas com horas registradas: a primeira contra as seguintes. */
+  firstVsLater: z.object({
+    firstAverageHours: z.number().nullable(), laterAverageHours: z.number().nullable(),
+    firstCount: z.number().int().nonnegative(), laterCount: z.number().int().nonnegative(),
+  }).strict(),
+  byPlatform: z.array(z.object({ name: z.string(), journeys: z.number().int().positive() }).strict()),
+  mostReplayed: z.array(z.object({
+    gameId: z.string().uuid(), title: z.string(), journeys: z.number().int().positive(),
+    completed: z.number().int().nonnegative(), abandoned: z.number().int().nonnegative(), history: z.array(journeySchema),
+  }).strict()),
+  mostAbandoned: z.array(z.object({ gameId: z.string().uuid(), title: z.string(), abandoned: z.number().int().positive(), journeys: z.number().int().positive() }).strict()),
+}).strict();
+export type PlaythroughsReport = z.infer<typeof playthroughsReportSchema>;

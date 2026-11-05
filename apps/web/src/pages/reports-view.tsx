@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { CompletionsReport, Genre, Platform, PlaytimeReport } from '@gameshelf/contracts';
+import type { CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
 import { EmptyState, ErrorState, LoadingState, Panel, StatCard } from '@gameshelf/ui';
 import { apiUrl, formatHoursMinutes } from './shared';
 
-type Category = 'playtime' | 'completions';
+type Category = 'playtime' | 'completions' | 'playthroughs';
 type Range = { from: string; to: string };
 type Reference = CompletionsReport['estimates']['reference'];
 type Sort = 'DIFFERENCE_DESC' | 'DIFFERENCE_ASC' | 'PLAYED_DESC' | 'TITLE';
@@ -12,6 +12,7 @@ const PAGE_SIZE = 15;
 const categories: Array<{ key: Category; title: string; description: string }> = [
   { key: 'playtime', title: 'Tempo de jogo', description: 'Sessões, horas, períodos e plataformas.' },
   { key: 'completions', title: 'Conclusões', description: 'Jogos zerados, estimativas e abandonos.' },
+  { key: 'playthroughs', title: 'Jornadas e replays', description: 'Rejogabilidade e evolução por jornada.' },
 ];
 const weekdayNames = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const lengthLabels: Record<PlaytimeReport['sessionLengths'][number]['key'], string> = {
@@ -81,6 +82,7 @@ export function ReportsView({ onOpenGame }: { onOpenGame: (gameId: string) => vo
     {category === null && <EmptyState title="Escolha um relatório" description="Selecione uma categoria para explorar os dados com filtros e detalhes." />}
     {category === 'playtime' && <PlaytimeReportView range={range} onOpenGame={onOpenGame} />}
     {category === 'completions' && <CompletionsReportView range={range} onOpenGame={onOpenGame} />}
+    {category === 'playthroughs' && <PlaythroughsReportView range={range} onOpenGame={onOpenGame} />}
   </section>;
 }
 
@@ -231,5 +233,48 @@ function CompletionsReportView({ range, onOpenGame }: { range: Range; onOpenGame
     {data.stalled.length > 0 && <Panel title="Jogos pausados há mais tempo">
       <Bars label="Dias sem atividade" entries={data.stalled.map((entry) => ({ key: entry.gameId, label: entry.title, value: entry.daysIdle, display: `${entry.daysIdle} dias`, onOpen: () => onOpenGame(entry.gameId) }))} />
     </Panel>}
+  </div>;
+}
+
+const journeyStatusLabels: Record<PlaythroughsReport['mostReplayed'][number]['history'][number]['status'], string> = {
+  PLANNED: 'Planejada', PLAYING: 'Jogando', PAUSED: 'Pausada', COMPLETED: 'Zerada', ABANDONED: 'Abandonada',
+};
+const decimal = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const brDate = (value: string | null) => value ? value.split('-').reverse().join('/') : '—';
+
+function PlaythroughsReportView({ range, onOpenGame }: { range: Range; onOpenGame: (gameId: string) => void }) {
+  const { data, failed } = useReport<PlaythroughsReport>(`/reports/playthroughs${query({ from: range.from, to: range.to })}`);
+  if (failed) return <ErrorState>Não foi possível carregar o relatório de jornadas.</ErrorState>;
+  if (!data) return <LoadingState>Carregando relatório…</LoadingState>;
+  const { totals, firstVsLater } = data;
+  if (totals.journeysStarted === 0) return <EmptyState title="Nenhuma jornada encontrada" description="Ajuste o período ou inicie jornadas nos jogos." />;
+  const comparison = firstVsLater.firstAverageHours === null || firstVsLater.laterAverageHours === null
+    ? '—' : `${decimal(firstVsLater.firstAverageHours)}h → ${decimal(firstVsLater.laterAverageHours)}h`;
+  return <div className="report-body">
+    <div className="stats-grid">
+      <StatCard label="Jornadas iniciadas" value={String(totals.journeysStarted)} detail={`em ${totals.gamesWithJourneys} jogos · ${decimal(totals.averageJourneysPerGame)} por jogo`} accent />
+      <StatCard label="Taxa de conclusão" value={`${decimal(totals.completionRate)}%`} detail={`${totals.journeysCompleted} zeradas · ${totals.journeysAbandoned} abandonadas`} />
+      <StatCard label="Replays iniciados" value={String(totals.replaysStarted)} />
+      <StatCard label="Dias para zerar" value={decimal(totals.averageDaysToComplete)} detail="Média entre início e conclusão" />
+      <StatCard label="Intervalo entre replays" value={totals.averageDaysBetweenReplays === null ? '—' : `${decimal(totals.averageDaysBetweenReplays)} dias`} detail="Da conclusão até a jornada seguinte" />
+      <StatCard label="Primeira vs. seguintes" value={comparison} detail="Horas médias das jornadas zeradas" />
+    </div>
+    <small className="stats-note">Conta jornadas, não o status atual do jogo; o período filtra pela data de início da jornada.</small>
+    <div className="stats-pair">
+      <Panel title="Por plataforma"><Bars label="Jornadas por plataforma" entries={data.byPlatform.map((entry) => ({ key: entry.name, label: entry.name, value: entry.journeys, display: String(entry.journeys) }))} /></Panel>
+      <Panel title="Jogos com mais jornadas abandonadas">{data.mostAbandoned.length === 0 ? <p className="library-subtitle">Nenhuma jornada abandonada.</p>
+        : <Bars label="Jornadas abandonadas" entries={data.mostAbandoned.map((entry) => ({ key: entry.gameId, label: entry.title, value: entry.abandoned, display: `${entry.abandoned} de ${entry.journeys}`, onOpen: () => onOpenGame(entry.gameId) }))} />}</Panel>
+    </div>
+    <Panel title="Jogos mais rejogados">{data.mostReplayed.length === 0 ? <p className="library-subtitle">Nenhum jogo com mais de uma jornada.</p>
+      : data.mostReplayed.map((game) => <div key={game.gameId} className="report-journeys">
+        <h3><button type="button" className="link-button" onClick={() => onOpenGame(game.gameId)}>{game.title}</button> <small>{game.journeys} jornadas</small></h3>
+        <table className="stats-table">
+          <thead><tr><th>Jornada</th><th>Plataforma</th><th>Início</th><th>Situação</th><th>Dias</th><th>Horas</th></tr></thead>
+          <tbody>{game.history.map((item) => <tr key={item.id}>
+            <th scope="row">{item.label ?? `#${item.sequence}`}</th><td>{item.platformName ?? '—'}</td><td>{brDate(item.startedAt)}</td>
+            <td>{journeyStatusLabels[item.status]}</td><td>{item.days ?? '—'}</td><td>{item.hours > 0 ? formatHoursMinutes(item.hours) : '—'}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>)}</Panel>
   </div>;
 }

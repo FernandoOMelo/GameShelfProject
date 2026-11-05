@@ -139,7 +139,7 @@ export function buildApp(options: { integrationHealth?: IntegrationHealthTracker
       options.externalAchievementRepository));
   }
   if (options.gameRepository && options.sessionRepository && options.platformRepository && options.genreRepository) {
-    app.register((instance) => registerReportRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!));
+    app.register((instance) => registerReportRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!, options.playthroughRepository));
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));
