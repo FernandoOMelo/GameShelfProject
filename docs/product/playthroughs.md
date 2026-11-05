@@ -43,6 +43,20 @@ Quatro coisas diferentes, que o sistema não confunde: o jogo existe na
 plataforma, o usuário possui o jogo na plataforma, o usuário jogou na plataforma
 e o usuário zerou.
 
+## Começar a jogar e zerar (ADR-042)
+
+Ao iniciar uma sessão, o app consulta `GET /games/:id/lifecycle` e, quando faz
+sentido, oferece iniciar a jornada com tudo pré-preenchido (data de início da
+sessão, plataforma da última sessão ou principal). Sem jornada: "Iniciar jornada
+#1"; com jornada em andamento: a sessão só é vinculada a ela; jogo zerado: replay;
+jornada pausada ou abandonada: retomar. Começar preenche a data de início do jogo
+se estiver vazia e leva Na biblioteca, Pausado e Abandonado para Jogando.
+
+Zerar (`POST /games/:id/finish`) grava de uma vez o status Zerado, a data de conclusão
+(hoje, editável), a conclusão da jornada em andamento (ou uma jornada já concluída,
+se o jogo não tinha nenhuma) e encerra a sessão aberta; nota, dificuldade e extras
+vêm depois, e a conclusão já está salva. `finish/undo` desfaz.
+
 ## Jornadas
 
 Uma jornada é uma experiência contínua de jogo. Um jogo pode ter nenhuma, uma ou

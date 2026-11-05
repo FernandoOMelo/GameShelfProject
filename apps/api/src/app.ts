@@ -32,6 +32,7 @@ import type { BackupImporter } from './modules/backup/importer.js';
 import { registerBackupRoutes } from './modules/backup/routes.js';
 import { registerStatsRoutes } from './modules/stats/routes.js';
 import { registerReportRoutes } from './modules/reports/routes.js';
+import { registerLifecycleRoutes } from './modules/lifecycle/routes.js';
 import type { ChallengeCompletionRepository, MainChallengeRepository } from './modules/challenge/repository.js';
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
 import type { SavedFilterRepository } from './modules/saved-filters/repository.js';
@@ -141,6 +142,15 @@ export function buildApp(options: { integrationHealth?: IntegrationHealthTracker
   if (options.gameRepository && options.sessionRepository && options.platformRepository && options.genreRepository) {
     app.register((instance) => registerReportRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!, options.playthroughRepository,
       options.gamePlatformRepository && options.externalAchievementRepository ? { gamePlatforms: options.gamePlatformRepository, store: options.externalAchievementRepository } : undefined));
+  }
+  if (options.gameRepository && options.sessionRepository && options.playthroughRepository) {
+    app.register((instance) => registerLifecycleRoutes(instance, {
+      games: options.gameRepository!, sessions: options.sessionRepository!, playthroughs: options.playthroughRepository!,
+      ...(options.backlogRepository ? { backlog: options.backlogRepository } : {}),
+      ...(options.gameListRepository && options.mainChallengeRepository && options.challengeCompletionRepository
+        ? { tracking: { lists: options.gameListRepository, challenge: options.mainChallengeRepository, completions: options.challengeCompletionRepository } }
+        : {}),
+    }));
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));

@@ -1363,3 +1363,64 @@ export const comparisonReportSchema = z.object({
 }).strict();
 export type ComparisonReport = z.infer<typeof comparisonReportSchema>;
 export type ComparisonMetricKey = z.infer<typeof comparisonMetricKeySchema>;
+
+// Ciclo do jogo guiado (ADR-042): começar a jogar e zerar como comandos explícitos.
+const lifecycleTimezone = z.coerce.number().int().min(-840).max(840).default(0);
+export const lifecycleQuerySchema = z.object({ timezoneOffsetMinutes: lifecycleTimezone }).strict();
+export const startModeSchema = z.enum(['LINK_ACTIVE', 'OFFER_FIRST', 'OFFER_REPLAY', 'OFFER_RESUME', 'OFFER_PLANNED']);
+export type StartMode = z.infer<typeof startModeSchema>;
+
+/** O que a tela deve oferecer ao iniciar uma sessão e ao zerar; deriva sempre do estado atual do servidor. */
+export const lifecycleHintSchema = z.object({
+  start: z.object({
+    mode: startModeSchema,
+    journeyId: z.string().uuid().nullable(),
+    nextSequence: z.number().int().positive(),
+    suggestedPlatformId: z.string().uuid().nullable(),
+    /** Status que o jogo terá depois de começar a jogar; igual ao atual quando nada muda. */
+    gameStatusAfter: gameStatusSchema,
+    lastSession: z.object({
+      endedAt: z.string().datetime(), progress: z.number().int().nullable(), location: z.string().nullable(), keyDecisions: z.string().nullable(),
+    }).strict().nullable(),
+  }).strict(),
+  finish: z.object({
+    journeyId: z.string().uuid().nullable(),
+    hasOpenSession: z.boolean(),
+    suggestedCompletedAt: calendarDateSchema,
+  }).strict(),
+}).strict();
+export type LifecycleHint = z.infer<typeof lifecycleHintSchema>;
+
+export const startPlayingInputSchema = z.object({
+  startedAt: z.string().datetime().optional(),
+  platformId: z.string().uuid().nullable().optional(),
+  /** Sessão já criada no servidor (web); sem ela, o cliente vincula a jornada à sessão ao salvá-la (Flutter). */
+  sessionId: z.string().uuid().optional(),
+  timezoneOffsetMinutes: lifecycleTimezone,
+}).strict();
+export const startPlayingResultSchema = z.object({
+  mode: startModeSchema, playthrough: playthroughSchema, game: gameSchema,
+}).strict();
+export type StartPlayingResult = z.infer<typeof startPlayingResultSchema>;
+
+export const finishInputSchema = z.object({
+  completedAt: calendarDateSchema.optional(),
+  rating: z.number().int().min(1).max(11).nullable().optional(),
+  difficulty: gameDifficultySchema.nullable().optional(),
+  completionCondition: z.string().trim().max(300).nullable().optional(),
+  favorite: z.boolean().optional(),
+  gameOfYear: z.boolean().optional(),
+  timezoneOffsetMinutes: lifecycleTimezone,
+}).strict();
+/** Estado anterior, para o Desfazer: `journey` diz como desfazer o que foi feito na jornada. */
+export const finishUndoSchema = z.object({
+  status: gameStatusSchema, startedAt: calendarDateSchema.nullable(), completedAt: calendarDateSchema.nullable(),
+  rating: z.number().int().min(1).max(11).nullable(), difficulty: gameDifficultySchema.nullable(),
+  completionCondition: z.string().nullable(), favorite: z.boolean(), gameOfYear: z.boolean(),
+  journey: z.object({ action: z.enum(['NONE', 'REOPEN', 'DELETE']), id: z.string().uuid().nullable() }).strict(),
+}).strict();
+export const finishResultSchema = z.object({
+  game: gameSchema, playthrough: playthroughSchema.nullable(), closedSessionIds: z.array(z.string().uuid()), undo: finishUndoSchema,
+}).strict();
+export type FinishResult = z.infer<typeof finishResultSchema>;
+export type FinishUndo = z.infer<typeof finishUndoSchema>;
