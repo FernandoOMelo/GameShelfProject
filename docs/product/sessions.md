@@ -114,3 +114,17 @@ motivos em ADR-012.
 
 Um jogo não pode ter duas sessões com o mesmo início: `POST /games/:gameId/sessions`
 responde 409. Isso torna seguro reenviar sessões guardadas offline (ADR-015).
+
+## Convite de jornada e "Terminou o jogo?" (ADR-042)
+
+Ao iniciar uma sessão (painel da web, telas do Flutter), o cronômetro começa no toque e
+nunca espera por uma pergunta. Logo depois o app consulta `GET /games/:id/lifecycle` e,
+se fizer sentido, oferece iniciar, retomar ou começar um replay da jornada, mostrando onde
+você parou na última sessão. Aceitar chama `POST /games/:id/start-playing` com o id da
+sessão, que a vincula à jornada. Com jornada em andamento a sessão só é vinculada, sem
+perguntar. A pergunta pode ser desligada em Configurações ("Perguntar sobre a jornada");
+a preferência fica só no aparelho ou navegador. Sessões criadas offline não recebem o
+convite; ele volta na próxima sessão com internet.
+
+Ao encerrar uma sessão com progresso em 100%, o app pergunta "Terminou o jogo?" e, se sim,
+segue para o assistente de zerar (ver playthroughs.md).

@@ -136,3 +136,11 @@ O HowLongToBeat não tem API pública; o cliente descobre o endpoint no build do
 renova um token de curta duração. Se o site mudar ou bloquear a requisição, a busca
 responde `502` e o restante da biblioteca continua normal. Sem provedor configurado,
 a rota responde `503`. Veja ADR-019.
+
+### Telas de revisão
+
+A web (aba **Metadados**, `/metadados`, com selo de contagem) e o Flutter (Mais > **Metadados
+a revisar**) mostram o mesmo: jogos preenchidos sozinhos (Confirmar ou Desfazer), jogos com
+candidatos (Usar este, Buscar outro, Ignorar) e jogos não encontrados, mais o botão "Buscar
+metadados pendentes". O cadastro rápido (título e plataforma) deixa o resto para a captura
+automática.

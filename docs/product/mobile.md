@@ -139,3 +139,19 @@ A interface adapta biblioteca, fila, painel e formulários para telas estreitas.
 ## Metas, missões e integrações (ADR-040)
 
 O app tem as metas flexíveis (jogos zerados, horas, zerar uma lista, horas seguidas e texto livre, com data limite livre), a lista de missões com uma principal e, em Configurações, a saúde do IGDB, da RAWG e do Achievist com teste sob demanda. A biblioteca mostra horas e conquistas nos cartões e ordena por horas jogadas (ADR-039).
+
+## Ciclo do jogo, metadados e proteção de edição (Flutter)
+
+- **Jornada ao iniciar sessão** e **Zerar em etapas** (nota em chips de 1 a 11, dificuldade,
+  extras, resumo, alterar data e Desfazer): ver playthroughs.md e sessions.md (ADR-042).
+  O botão "Zerar" fica no detalhe do jogo; o gatilho "Terminou o jogo?" vem do encerramento
+  da sessão com 100%.
+- **Metadados a revisar** (Mais): jogos que a API preencheu sozinha (Confirmar ou Desfazer),
+  que têm candidatos (Usar este, Buscar outro, Ignorar) ou que não foram encontrados, com o
+  botão "Buscar metadados pendentes". O selo com a contagem aparece em "Mais" (ADR-043).
+- **Cadastro rápido**: o botão "Jogo" da biblioteca abre um sheet com título (com sugestões
+  do nome oficial enquanto digita) e plataforma. "Mais detalhes" abre o editor completo.
+- **Proteção contra perda de alterações**: sair do editor de jogo ou do sheet de sessão com
+  alterações pergunta "Descartar alterações?"; salvar fecha direto.
+- **Status em um toque** no detalhe: Pausar, Retomar, Marcar como jogando e Abandonar, com
+  "Desfazer" no aviso. O app Flutter não tem a área de Relatórios.

@@ -74,3 +74,16 @@ Não definir identidade visual definitiva nesta fase. O design system deve permi
 Padrões de layout de sistemas parecidos (bibliotecas de jogos, trackers de mídia
 e launchers) e recomendações de modernização estão em
 [Pesquisa de layouts — referências para modernizar a UI](ui-references.md).
+
+## Padrões de fluxo (ADR-042 e ADR-043)
+
+- **Capturar primeiro, perguntar depois**: a ação principal (iniciar sessão, zerar) é gravada
+  no toque; os detalhes (jornada, nota, dificuldade) vêm em seguida, todos puláveis.
+- **Nunca bloquear o cronômetro**: perguntas sobre a jornada aparecem depois que a sessão
+  já começou, em sheet ou aviso que não impede o uso do app.
+- **Desfazer em vez de confirmar** para ações reversíveis (zerar, pausar, abandonar,
+  confirmar metadados); diálogo de confirmação só para o que não volta (excluir).
+- **Proteção contra perda de alterações**: editores com alterações pedem confirmação ao
+  fechar (Cancelar, Esc, clique no fundo, voltar); a web também avisa antes de recarregar.
+- **Padrões inteligentes**: plataforma da última sessão, data de hoje e jornada seguinte
+  vêm preenchidas; o usuário só corrige o que estiver errado.
