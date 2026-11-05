@@ -10,6 +10,7 @@ describe('readRoute', () => {
     expect(readRoute('/plataformas')).toEqual({ view: 'platforms', gameId: null });
     expect(readRoute('/estatisticas')).toEqual({ view: 'stats', gameId: null });
     expect(readRoute('/relatorios')).toEqual({ view: 'reports', gameId: null });
+    expect(readRoute('/metadados')).toEqual({ view: 'metadata', gameId: null });
     expect(readRoute('/atividade')).toEqual({ view: 'timeline', gameId: null });
     expect(readRoute('/configuracoes')).toEqual({ view: 'settings', gameId: null });
   });
@@ -29,7 +30,7 @@ describe('readRoute', () => {
 
 describe('routePath', () => {
   it('é o inverso de readRoute', () => {
-    for (const path of ['/painel', '/biblioteca', '/fila', '/listas', '/plataformas', '/estatisticas', '/relatorios', '/atividade', '/configuracoes']) {
+    for (const path of ['/painel', '/biblioteca', '/fila', '/listas', '/plataformas', '/estatisticas', '/relatorios', '/metadados', '/atividade', '/configuracoes']) {
       expect(routePath(readRoute(path))).toBe(path);
     }
   });

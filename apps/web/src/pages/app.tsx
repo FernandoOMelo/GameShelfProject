@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameUsage, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
+import type { FinishResult, LifecycleHint } from '@gameshelf/contracts';
 import { GameAchievementsPanel } from './game-achievements-panel';
 import { DlcPanel } from './dlc-panel';
 import { GameMergeDialog } from './game-merge-dialog';
@@ -17,18 +18,24 @@ import { enqueueFailureMessage, OfflineBanner, useOfflineSessions } from './offl
 import { isNetworkFailure } from './offline-sessions';
 import { SessionScreenshots } from './session-screenshots';
 import { NextGameSuggestion } from './next-game-suggestion';
+import { JourneyStartDialog } from './journey-start-dialog';
+import { FinishGameDialog } from './finish-game-dialog';
+import { QuickAddDialog } from './quick-add-dialog';
+import { fetchMetadataReviewCount } from './metadata-review-view';
+import { canFinishGame, fetchLifecycleHint, finishGameRequest, journeyPromptEnabled, startPlaying, undoFinishRequest } from './lifecycle';
 
 // Views de uso menos frequente entram em chunks próprios. `ErrorBoundary` +
 // `Suspense` garantem que uma falha de rede (ou offline sem cache) mostre um
 // estado recuperável em vez de derrubar a aplicação.
 const GameJourneyPanel = lazy(async () => ({ default: (await import('./game-journey-panel')).GameJourneyPanel }));
 const StatsView = lazy(async () => ({ default: (await import('./stats-view')).StatsView }));
+const MetadataReviewView = lazy(async () => ({ default: (await import('./metadata-review-view')).MetadataReviewView }));
 const ReportsView = lazy(async () => ({ default: (await import('./reports-view')).ReportsView }));
 const TimelineView = lazy(async () => ({ default: (await import('./timeline-view')).TimelineView }));
 const SettingsView = lazy(async () => ({ default: (await import('./settings-view')).SettingsView }));
 const PlatformsView = lazy(async () => ({ default: (await import('./platforms-view')).PlatformsView }));
 /** Views que fazem parte do "perfil": recebem o resumo e a barra de abas. */
-const profileViews: AppView[] = ['library', 'queue', 'lists', 'platforms', 'stats', 'reports', 'timeline'];
+const profileViews: AppView[] = ['library', 'queue', 'lists', 'platforms', 'stats', 'reports', 'metadata', 'timeline'];
 const statuses: Game['status'][] = ['DESIRED', 'BACKLOG', 'PLAYING', 'PAUSED', 'COMPLETED', 'ABANDONED'];
 const priorities: Game['priority'][] = ['LOW', 'NORMAL', 'HIGH'];
 const sortLabels: Record<LibrarySort, string> = { TITLE: 'Título', STARTED_DESC: 'Início mais recente', COMPLETED_DESC: 'Conclusão mais recente', HOURS_DESC: 'Mais horas jogadas' };
@@ -192,6 +199,15 @@ export function App() {
   const [sessionFeedback, setSessionFeedback] = useState('');
   const [savingSession, setSavingSession] = useState(false);
   const [clockNow, setClockNow] = useState(Date.now());
+  // Ciclo guiado do jogo (ADR-042) e captura de metadados (ADR-043).
+  const [journeyOffer, setJourneyOffer] = useState<{ game: Game; session: Session; hint: LifecycleHint['start'] } | null>(null);
+  const [finishFlow, setFinishFlow] = useState<{ game: Game; result: FinishResult } | null>(null);
+  const [finishNotice, setFinishNotice] = useState<{ title: string; gameId: string; undo: FinishResult['undo'] } | null>(null);
+  const [finishPrompt, setFinishPrompt] = useState<Game | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [metadataCount, setMetadataCount] = useState(0);
+  const refreshMetadataCount = useCallback(() => { void fetchMetadataReviewCount().then(setMetadataCount); }, []);
+  useEffect(() => { refreshMetadataCount(); }, [refreshMetadataCount]);
   const offline = useOfflineSessions(() => { void refreshPlanningViews().catch(() => undefined); });
   const [saving, setSaving] = useState(false);
   const [metadataCandidates, setMetadataCandidates] = useState<GameMetadataCandidate[]>([]);
@@ -831,6 +847,8 @@ export function App() {
       formElement.reset();
       await refreshPlanningViews();
       setSessionFeedback(editingSession ? 'Sessão atualizada.' : 'Sessão registrada.');
+      // Progresso em 100% numa sessão encerrada: pergunta se terminou o jogo (ADR-042).
+      if (endedAt && numberOrNull(form.get('progress')) === 100 && canFinishGame(selectedGame.status)) setFinishPrompt(selectedGame);
     } catch (cause) {
       setSessionFeedback(cause instanceof Error ? cause.message : 'Não foi possível salvar a sessão.');
     } finally {
@@ -1054,7 +1072,54 @@ export function App() {
       return;
     }
     if (!response.ok) { setError('Não foi possível iniciar a sessão.'); return; }
+    const started = await response.json() as Session;
     await refreshPlanningViews();
+    void offerJourney(game, started);
+  }
+
+  /** Depois de iniciar a sessão, oferece a jornada sem bloquear (ADR-042). Melhor esforço. */
+  async function offerJourney(game: Game, session: Session) {
+    if (!journeyPromptEnabled()) return;
+    try {
+      const { start } = await fetchLifecycleHint(game.id);
+      if (start.mode === 'LINK_ACTIVE') { await startPlaying(game.id, { sessionId: session.id, startedAt: session.startedAt }); return; }
+      setJourneyOffer({ game, session, hint: start });
+    } catch { /* A sessão já está rodando; o convite volta na próxima vez. */ }
+  }
+
+  async function acceptJourney() {
+    if (!journeyOffer) return;
+    const { game, session } = journeyOffer;
+    setJourneyOffer(null);
+    try {
+      await startPlaying(game.id, { sessionId: session.id, startedAt: session.startedAt });
+      await loadGames();
+      await refreshPlanningViews();
+    } catch { setError('Não foi possível iniciar a jornada.'); }
+  }
+
+  /** Zerar: grava a conclusão na hora e abre o assistente (ADR-042). */
+  async function beginFinish(game: Game) {
+    setFinishPrompt(null);
+    try {
+      const result = await finishGameRequest(game.id);
+      setFinishFlow({ game, result });
+      setSelectedGame((current) => current?.id === result.game.id ? result.game : current);
+      await loadGames();
+      await refreshPlanningViews();
+    } catch { setError('Não foi possível zerar o jogo agora.'); }
+  }
+
+  async function undoFinish() {
+    if (!finishNotice) return;
+    const { gameId, undo } = finishNotice;
+    setFinishNotice(null);
+    try {
+      await undoFinishRequest(gameId, undo);
+      await loadGames();
+      await refreshPlanningViews();
+      setSelectedGame(null);
+    } catch { setError('Não foi possível desfazer.'); }
   }
 
   async function finishDashboardSession(game: Game, session: Session) {
@@ -1162,7 +1227,7 @@ export function App() {
                     : null}
                 />
               )}
-              <ProfileTabs activeView={activeView} queueCount={queue.length} onSelect={goTo}>
+              <ProfileTabs activeView={activeView} queueCount={queue.length} metadataCount={metadataCount} onSelect={goTo}>
                 {activeView === 'library' && (
                   <>
                     {savedFilters.map((filter) => (
@@ -1183,7 +1248,7 @@ export function App() {
                       <button type="button" aria-label="Visualizar em grade compacta" aria-pressed={density === 'compact'} onClick={() => changeDensity('compact')}>▥</button>
                       <button type="button" aria-label="Visualizar em lista" aria-pressed={density === 'list'} onClick={() => changeDensity('list')}>☰</button>
                     </div>
-                    <Button type="button" onClick={() => openEditor()}>＋ Adicionar jogo</Button>
+                    <Button type="button" onClick={() => setQuickAddOpen(true)}>＋ Adicionar jogo</Button>
                   </>
                 )}
               </ProfileTabs>
@@ -1210,6 +1275,7 @@ export function App() {
             </dl>
             <div className="gd-hero-actions">
               <Button type="button" onClick={() => openEditor(selectedGame)}>Editar jogo</Button>
+              {canFinishGame(selectedGame.status) && <button type="button" className="button-secondary" onClick={() => void beginFinish(selectedGame)}>Zerar</button>}
               <button type="button" className="button-secondary" onClick={() => void updateGame(selectedGame, { archived: !selectedGame.archived })}>{selectedGame.archived ? 'Desarquivar' : 'Arquivar'}</button>
               <button type="button" className="button-secondary" aria-pressed={selectedGame.excludedFromSuggestions} onClick={() => void updateGame(selectedGame, { excludedFromSuggestions: !selectedGame.excludedFromSuggestions })}>{selectedGame.excludedFromSuggestions ? 'Voltar a sugerir' : 'Não sugerir este jogo'}</button>
               <button type="button" className="button-secondary" onClick={() => setMergingGame(true)}>Mesclar duplicado</button>
@@ -1338,7 +1404,7 @@ export function App() {
             </div>}
           </aside>}
         </div>
-      </section> : activeView === 'dashboard' ? <DashboardView dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'reports' ? <ErrorBoundary title="Não foi possível abrir os relatórios"><Suspense fallback={<LoadingState>Carregando relatórios…</LoadingState>}><ReportsView onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} platforms={platforms} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : activeView === 'platforms' ? <ErrorBoundary title="Não foi possível abrir as plataformas"><Suspense fallback={<LoadingState>Carregando plataformas…</LoadingState>}><PlatformsView platforms={platforms} summaries={platformSummaries} games={games} onChanged={() => void reloadPlatforms()} /></Suspense></ErrorBoundary> : <>
+      </section> : activeView === 'dashboard' ? <DashboardView onFinishGame={(game) => void beginFinish(game)} dashboard={dashboard} previousPeriodStats={previousPeriodStats} queue={queue} now={clockNow} period={dashboardPeriod} customPeriod={customPeriod} onPeriodChange={(period) => { setDashboardPeriod(period); try { window.localStorage.setItem('gameshelf-dashboard-period', period); } catch { /* Storage can be unavailable in private test contexts. */ } }} onCustomPeriodChange={(value) => { setCustomPeriod(value); try { window.localStorage.setItem('gameshelf-dashboard-custom-period', JSON.stringify(value)); } catch { /* Storage can be unavailable in private test contexts. */ } }} onSelectGame={showDetails} onStartSession={startDashboardSession} onFinishSession={finishDashboardSession} onPauseGame={(game) => void updateGame(game, { status: 'PAUSED' })} onPrepareStatus={prepareGameStatus} onOpenQueue={() => setActiveView('queue')} onFilterLibrary={applyLibraryFilter} /> : activeView === 'settings' ? <ErrorBoundary title="Não foi possível abrir as configurações"><Suspense fallback={<LoadingState>Carregando configurações…</LoadingState>}><SettingsView platforms={platforms} games={games} weeklyHours={dashboard?.weeklyHours ?? 0} onRefresh={refreshPlanningViews} /></Suspense></ErrorBoundary> : activeView === 'stats' ? <ErrorBoundary title="Não foi possível abrir as estatísticas"><Suspense fallback={<LoadingState>Carregando estatísticas…</LoadingState>}><StatsView refreshKey={games} onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'reports' ? <ErrorBoundary title="Não foi possível abrir os relatórios"><Suspense fallback={<LoadingState>Carregando relatórios…</LoadingState>}><ReportsView onOpenGame={(gameId) => { const target = games.find((item) => item.id === gameId); if (target) showDetails(target); }} /></Suspense></ErrorBoundary> : activeView === 'metadata' ? <ErrorBoundary title="Não foi possível abrir a revisão de metadados"><Suspense fallback={<LoadingState>Carregando revisão…</LoadingState>}><MetadataReviewView onChanged={() => { refreshMetadataCount(); void loadGames(); }} /></Suspense></ErrorBoundary> : activeView === 'timeline' ? <ErrorBoundary title="Não foi possível abrir a atividade"><Suspense fallback={<LoadingState>Carregando atividade…</LoadingState>}><TimelineView games={games} platforms={platforms} onSelectGame={showDetails} /></Suspense></ErrorBoundary> : activeView === 'queue' ? <QueueView queue={queue} onMove={moveQueueItem} onReorder={reorderQueue} onRemove={removeFromQueue} onSelectGame={showDetails} /> : activeView === 'lists' ? <GameListsView games={games} onSelectGame={showDetails} onQueueChanged={setQueue} /> : activeView === 'platforms' ? <ErrorBoundary title="Não foi possível abrir as plataformas"><Suspense fallback={<LoadingState>Carregando plataformas…</LoadingState>}><PlatformsView platforms={platforms} summaries={platformSummaries} games={games} onChanged={() => void reloadPlatforms()} /></Suspense></ErrorBoundary> : <>
       <section className="library-tools" aria-label="Ferramentas da biblioteca">
         <label className="filter-field">Status<select aria-label="Filtrar por status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Game['status'] | 'ALL')}><option value="ALL">Todos</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label>
         <label className="filter-field">Prioridade<select aria-label="Filtrar por prioridade" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Game['priority'] | 'ALL')}><option value="ALL">Todas</option>{priorities.map((priority) => <option key={priority} value={priority}>{priority === 'LOW' ? 'Baixa' : priority === 'HIGH' ? 'Alta' : 'Normal'}</option>)}</select></label>
@@ -1366,7 +1432,7 @@ export function App() {
       </section>
       {error && <ErrorState action={<button type="button" onClick={() => void loadGames()}>Tentar novamente</button>}>{error}</ErrorState>}
       {loading ? <LoadingState>Carregando biblioteca…</LoadingState> : visibleGames.length === 0 ? (
-        <EmptyState title={query ? 'Nenhum jogo encontrado' : 'Sua biblioteca começa aqui'} description={query ? 'Tente buscar por outro título.' : 'Adicione seu primeiro jogo para começar a organizar sua coleção.'} action={query ? undefined : <Button type="button" onClick={() => openEditor()}>Adicionar primeiro jogo</Button>} />
+        <EmptyState title={query ? 'Nenhum jogo encontrado' : 'Sua biblioteca começa aqui'} description={query ? 'Tente buscar por outro título.' : 'Adicione seu primeiro jogo para começar a organizar sua coleção.'} action={query ? undefined : <Button type="button" onClick={() => setQuickAddOpen(true)}>Adicionar primeiro jogo</Button>} />
       ) : (
         <section className={`game-grid density-${density}`} aria-label="Jogos da biblioteca">{visibleGames.map((game) => <div className="game-card-wrap" key={game.id}><button className="game-card" type="button" onClick={() => showDetails(game)} aria-label={`Ver detalhes de ${game.title}`}>
           <span className="game-cover">{game.coverUrl ? <img src={game.coverUrl} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">▧</span>}<span className={`status-pill status-${game.status.toLowerCase()}`}>{statusLabels[game.status]}</span>{game.gameOfYear && <span className="cover-badge cover-goty" aria-label="Jogo do ano" title="Jogo do ano">★</span>}{game.favorite && !game.gameOfYear && <span className="cover-badge cover-fav" aria-label="Favorito" title="Favorito">♥</span>}</span>
@@ -1419,6 +1485,16 @@ export function App() {
           <footer className="dialog-actions"><button className="cancel-button" type="button" onClick={closeEditor}>Cancelar</button><Button type="submit" disabled={saving}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar jogo'}</Button></footer>
         </form></section></div>}
         {mergingGame && selectedGame && <GameMergeDialog game={selectedGame} games={games} onClose={() => setMergingGame(false)} onMerged={(merged) => { setMergingGame(false); setSelectedGame(merged); setAchievementsSummary(null); setDetailVersion((version) => version + 1); void loadGames(); void refreshPlanningViews(); }} />}
+        {journeyOffer && <JourneyStartDialog gameTitle={journeyOffer.game.title} hint={journeyOffer.hint} onAccept={() => void acceptJourney()} onDismiss={() => setJourneyOffer(null)} />}
+        {finishFlow && <FinishGameDialog result={finishFlow.result}
+          onChangeDate={async (date) => { await undoFinishRequest(finishFlow.game.id, finishFlow.result.undo); const next = await finishGameRequest(finishFlow.game.id, date); setFinishFlow({ game: finishFlow.game, result: next }); return next; }}
+          onSave={async (values) => { await updateGame(finishFlow.game, values); }}
+          onClose={(result) => { setFinishNotice({ title: finishFlow.game.title, gameId: finishFlow.game.id, undo: result.undo }); setFinishFlow(null); void loadGames(); }} />}
+        {finishNotice && <section className="journey-offer" role="status"><p>{finishNotice.title} zerado.</p><div className="journey-offer-actions"><button type="button" className="session-edit" onClick={() => void undoFinish()}>Desfazer</button><button type="button" className="cancel-button" onClick={() => setFinishNotice(null)}>Fechar</button></div></section>}
+        <ConfirmDialog open={finishPrompt !== null} title="Terminou o jogo?" description={finishPrompt ? `O progresso chegou a 100%. Quer zerar ${finishPrompt.title} agora?` : ''} confirmLabel="Zerar agora" onCancel={() => setFinishPrompt(null)} onConfirm={() => { if (finishPrompt) void beginFinish(finishPrompt); }} />
+        {quickAddOpen && <QuickAddDialog platforms={platforms} onClose={() => setQuickAddOpen(false)}
+          onCreated={(game) => { setQuickAddOpen(false); void loadGames(); void refreshPlanningViews(); setSessionFeedback(`${game.title} adicionado. Os metadados chegam sozinhos.`); window.setTimeout(refreshMetadataCount, 8000); }}
+          onMoreDetails={(title) => { setQuickAddOpen(false); openEditor(); setFormTitle(title); }} />}
         <ConfirmDialog open={pendingDelete !== null} title={pendingDelete?.title ?? ''} description={pendingDelete?.description} confirmLabel={pendingDelete?.confirmLabel} tone="danger" busy={deleting} onCancel={() => setPendingDelete(null)} onConfirm={() => void confirmPendingDelete()} />
         </main>
       </div>

@@ -76,17 +76,20 @@ const tabs: Tab[] = [
   { view: 'platforms', label: 'Plataformas', icon: '▤' },
   { view: 'stats', label: 'Estatísticas', icon: '∿' },
   { view: 'reports', label: 'Relatórios', icon: '☰' },
+  { view: 'metadata', label: 'Metadados', icon: '✦' },
 ];
 
 export type ProfileTabsProps = {
   activeView: AppView;
   queueCount: number;
+  /** Jogos com metadados a revisar (selo da aba Metadados). */
+  metadataCount?: number;
   onSelect: (view: AppView) => void;
   /** Ações contextuais à direita (adição, densidade, filtros). */
   children?: ReactNode;
 };
 
-export function ProfileTabs({ activeView, queueCount, onSelect, children }: ProfileTabsProps) {
+export function ProfileTabs({ activeView, queueCount, metadataCount = 0, onSelect, children }: ProfileTabsProps) {
   return (
     <nav className="profile-tabs" aria-label="Seções do perfil">
       <div className="profile-tabs-list">
@@ -101,6 +104,7 @@ export function ProfileTabs({ activeView, queueCount, onSelect, children }: Prof
             <span className="profile-tab-icon" aria-hidden="true">{tab.icon}</span>
             <span className="profile-tab-label">{tab.label}</span>
             {tab.view === 'queue' && <span className="profile-tab-badge" aria-hidden="true">{queueCount}</span>}
+            {tab.view === 'metadata' && metadataCount > 0 && <span className="profile-tab-badge" aria-label={`${metadataCount} a revisar`}>{metadataCount}</span>}
           </button>
         ))}
       </div>

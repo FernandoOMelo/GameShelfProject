@@ -4,6 +4,7 @@ import { Button } from '@gameshelf/ui';
 import { AchievistSyncPanel } from './achievist-sync-panel';
 import { BackupCard } from './backup-card';
 import { IntegrationHealthPanel } from './integration-health-panel';
+import { journeyPromptEnabled, setJourneyPromptEnabled } from './lifecycle';
 import { apiUrl } from './shared';
 
 /**
@@ -28,6 +29,18 @@ export function SettingsView({ platforms, games, weeklyHours, onRefresh }: {
     <BackupCard onImported={() => window.location.reload()} />
 
     <WeeklyGoalForm weeklyHours={weeklyHours} onSaved={() => onRefresh()} />
+
+    <JourneyPromptSetting />
+  </section>;
+}
+
+/** Preferência local (ADR-042): oferecer a jornada ao iniciar uma sessão ou nunca perguntar. */
+export function JourneyPromptSetting() {
+  const [ask, setAsk] = useState(journeyPromptEnabled);
+  return <section className="panel" aria-labelledby="journey-prompt-title">
+    <h2 id="journey-prompt-title">Jornada ao iniciar sessão</h2>
+    <label className="form-check"><input type="checkbox" checked={ask} onChange={(event) => { setAsk(event.target.checked); setJourneyPromptEnabled(event.target.checked); }} /> Perguntar sobre a jornada ao iniciar uma sessão</label>
+    <p className="library-subtitle">Oferece criar, retomar ou começar um replay da jornada do jogo. Guardado só neste navegador.</p>
   </section>;
 }
 

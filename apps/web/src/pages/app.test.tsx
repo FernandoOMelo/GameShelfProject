@@ -290,6 +290,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
 
     const metadataResults = await screen.findByRole('list', { name: 'Resultados de metadata' });
@@ -307,6 +308,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
 
     const timeResults = await screen.findByRole('list', { name: 'Resultados de tempo' });
@@ -323,6 +325,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/metadata/time-estimates?'))).toBe(true));
@@ -354,6 +357,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
     await screen.findByRole('list', { name: 'Resultados de metadata' });
 
@@ -389,6 +393,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Adicionar primeiro jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Hades' } });
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar jogo' }));
 
@@ -441,6 +446,7 @@ describe('library page', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Adicionar primeiro jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     await screen.findByRole('heading', { name: 'Adicionar jogo' });
     screen.getByRole('textbox', { name: /Adicionar plataforma/ });
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Metroid Dread' } });
@@ -1153,6 +1159,7 @@ describe('statistics and classification', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Jogos' }));
     fireEvent.click(await screen.findByRole('button', { name: '＋ Adicionar jogo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais detalhes' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Chrono Trigger' } });
     fireEvent.change(screen.getByLabelText('Dificuldade'), { target: { value: 'B' } });
     fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'RPG de Turno' } });

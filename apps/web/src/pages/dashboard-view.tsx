@@ -28,7 +28,7 @@ function formatPeriodDelta(current: number, previous: number): string | undefine
   return `${percent > 0 ? '▲' : '▼'} ${Math.abs(percent)}% vs. período anterior`;
 }
 
-export function DashboardView({ dashboard, previousPeriodStats, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
+export function DashboardView({ onFinishGame, dashboard, previousPeriodStats, queue, now, period, customPeriod, onPeriodChange, onCustomPeriodChange, onSelectGame, onStartSession, onFinishSession, onPauseGame, onPrepareStatus, onOpenQueue, onFilterLibrary }: {
   dashboard: DashboardResponse | null;
   /** Indicadores do período imediatamente anterior, quando existe comparação. */
   previousPeriodStats?: DashboardResponse['periodStats'] | null;
@@ -43,6 +43,8 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
   onFinishSession: (game: Game, session: Session) => Promise<void>;
   onPauseGame: (game: Game) => void;
   onPrepareStatus: (game: Game, status: Game['status']) => void;
+  /** "Marcar zerado": grava a conclusão na hora e abre o assistente (ADR-042). */
+  onFinishGame: (game: Game) => void;
   onOpenQueue: () => void;
   onFilterLibrary?: (filter: LibraryFilter) => void;
 }) {
@@ -99,7 +101,7 @@ export function DashboardView({ dashboard, previousPeriodStats, queue, now, peri
               {entry.activeSession ? <p className="session-live-duration">Sessão ativa · {formatElapsed(entry.activeSession.startedAt, now)}</p> : entry.lastSession && <p>Última sessão: {formatDateTime(entry.lastSession.startedAt)}</p>}
               {entry.lastSession?.location && <p>Parou em: {entry.lastSession.location}</p>}
               {entry.remainingHours !== null && <p>{formatCompactHours(entry.remainingHours)} estimadas restantes</p>}
-              <div className="dashboard-game-actions"><Button type="button" onClick={() => entry.activeSession ? void onFinishSession(entry.game, entry.activeSession) : void onStartSession(entry.game)}>{entry.activeSession ? 'Encerrar sessão' : 'Continuar jogando'}</Button><button type="button" className="session-edit" onClick={() => onPauseGame(entry.game)}>Pausar</button><button type="button" className="session-edit" onClick={() => onPrepareStatus(entry.game, 'COMPLETED')}>Marcar zerado</button><button type="button" className="session-edit" onClick={() => onPrepareStatus(entry.game, 'ABANDONED')}>Abandonar</button><button type="button" className="session-edit" onClick={() => onSelectGame(entry.game)}>Abrir detalhes</button></div>
+              <div className="dashboard-game-actions"><Button type="button" onClick={() => entry.activeSession ? void onFinishSession(entry.game, entry.activeSession) : void onStartSession(entry.game)}>{entry.activeSession ? 'Encerrar sessão' : 'Continuar jogando'}</Button><button type="button" className="session-edit" onClick={() => onPauseGame(entry.game)}>Pausar</button><button type="button" className="session-edit" onClick={() => onFinishGame(entry.game)}>Marcar zerado</button><button type="button" className="session-edit" onClick={() => onPrepareStatus(entry.game, 'ABANDONED')}>Abandonar</button><button type="button" className="session-edit" onClick={() => onSelectGame(entry.game)}>Abrir detalhes</button></div>
             </div>
           </article>;
         })}</div> : <p className="dashboard-empty">Nenhum jogo marcado como em andamento.</p>}
