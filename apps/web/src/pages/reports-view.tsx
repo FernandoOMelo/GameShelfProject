@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BacklogReport, CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
+import type { AchievementsReport, BacklogReport, CompletionsReport, Genre, Platform, PlaythroughsReport, PlaytimeReport } from '@gameshelf/contracts';
 import { EmptyState, ErrorState, LoadingState, Panel, StatCard } from '@gameshelf/ui';
 import { apiUrl, formatHoursMinutes } from './shared';
 
-type Category = 'playtime' | 'completions' | 'playthroughs' | 'backlog';
+type Category = 'playtime' | 'completions' | 'playthroughs' | 'backlog' | 'achievements';
 type Range = { from: string; to: string };
 type Reference = CompletionsReport['estimates']['reference'];
 type Sort = 'DIFFERENCE_DESC' | 'DIFFERENCE_ASC' | 'PLAYED_DESC' | 'TITLE';
@@ -14,6 +14,7 @@ const categories: Array<{ key: Category; title: string; description: string }> =
   { key: 'completions', title: 'Conclusões', description: 'Jogos zerados, estimativas e abandonos.' },
   { key: 'playthroughs', title: 'Jornadas e replays', description: 'Rejogabilidade e evolução por jornada.' },
   { key: 'backlog', title: 'Biblioteca e backlog', description: 'Acervo, envelhecimento e pendências.' },
+  { key: 'achievements', title: 'Conquistas', description: 'Desbloqueios, raridade e conclusão.' },
 ];
 const weekdayNames = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const lengthLabels: Record<PlaytimeReport['sessionLengths'][number]['key'], string> = {
@@ -83,6 +84,7 @@ export function ReportsView({ onOpenGame }: { onOpenGame: (gameId: string) => vo
     {category === null && <EmptyState title="Escolha um relatório" description="Selecione uma categoria para explorar os dados com filtros e detalhes." />}
     {category === 'playtime' && <PlaytimeReportView range={range} onOpenGame={onOpenGame} />}
     {category === 'completions' && <CompletionsReportView range={range} onOpenGame={onOpenGame} />}
+    {category === 'achievements' && <AchievementsReportView range={range} onOpenGame={onOpenGame} />}
     {category === 'backlog' && <BacklogReportView onOpenGame={onOpenGame} />}
     {category === 'playthroughs' && <PlaythroughsReportView range={range} onOpenGame={onOpenGame} />}
   </section>;
@@ -309,5 +311,43 @@ function BacklogReportView({ onOpenGame }: { onOpenGame: (gameId: string) => voi
       <Panel title="Por plataforma"><Bars label="Backlog por plataforma" entries={rank(data.byPlatform)} /></Panel>
     </div>
     <Panel title="Esperando há mais tempo"><Bars label="Dias no backlog" entries={data.oldest.map((entry) => ({ key: entry.gameId, label: entry.title, value: entry.ageDays, display: `${entry.ageDays} dias`, onOpen: () => onOpenGame(entry.gameId) }))} /></Panel>
+  </div>;
+}
+
+function AchievementsReportView({ range, onOpenGame }: { range: Range; onOpenGame: (gameId: string) => void }) {
+  const { data, failed } = useReport<AchievementsReport>(`/reports/achievements${query({ from: range.from, to: range.to, timezoneOffsetMinutes: new Date().getTimezoneOffset() })}`);
+  if (failed) return <ErrorState>Não foi possível carregar o relatório de conquistas.</ErrorState>;
+  if (!data) return <LoadingState>Carregando relatório…</LoadingState>;
+  const { totals } = data;
+  if (totals.totalAchievements === 0 && totals.unlockedInRange === 0) return <EmptyState title="Nenhuma conquista encontrada" description="Sincronize conquistas de uma plataforma para ver este relatório." />;
+  const hunt = (entries: AchievementsReport['perfect']) => entries.map((entry) => ({
+    key: entry.gameId, label: entry.title, value: entry.percent, display: `${entry.unlocked}/${entry.total} · ${decimal(entry.percent)}%`, onOpen: () => onOpenGame(entry.gameId),
+  }));
+  return <div className="report-body">
+    <div className="stats-grid">
+      <StatCard label="Conquistas no período" value={String(totals.unlockedInRange)} detail={`${totals.pointsInRange} pontos · ${totals.activeDays} dias`} accent />
+      <StatCard label="Conclusão geral" value={`${decimal(totals.completionPercent)}%`} detail={`${totals.unlockedAchievements} de ${totals.totalAchievements}`} />
+      <StatCard label="Jogos com conquistas" value={String(totals.gamesWithAchievements)} />
+      <StatCard label="Jogos com 100%" value={String(totals.gamesPerfect)} />
+    </div>
+    <small className="stats-note">O período filtra os desbloqueios; o progresso por jogo é o estado atual. Um jogo em várias plataformas soma as conquistas de cada uma.</small>
+    <div className="stats-pair">
+      <Panel title="Desbloqueios por mês">{data.byMonth.length === 0 ? <p className="library-subtitle">Nenhum desbloqueio no período.</p>
+        : <Bars label="Conquistas por mês" entries={data.byMonth.map((entry) => ({ key: entry.month, label: monthLabel(entry.month), value: entry.count, display: String(entry.count) }))} />}</Panel>
+      <Panel title="Por plataforma"><Bars label="Conquistas por plataforma" entries={data.byPlatform.map((entry) => ({ key: entry.name, label: entry.name, value: entry.count, display: String(entry.count) }))} /></Panel>
+      <Panel title="Jogos com mais conquistas"><Bars label="Conquistas por jogo" entries={data.topGames.map((entry) => ({ key: entry.gameId, label: entry.title, value: entry.count, display: String(entry.count), onOpen: () => onOpenGame(entry.gameId) }))} /></Panel>
+      <Panel title="Caças mais longas"><Bars label="Dias entre a primeira e a última conquista" entries={data.longestHunts.map((entry) => ({ key: entry.gameId, label: entry.title, value: entry.days, display: `${entry.days} dias · ${entry.count} conquistas`, onOpen: () => onOpenGame(entry.gameId) }))} /></Panel>
+    </div>
+    <Panel title="Caça às conquistas: mais perto dos 100%">{data.closeToPerfect.length === 0 ? <p className="library-subtitle">Nenhum jogo entre 50% e 99%.</p> : <Bars label="Progresso das conquistas" entries={hunt(data.closeToPerfect)} />}</Panel>
+    {data.perfect.length > 0 && <Panel title="Jogos com 100%"><Bars label="Jogos completos" entries={hunt(data.perfect)} /></Panel>}
+    {data.rarest.length > 0 && <Panel title="Conquistas mais raras desbloqueadas">
+      <table className="stats-table">
+        <thead><tr><th>Conquista</th><th>Jogo</th><th>Raridade</th><th>Quando</th></tr></thead>
+        <tbody>{data.rarest.map((entry) => <tr key={`${entry.gameId}-${entry.name}-${entry.unlockedAt}`}>
+          <th scope="row">{entry.name}</th><td><button type="button" className="link-button" onClick={() => onOpenGame(entry.gameId)}>{entry.gameTitle}</button></td>
+          <td>{decimal(entry.rarityPercent)}%</td><td>{brDate(entry.unlockedAt.slice(0, 10))}</td>
+        </tr>)}</tbody>
+      </table>
+    </Panel>}
   </div>;
 }

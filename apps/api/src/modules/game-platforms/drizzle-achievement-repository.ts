@@ -9,11 +9,12 @@ export class DrizzleExternalAchievementRepository implements ExternalAchievement
     const rows = await this.db.select({
       gameId: gamePlatforms.gameId, platformId: gamePlatforms.platformId, unlockedAt: externalAchievements.unlockedAt,
       name: externalAchievements.name, description: externalAchievements.description, iconUrl: externalAchievements.iconUrl,
+      points: externalAchievements.points, rarityPercent: externalAchievements.rarityPercent,
     })
       .from(externalAchievements)
       .innerJoin(gamePlatforms, eq(gamePlatforms.id, externalAchievements.gamePlatformId))
       .where(and(eq(externalAchievements.unlocked, true)));
-    return rows.flatMap((row) => row.unlockedAt ? [{ ...row, unlockedAt: row.unlockedAt }] : []);
+    return rows.flatMap((row) => row.unlockedAt ? [{ ...row, unlockedAt: row.unlockedAt, rarityPercent: row.rarityPercent === null ? null : Number(row.rarityPercent) }] : []);
   }
 
   async countsByGamePlatform(): Promise<Map<string, { total: number; unlocked: number }>> {

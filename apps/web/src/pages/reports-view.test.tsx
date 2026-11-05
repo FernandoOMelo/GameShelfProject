@@ -30,10 +30,18 @@ const backlog = {
   oldest: [{ gameId: '00000000-0000-4000-8000-000000000002', title: 'Antigo', addedAt: '2025-01-01T00:00:00.000Z', ageDays: 516, estimatedHours: 5 }],
 };
 
+const achievements = {
+  totals: { unlockedInRange: 4, pointsInRange: 50, activeDays: 3, totalAchievements: 24, unlockedAchievements: 15, completionPercent: 62.5, gamesWithAchievements: 3, gamesPerfect: 1 },
+  byMonth: [{ month: '2026-01', count: 4 }], byPlatform: [{ name: 'PC', count: 4 }],
+  topGames: [{ gameId: '00000000-0000-4000-8000-000000000001', title: 'Hades', count: 4 }], longestHunts: [],
+  rarest: [{ gameId: '00000000-0000-4000-8000-000000000001', gameTitle: 'Hades', name: 'Lendária', rarityPercent: 1.5, unlockedAt: '2026-01-01T12:00:00.000Z' }],
+  closeToPerfect: [{ gameId: '00000000-0000-4000-8000-000000000001', title: 'Hades', unlocked: 9, total: 10, remaining: 1, percent: 90 }], perfect: [],
+};
+
 function mockApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const body = url.includes('/reports/backlog') ? backlog : url.includes('/reports/playtime') ? playtime : url.includes('/reports/playthroughs') ? playthroughs : [];
+    const body = url.includes('/reports/achievements') ? achievements : url.includes('/reports/backlog') ? backlog : url.includes('/reports/playtime') ? playtime : url.includes('/reports/playthroughs') ? playthroughs : [];
     return new Response(JSON.stringify(body), { status: 200 });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -48,6 +56,15 @@ describe('ReportsView', () => {
     render(<ReportsView onOpenGame={() => undefined} />);
     expect(screen.getByText('Escolha um relatório')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('mostra a caça às conquistas e as mais raras', async () => {
+    mockApi();
+    render(<ReportsView onOpenGame={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: /Conquistas/ }));
+    expect(await screen.findByText('62,5%')).toBeInTheDocument();
+    expect(screen.getByText('9/10 · 90%')).toBeInTheDocument();
+    expect(screen.getByText('Lendária')).toBeInTheDocument();
   });
 
   it('mostra o envelhecimento do backlog e abre o jogo mais antigo', async () => {

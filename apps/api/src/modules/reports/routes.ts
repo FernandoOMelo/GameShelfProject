@@ -1,10 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { backlogReportSchema, completionsReportQuerySchema, completionsReportSchema, playtimeReportQuerySchema, playtimeReportSchema, playthroughsReportQuerySchema, playthroughsReportSchema } from '@gameshelf/contracts';
+import { achievementsReportQuerySchema, achievementsReportSchema, backlogReportSchema, completionsReportQuerySchema, completionsReportSchema, playtimeReportQuerySchema, playtimeReportSchema, playthroughsReportQuerySchema, playthroughsReportSchema } from '@gameshelf/contracts';
 import type { GameRepository } from '../games/repository.js';
 import type { SessionRepository } from '../sessions/repository.js';
 import type { PlatformRepository } from '../platforms/repository.js';
 import type { GenreRepository } from '../genres/repository.js';
 import type { PlaythroughRepository } from '../playthroughs/repository.js';
+import type { GamePlatformRepository } from '../game-platforms/repository.js';
+import type { ExternalAchievementRepository } from '../game-platforms/achievement-repository.js';
+import { buildAchievementsReport } from './achievements.js';
 import { toGame, toPlaythrough, toSession } from '../shared/serialize.js';
 import { buildBacklogReport } from './backlog.js';
 import { buildCompletionsReport } from './completions.js';
@@ -12,7 +15,7 @@ import { buildPlaythroughsReport } from './playthroughs.js';
 import { buildPlaytimeReport } from './playtime.js';
 
 /** Cada relatório tem a própria rota e os próprios filtros (ADR-041). */
-export async function registerReportRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, platforms: PlatformRepository, genres: GenreRepository, playthroughs?: PlaythroughRepository) {
+export async function registerReportRoutes(app: FastifyInstance, games: GameRepository, sessions: SessionRepository, platforms: PlatformRepository, genres: GenreRepository, playthroughs?: PlaythroughRepository, achievements?: { gamePlatforms: GamePlatformRepository; store: ExternalAchievementRepository }) {
   app.get('/reports/playtime', async (request, reply) => {
     const parsed = playtimeReportQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ message: 'Parâmetros do relatório de tempo de jogo inválidos.', issues: parsed.error.issues });
@@ -37,6 +40,22 @@ export async function registerReportRoutes(app: FastifyInstance, games: GameRepo
     const [gameRecords, sessionRecords, platformItems, genreItems] = await Promise.all([games.list(), sessions.listAll(), platforms.list(), genres.list()]);
     return reply.send(backlogReportSchema.parse(buildBacklogReport({ games: gameRecords.map(toGame), sessions: sessionRecords.map(toSession), platforms: platformItems, genres: genreItems })));
   });
+
+  if (achievements) {
+    app.get('/reports/achievements', async (request, reply) => {
+      const parsed = achievementsReportQuerySchema.safeParse(request.query);
+      if (!parsed.success) return reply.code(400).send({ message: 'Parâmetros do relatório de conquistas inválidos.', issues: parsed.error.issues });
+      const [gameRecords, platformItems, links, unlocks, totals] = await Promise.all([
+        games.list(), platforms.list(), achievements.gamePlatforms.listAll(), achievements.store.listUnlocks(), achievements.store.countsByGamePlatform(),
+      ]);
+      const { from, to, timezoneOffsetMinutes } = parsed.data;
+      return reply.send(achievementsReportSchema.parse(buildAchievementsReport({
+        games: gameRecords.map(toGame), platforms: platformItems, unlocks, timezoneOffsetMinutes,
+        counts: links.flatMap((link) => { const count = totals.get(link.id); return count ? [{ gameId: link.gameId, ...count }] : []; }),
+        ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }),
+      })));
+    });
+  }
 
   if (playthroughs) {
     app.get('/reports/playthroughs', async (request, reply) => {

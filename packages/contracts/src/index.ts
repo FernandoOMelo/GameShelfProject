@@ -1315,3 +1315,33 @@ export const backlogReportSchema = z.object({
   }).strict()),
 }).strict();
 export type BacklogReport = z.infer<typeof backlogReportSchema>;
+
+export const achievementsReportQuerySchema = z.object({ ...reportRangeQuery }).strict().refine(validReportRange, reportRangeMessage);
+const huntGameSchema = z.object({
+  gameId: z.string().uuid(), title: z.string(), unlocked: z.number().int().nonnegative(), total: z.number().int().positive(),
+  remaining: z.number().int().nonnegative(), percent: z.number().min(0).max(100),
+}).strict();
+/** Desbloqueios no período; o progresso por jogo (caça) é o estado atual. */
+export const achievementsReportSchema = z.object({
+  totals: z.object({
+    unlockedInRange: z.number().int().nonnegative(),
+    pointsInRange: z.number().int().nonnegative(),
+    activeDays: z.number().int().nonnegative(),
+    totalAchievements: z.number().int().nonnegative(),
+    unlockedAchievements: z.number().int().nonnegative(),
+    completionPercent: z.number().min(0).max(100),
+    gamesWithAchievements: z.number().int().nonnegative(),
+    gamesPerfect: z.number().int().nonnegative(),
+  }).strict(),
+  byMonth: z.array(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), count: z.number().int().positive() }).strict()),
+  byPlatform: z.array(z.object({ name: z.string(), count: z.number().int().positive() }).strict()),
+  topGames: z.array(z.object({ gameId: z.string().uuid(), title: z.string(), count: z.number().int().positive() }).strict()),
+  rarest: z.array(z.object({
+    gameId: z.string().uuid(), gameTitle: z.string(), name: z.string(), rarityPercent: z.number().min(0).max(100), unlockedAt: z.string().datetime(),
+  }).strict()),
+  /** Jogos com mais de uma conquista desbloqueada no período, pelo intervalo entre a primeira e a última. */
+  longestHunts: z.array(z.object({ gameId: z.string().uuid(), title: z.string(), days: z.number().int().nonnegative(), count: z.number().int().positive() }).strict()),
+  closeToPerfect: z.array(huntGameSchema),
+  perfect: z.array(huntGameSchema),
+}).strict();
+export type AchievementsReport = z.infer<typeof achievementsReportSchema>;

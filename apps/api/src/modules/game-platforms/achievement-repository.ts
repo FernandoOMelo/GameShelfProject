@@ -21,6 +21,9 @@ export type AchievementUnlock = {
   name: string;
   description: string | null;
   iconUrl: string | null;
+  /** Pontos e raridade (% de jogadores) quando a fonte informa; usados pelos relatórios. */
+  points?: number | null;
+  rarityPercent?: number | null;
 };
 
 export interface ExternalAchievementRepository {

@@ -59,6 +59,19 @@ os jogos com status Backlog, sem os arquivados.
 - backlog por ano de lançamento, gênero e plataforma (jogos e horas que faltam);
 - os 10 jogos esperando há mais tempo.
 
+## Conquistas (`GET /reports/achievements`)
+
+Parâmetros: `from`, `to`, `timezoneOffsetMinutes`. Só existe com o espelho de
+conquistas (Achievist) configurado. O período filtra os desbloqueios pelo dia local;
+o progresso por jogo é o estado atual.
+
+- no período: conquistas desbloqueadas, pontos, dias com desbloqueio, por mês, por
+  plataforma, jogos com mais conquistas, caças mais longas (dias entre a primeira e a
+  última conquista do jogo) e as mais raras (pela raridade informada pela fonte);
+- estado atual: conclusão geral, jogos com conquistas, jogos com 100%, jogos mais
+  perto de 100% (a partir de 50%, por menos conquistas faltando) e jogos completos;
+- um jogo em várias plataformas soma as conquistas de cada associação.
+
 ## Próximas etapas
 
-Conquistas e comparativos; filtros salvos e exportação em PDF.
+Comparativos (ano contra ano e período contra período); filtros salvos e exportação em PDF.
