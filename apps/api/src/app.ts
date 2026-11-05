@@ -31,6 +31,7 @@ import { registerScreenshotRoutes } from './modules/sessions/screenshot-routes.j
 import type { BackupImporter } from './modules/backup/importer.js';
 import { registerBackupRoutes } from './modules/backup/routes.js';
 import { registerStatsRoutes } from './modules/stats/routes.js';
+import { registerReportRoutes } from './modules/reports/routes.js';
 import type { ChallengeCompletionRepository, MainChallengeRepository } from './modules/challenge/repository.js';
 import { registerChallengeRoutes } from './modules/challenge/routes.js';
 import type { SavedFilterRepository } from './modules/saved-filters/repository.js';
@@ -136,6 +137,9 @@ export function buildApp(options: { integrationHealth?: IntegrationHealthTracker
         ? { gamePlatforms: options.gamePlatformRepository, playthroughs: options.playthroughRepository }
         : undefined,
       options.externalAchievementRepository));
+  }
+  if (options.gameRepository && options.sessionRepository && options.platformRepository && options.genreRepository) {
+    app.register((instance) => registerReportRoutes(instance, options.gameRepository!, options.sessionRepository!, options.platformRepository!, options.genreRepository!));
   }
   if (options.gameRepository && options.gameListRepository && options.mainChallengeRepository) {
     app.register((instance) => registerChallengeRoutes(instance, options.gameRepository!, options.gameListRepository!, options.mainChallengeRepository!));

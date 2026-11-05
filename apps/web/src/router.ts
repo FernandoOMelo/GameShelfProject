@@ -4,7 +4,7 @@
  */
 
 /** Views de topo do app. Cada uma tem um caminho estável e compartilhável. */
-export type AppView = 'library' | 'queue' | 'lists' | 'platforms' | 'dashboard' | 'stats' | 'timeline' | 'settings';
+export type AppView = 'library' | 'queue' | 'lists' | 'platforms' | 'dashboard' | 'stats' | 'reports' | 'timeline' | 'settings';
 
 export type AppRoute = {
   view: AppView;
@@ -19,6 +19,7 @@ const viewPaths: Record<AppView, string> = {
   lists: '/listas',
   platforms: '/plataformas',
   stats: '/estatisticas',
+  reports: '/relatorios',
   timeline: '/atividade',
   settings: '/configuracoes',
 };

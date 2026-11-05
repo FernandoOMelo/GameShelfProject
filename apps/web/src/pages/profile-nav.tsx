@@ -75,6 +75,7 @@ const tabs: Tab[] = [
   { view: 'timeline', label: 'Sessões de jogo', icon: '◔' },
   { view: 'platforms', label: 'Plataformas', icon: '▤' },
   { view: 'stats', label: 'Estatísticas', icon: '∿' },
+  { view: 'reports', label: 'Relatórios', icon: '☰' },
 ];
 
 export type ProfileTabsProps = {

@@ -1161,3 +1161,97 @@ export const backupSchema = z.object({
 }).strict();
 export type BackupData = z.infer<typeof backupDataSchema>;
 export type Backup = z.infer<typeof backupSchema>;
+
+// Relatórios (ADR-041): consultas detalhadas, com filtros, à parte das estatísticas.
+// Definições compartilhadas por todos os relatórios: tempo é a soma das sessões
+// encerradas, atribuída ao dia local de início da sessão.
+const reportRangeQuery = {
+  from: calendarDateSchema.optional(),
+  to: calendarDateSchema.optional(),
+  timezoneOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0),
+};
+const validReportRange = (value: { from?: string; to?: string }) => !value.from || !value.to || value.from <= value.to;
+const reportRangeMessage = { path: ['to'], message: 'O fim do período não pode ser anterior ao início.' };
+
+export const playtimeReportQuerySchema = z.object({
+  ...reportRangeQuery,
+  platformId: z.string().uuid().optional(),
+  genreId: z.string().uuid().optional(),
+}).strict().refine(validReportRange, reportRangeMessage);
+
+const reportBucketSchema = z.object({ minutes: z.number().int().nonnegative(), sessions: z.number().int().nonnegative() }).strict();
+const reportRankSchema = reportBucketSchema.extend({
+  id: z.string().nullable(), name: z.string(), share: z.number().min(0).max(100),
+}).strict();
+
+export const playtimeReportSchema = z.object({
+  totalMinutes: z.number().int().nonnegative(),
+  sessionCount: z.number().int().nonnegative(),
+  averageSessionMinutes: z.number().int().nonnegative(),
+  activeDays: z.number().int().nonnegative(),
+  /** Anos com sessões encerradas (sem filtro), para o seletor de período. */
+  availableYears: z.array(z.number().int()),
+  byMonth: z.array(reportBucketSchema.extend({ month: z.string().regex(/^\d{4}-\d{2}$/) }).strict()),
+  byYear: z.array(reportBucketSchema.extend({ year: z.number().int() }).strict()),
+  /** 0 = domingo … 6 = sábado, sempre as sete posições. */
+  byWeekday: z.array(reportBucketSchema.extend({ weekday: z.number().int().min(0).max(6) }).strict()),
+  /** Hora local de início (0–23), sempre as 24 posições. */
+  byHour: z.array(reportBucketSchema.extend({ hour: z.number().int().min(0).max(23) }).strict()),
+  sessionLengths: z.array(z.object({ key: z.enum(['UP_TO_30', 'UP_TO_60', 'UP_TO_120', 'UP_TO_240', 'OVER_240']), sessions: z.number().int().nonnegative() }).strict()),
+  byPlatform: z.array(reportRankSchema),
+  byGenre: z.array(reportRankSchema),
+  byDeveloper: z.array(reportRankSchema),
+  topGames: z.array(reportRankSchema),
+  highlights: z.object({
+    busiestWeekday: z.number().int().min(0).max(6).nullable(),
+    busiestMonth: z.string().nullable(),
+    peakHour: z.number().int().min(0).max(23).nullable(),
+    averageMonthlyMinutes: z.number().int().nonnegative(),
+  }).strict(),
+}).strict();
+export type PlaytimeReport = z.infer<typeof playtimeReportSchema>;
+
+export const estimateReferenceSchema = z.enum(['MAIN', 'COMPLETIONIST', 'PERSONAL']);
+export const completionsReportSortSchema = z.enum(['TITLE', 'DIFFERENCE_DESC', 'DIFFERENCE_ASC', 'PLAYED_DESC']);
+
+export const completionsReportQuerySchema = z.object({
+  ...reportRangeQuery,
+  reference: estimateReferenceSchema.default('MAIN'),
+  sort: completionsReportSortSchema.default('DIFFERENCE_DESC'),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(500).default(20),
+}).strict().refine(validReportRange, reportRangeMessage);
+
+export const completionsReportSchema = z.object({
+  /** Retrato do estado atual da biblioteca; o período não o altera. */
+  funnel: z.object({
+    started: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    paused: z.number().int().nonnegative(),
+    abandoned: z.number().int().nonnegative(),
+    completionRate: z.number().min(0).max(100),
+    abandonmentRate: z.number().min(0).max(100),
+  }).strict(),
+  /** Jogos zerados dentro do período. */
+  completedInRange: z.number().int().nonnegative(),
+  averageDaysToComplete: z.number().nonnegative().nullable(),
+  byMonth: z.array(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), count: z.number().int().positive() }).strict()),
+  byYear: z.array(z.object({ year: z.number().int(), count: z.number().int().positive() }).strict()),
+  estimates: z.object({
+    reference: estimateReferenceSchema,
+    compared: z.number().int().nonnegative(),
+    overCount: z.number().int().nonnegative(),
+    underCount: z.number().int().nonnegative(),
+    averageDifferencePercent: z.number().nullable(),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    rows: z.array(z.object({
+      gameId: z.string().uuid(), title: z.string(), completedAt: calendarDateSchema,
+      estimatedHours: z.number().positive(), playedHours: z.number().nonnegative(), differencePercent: z.number(),
+    }).strict()),
+  }).strict(),
+  /** Jogos pausados há mais tempo, do mais parado ao menos parado. */
+  stalled: z.array(z.object({ gameId: z.string().uuid(), title: z.string(), lastActivityAt: z.string().datetime(), daysIdle: z.number().int().nonnegative() }).strict()),
+}).strict();
+export type CompletionsReport = z.infer<typeof completionsReportSchema>;

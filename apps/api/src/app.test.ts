@@ -910,6 +910,19 @@ describe('classification, stats and challenge API', () => {
     expect((await app.inject({ method: 'GET', url: '/stats/replay?year=1' })).statusCode).toBe(400);
   });
 
+  it('returns the report contracts and rejects invalid parameters', async () => {
+    const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), platformRepository: createPlatformRepository(), genreRepository: createGenreRepository() });
+    apps.push(app);
+    const playtime = await app.inject({ method: 'GET', url: '/reports/playtime?from=2026-01-01&to=2026-12-31' });
+    expect(playtime.statusCode).toBe(200);
+    expect(playtime.json()).toMatchObject({ totalMinutes: 0, sessionCount: 0, byWeekday: expect.any(Array), highlights: { busiestWeekday: null } });
+    expect((await app.inject({ method: 'GET', url: '/reports/playtime?from=2026-12-31&to=2026-01-01' })).statusCode).toBe(400);
+    const completions = await app.inject({ method: 'GET', url: '/reports/completions?reference=PERSONAL&pageSize=5' });
+    expect(completions.statusCode).toBe(200);
+    expect(completions.json()).toMatchObject({ funnel: { started: 0 }, estimates: { reference: 'PERSONAL', pageSize: 5, rows: [] } });
+    expect((await app.inject({ method: 'GET', url: '/reports/completions?pageSize=9999' })).statusCode).toBe(400);
+  });
+
   it('returns the timeline contract and rejects invalid parameters', async () => {
     const app = buildApp({ gameRepository: createRepository(), sessionRepository: createSessionRepository(), platformRepository: createPlatformRepository(), genreRepository: createGenreRepository() });
     apps.push(app);
