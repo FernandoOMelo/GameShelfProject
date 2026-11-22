@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { FinishResult, Game, LifecycleHint } from '@gameshelf/contracts';
 import { JourneyStartDialog } from './journey-start-dialog';
 import { FinishGameDialog } from './finish-game-dialog';
@@ -59,18 +59,35 @@ describe('FinishGameDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '10' }));
     fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
     fireEvent.click(screen.getByRole('button', { name: /^AA ·/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onSave).toHaveBeenCalledWith({ rating: 10, difficulty: 'AA' });
+  });
+
+  it('grava a análise com critérios e texto quando preenchida', async () => {
+    const onSave = vi.fn(async () => undefined);
+    const onClose = vi.fn();
+    render(<FinishGameDialog result={result()} onChangeDate={async () => result()} onSave={onSave} onClose={onClose} />);
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Pular' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Trilha sonora' })).getByRole('button', { name: '10' }));
+    fireEvent.change(screen.getByLabelText('Comentário de gameplay'), { target: { value: 'Combate fluido' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    fireEvent.change(screen.getByLabelText(/Sua análise do jogo/), { target: { value: 'Obra-prima.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onSave).toHaveBeenCalledWith({ review: {
+      summary: 'Obra-prima.', gameplay: { score: null, comment: 'Combate fluido' }, setting: { score: null, comment: null },
+      soundtrack: { score: 10, comment: null }, story: { score: null, comment: null },
+    } });
   });
 
   it('pular tudo fecha sem gravar nada', () => {
     const onSave = vi.fn(async () => undefined);
     const onClose = vi.fn();
     render(<FinishGameDialog result={result()} onChangeDate={async () => result()} onSave={onSave} onClose={onClose} />);
-    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Pular' }));
+    for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Pular' }));
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     expect(onSave).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();

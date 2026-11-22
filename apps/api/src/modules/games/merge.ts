@@ -37,7 +37,7 @@ export type MergedGameFields = {
   startedAt: string | null; completedAt: string | null;
   estimatedMainHours: string | number | null; estimatedCompletionistHours: string | number | null; personalEstimatedHours: string | number | null;
   retroactivePlayedHours: number; rating: number | null; difficulty: GameRecord['difficulty'];
-  gameType: string | null; completionCondition: string | null; notes: string | null;
+  gameType: string | null; completionCondition: string | null; review: GameRecord['review']; notes: string | null;
 };
 
 const firstFilled = <T>(preferred: T | null, fallback: T | null): T | null => (preferred !== null && preferred !== '' ? preferred : fallback);
@@ -83,6 +83,7 @@ export function mergeGameFields(target: GameRecord, source: GameRecord): MergedG
     difficulty: firstFilled(target.difficulty, source.difficulty),
     gameType: firstFilled(target.gameType, source.gameType),
     completionCondition: firstFilled(target.completionCondition, source.completionCondition),
+    review: target.review ?? source.review ?? null,
     notes,
   };
 }

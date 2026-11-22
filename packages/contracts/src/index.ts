@@ -156,6 +156,24 @@ const mediaUrl = z.string().max(2048).refine((value) => {
 const optionalUrl = mediaUrl.nullable().optional();
 const optionalHours = z.number().finite().min(0).max(999999.99).nullable().optional();
 
+/** Análise feita ao zerar (ADR-044): nota 1–10 e comentário por critério, todos opcionais. */
+const reviewCriterionSchema = z.object({
+  score: z.number().int().min(1).max(10).nullable(),
+  comment: z.string().trim().max(1000).nullable(),
+}).strict();
+export const gameReviewSchema = z.object({
+  summary: z.string().trim().max(5000).nullable(),
+  gameplay: reviewCriterionSchema,
+  setting: reviewCriterionSchema,
+  soundtrack: reviewCriterionSchema,
+  story: reviewCriterionSchema,
+}).strict();
+export type GameReview = z.infer<typeof gameReviewSchema>;
+export const reviewCriteria = ['gameplay', 'setting', 'soundtrack', 'story'] as const;
+/** Uma análise sem nenhum campo preenchido não é gravada. */
+export const isReviewEmpty = (review: GameReview): boolean =>
+  !review.summary?.trim() && reviewCriteria.every((key) => review[key].score === null && !review[key].comment?.trim());
+
 const gameInputBaseSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: optionalText,
@@ -172,6 +190,7 @@ const gameInputBaseSchema = z.object({
   difficulty: gameDifficultySchema.nullable().optional(),
   gameType: z.string().trim().max(100).nullable().optional(),
   completionCondition: z.string().trim().max(300).nullable().optional(),
+  review: gameReviewSchema.nullable().optional(),
   favorite: z.boolean().optional(),
   gameOfYear: z.boolean().optional(),
   excludedFromSuggestions: z.boolean().optional(),
@@ -188,6 +207,8 @@ export const gameInputSchema = gameInputBaseSchema.refine(validGameDates, {
   path: ['completedAt'], message: 'A data de conclusão não pode ser anterior ao início.',
 }).refine((value) => value.rating == null || value.status === 'COMPLETED' || value.status === 'ABANDONED', {
   path: ['rating'], message: 'A avaliação só pode ser informada para jogos zerados ou abandonados.',
+}).refine((value) => value.review == null || value.status === 'COMPLETED' || value.status === 'ABANDONED', {
+  path: ['review'], message: 'A análise só pode ser informada para jogos zerados ou abandonados.',
 }).refine((value) => !value.gameOfYear || Boolean(value.completedAt), {
   path: ['gameOfYear'], message: 'Informe a data de conclusão para marcar o jogo do ano.',
 });
@@ -218,6 +239,7 @@ export const gameSchema = z.object({
   difficulty: gameDifficultySchema.nullable(),
   gameType: z.string().nullable(),
   completionCondition: z.string().nullable(),
+  review: gameReviewSchema.nullable().default(null),
   favorite: z.boolean(),
   gameOfYear: z.boolean(),
   excludedFromSuggestions: z.boolean(),
@@ -1408,6 +1430,7 @@ export const finishInputSchema = z.object({
   rating: z.number().int().min(1).max(11).nullable().optional(),
   difficulty: gameDifficultySchema.nullable().optional(),
   completionCondition: z.string().trim().max(300).nullable().optional(),
+  review: gameReviewSchema.nullable().optional(),
   favorite: z.boolean().optional(),
   gameOfYear: z.boolean().optional(),
   timezoneOffsetMinutes: lifecycleTimezone,
@@ -1417,6 +1440,8 @@ export const finishUndoSchema = z.object({
   status: gameStatusSchema, startedAt: calendarDateSchema.nullable(), completedAt: calendarDateSchema.nullable(),
   rating: z.number().int().min(1).max(11).nullable(), difficulty: gameDifficultySchema.nullable(),
   completionCondition: z.string().nullable(), favorite: z.boolean(), gameOfYear: z.boolean(),
+  // Opcional para aceitar o Desfazer de clientes anteriores à análise.
+  review: gameReviewSchema.nullable().optional(),
   journey: z.object({ action: z.enum(['NONE', 'REOPEN', 'DELETE']), id: z.string().uuid().nullable() }).strict(),
 }).strict();
 export const finishResultSchema = z.object({

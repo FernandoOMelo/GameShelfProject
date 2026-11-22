@@ -1,3 +1,47 @@
+/// Nota (1–10) e comentário de um critério da análise; ambos opcionais.
+class ReviewCriterion {
+  final int? score;
+  final String? comment;
+
+  const ReviewCriterion({this.score, this.comment});
+
+  bool get isEmpty => score == null && (comment == null || comment!.trim().isEmpty);
+
+  factory ReviewCriterion.fromJson(Map<String, dynamic> json) =>
+      ReviewCriterion(score: json['score'] as int?, comment: json['comment'] as String?);
+}
+
+/// Análise feita ao zerar (ADR-044). Espelha `gameReviewSchema` de `packages/contracts`.
+class GameReview {
+  /// Chaves e rótulos dos critérios, na ordem de exibição.
+  static const criteria = {'gameplay': 'Gameplay', 'setting': 'Ambientação', 'soundtrack': 'Trilha sonora', 'story': 'História'};
+
+  final String? summary;
+  final Map<String, ReviewCriterion> byCriterion;
+
+  const GameReview({this.summary, this.byCriterion = const {}});
+
+  ReviewCriterion criterion(String key) => byCriterion[key] ?? const ReviewCriterion();
+
+  /// Uma análise sem nenhum campo preenchido não é enviada.
+  bool get isEmpty => (summary == null || summary!.trim().isEmpty) && criteria.keys.every((key) => criterion(key).isEmpty);
+
+  factory GameReview.fromJson(Map<String, dynamic> json) => GameReview(
+        summary: json['summary'] as String?,
+        byCriterion: {
+          for (final key in criteria.keys)
+            if (json[key] is Map) key: ReviewCriterion.fromJson(Map<String, dynamic>.from(json[key] as Map)),
+        },
+      );
+
+  static String? _text(String? value) => (value == null || value.trim().isEmpty) ? null : value.trim();
+
+  Map<String, dynamic> toJson() => {
+        'summary': _text(summary),
+        for (final key in criteria.keys) key: {'score': criterion(key).score, 'comment': _text(criterion(key).comment)},
+      };
+}
+
 /// Jogo da biblioteca. Espelha `gameSchema` de `packages/contracts`.
 ///
 /// As datas de ciclo de vida (`startedAt`/`completedAt`) são datas de calendário
@@ -23,6 +67,7 @@ class Game {
   final String? difficulty;
   final String? gameType;
   final String? completionCondition;
+  final GameReview? review;
   final bool favorite;
   final bool gameOfYear;
   final bool excludedFromSuggestions;
@@ -57,6 +102,7 @@ class Game {
     this.difficulty,
     this.gameType,
     this.completionCondition,
+    this.review,
     this.favorite = false,
     this.gameOfYear = false,
     this.excludedFromSuggestions = false,
@@ -94,6 +140,7 @@ class Game {
         difficulty: json['difficulty'] as String?,
         gameType: json['gameType'] as String?,
         completionCondition: json['completionCondition'] as String?,
+        review: json['review'] is Map ? GameReview.fromJson(Map<String, dynamic>.from(json['review'] as Map)) : null,
         favorite: json['favorite'] as bool? ?? false,
         gameOfYear: json['gameOfYear'] as bool? ?? false,
         excludedFromSuggestions: json['excludedFromSuggestions'] as bool? ?? false,
@@ -178,6 +225,7 @@ class Game {
         difficulty: difficulty ?? this.difficulty,
         gameType: gameType,
         completionCondition: completionCondition,
+        review: review,
         favorite: favorite ?? this.favorite,
         gameOfYear: gameOfYear ?? this.gameOfYear,
         excludedFromSuggestions: excludedFromSuggestions,

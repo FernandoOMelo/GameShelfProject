@@ -57,6 +57,11 @@ Zerar (`POST /games/:id/finish`) grava de uma vez o status Zerado, a data de con
 se o jogo não tinha nenhuma) e encerra a sessão aberta; nota, dificuldade e extras
 vêm depois, e a conclusão já está salva. `finish/undo` desfaz.
 
+Ao zerar também é possível registrar uma **análise** (ADR-044): nota de 1 a 10 e comentário
+para gameplay, ambientação, trilha sonora e história, mais um texto livre. Tudo é
+opcional e só existe nesse momento; pular as etapas "Critérios" e "Análise" não grava
+nada. A ficha do jogo mostra "Minha análise" quando há conteúdo.
+
 ## Jornadas
 
 Uma jornada é uma experiência contínua de jogo. Um jogo pode ter nenhuma, uma ou

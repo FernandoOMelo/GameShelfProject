@@ -19,6 +19,7 @@ import 'end_session_sheet.dart';
 import 'game_detail/achievements_panel.dart';
 import 'game_detail/dlc_franchise_panel.dart';
 import 'game_detail/journey_panel.dart';
+import 'game_detail/review_section.dart';
 import 'game_detail/sessions_panel.dart';
 import 'finish_game_sheet.dart';
 import 'game_editor_screen.dart';
@@ -236,6 +237,7 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
         if (_game.difficulty != null)
           InfoRow(label: 'Dificuldade', value: difficultyLabels[_game.difficulty] ?? _game.difficulty!),
         if (_game.completionCondition != null) InfoRow(label: 'Conclusão', value: _game.completionCondition!),
+        if (_game.review != null) ReviewSection(review: _game.review!),
         if (_game.notes != null && _game.notes!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 10),

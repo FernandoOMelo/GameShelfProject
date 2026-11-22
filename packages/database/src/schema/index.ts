@@ -1,6 +1,13 @@
 import { type AnyPgColumn, pgEnum, pgTable, text, timestamp, integer, numeric, uuid, check, primaryKey, boolean, date, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+/** Formato gravado em `games.review`; a validação fica em `@gameshelf/contracts`. */
+type ReviewCriterionJson = { score: number | null; comment: string | null };
+export type GameReviewJson = {
+  summary: string | null; gameplay: ReviewCriterionJson; setting: ReviewCriterionJson;
+  soundtrack: ReviewCriterionJson; story: ReviewCriterionJson;
+};
+
 export const franchises = pgTable('franchises', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull().unique(),
@@ -74,6 +81,8 @@ export const games = pgTable('games', {
   difficulty: gameDifficulty('difficulty'),
   gameType: text('game_type'),
   completionCondition: text('completion_condition'),
+  // Análise feita ao zerar (ADR-044): nota e comentário por critério.
+  review: jsonb('review').$type<GameReviewJson>(),
   favorite: boolean('favorite').notNull().default(false),
   gameOfYear: boolean('game_of_year').notNull().default(false),
   excludedFromSuggestions: boolean('excluded_from_suggestions').notNull().default(false),

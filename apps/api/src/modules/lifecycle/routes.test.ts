@@ -161,6 +161,29 @@ describe('POST /games/:id/finish', () => {
     expect(journeys).toHaveLength(0);
   });
 
+  const emptyCriterion = { score: null, comment: null };
+  it('grava a análise ao zerar, ignora análise vazia e restaura ao desfazer', async () => {
+    const { app, game } = setup({ status: 'PLAYING', startedAt: '2026-04-01' });
+    apps.push(app);
+    const review = { summary: 'Excelente.', gameplay: { score: 9, comment: 'Combate fluido' }, setting: emptyCriterion, soundtrack: { score: 10, comment: null }, story: emptyCriterion };
+    const response = await app.inject({ method: 'POST', url: `/games/${GAME}/finish`, payload: { completedAt: '2026-04-30', review } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().game.review).toEqual(review);
+    expect(response.json().undo.review).toBeNull();
+    await app.inject({ method: 'POST', url: `/games/${GAME}/finish/undo`, payload: response.json().undo });
+    expect(game.review).toBeNull();
+
+    const blank = await app.inject({ method: 'POST', url: `/games/${GAME}/finish`, payload: { completedAt: '2026-04-30', review: { summary: '  ', gameplay: emptyCriterion, setting: emptyCriterion, soundtrack: emptyCriterion, story: emptyCriterion } } });
+    expect(blank.json().game.review).toBeNull();
+  });
+
+  it('recusa nota de critério fora de 1 a 10', async () => {
+    const { app } = setup({ status: 'PLAYING', startedAt: '2026-04-01' });
+    apps.push(app);
+    const review = { summary: null, gameplay: { score: 11, comment: null }, setting: emptyCriterion, soundtrack: emptyCriterion, story: emptyCriterion };
+    expect((await app.inject({ method: 'POST', url: `/games/${GAME}/finish`, payload: { review } })).statusCode).toBe(400);
+  });
+
   it('recusa data anterior ao início e jogo desejado', async () => {
     const { app } = setup({ status: 'PLAYING', startedAt: '2026-04-10' });
     apps.push(app);

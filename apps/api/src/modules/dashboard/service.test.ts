@@ -5,7 +5,7 @@ import { buildDashboard, estimateRemainingHours } from './service.js';
 const game: Game = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Hades', description: null, coverUrl: null,
   backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null, franchiseId: null,
-  platformId: null, platformIds: [], genreIds: [], status: 'PLAYING', rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: 20,
+  platformId: null, platformIds: [], genreIds: [], status: 'PLAYING', rating: null, difficulty: null, gameType: null, completionCondition: null, review: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false, owned: false, startedAt: null, completedAt: null, priority: 'NORMAL', estimatedMainHours: 20,
   estimatedCompletionistHours: null, personalEstimatedHours: 18, retroactivePlayedHours: 0, notes: null, archived: false,
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
 };

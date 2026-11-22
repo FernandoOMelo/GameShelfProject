@@ -1,4 +1,4 @@
-import type { GameInput, GameUpdate } from '@gameshelf/contracts';
+import type { GameInput, GameReview, GameUpdate } from '@gameshelf/contracts';
 
 export type GameRecord = {
   id: string;
@@ -21,6 +21,8 @@ export type GameRecord = {
   difficulty: 'C' | 'B' | 'A' | 'AA' | 'AAA' | null;
   gameType: string | null;
   completionCondition: string | null;
+  /** Análise ao zerar (ADR-044); ausente em registros antigos. */
+  review?: GameReview | null;
   favorite: boolean;
   gameOfYear: boolean;
   excludedFromSuggestions: boolean;

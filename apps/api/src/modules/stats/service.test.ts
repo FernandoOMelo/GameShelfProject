@@ -6,7 +6,7 @@ import { buildChallengeProgress } from '../challenge/service.js';
 const base: Game = {
   id: '00000000-0000-4000-8000-000000000001', title: 'Base', description: null, coverUrl: null, backgroundUrl: null,
   releaseYear: null, developer: null, publisher: null, franchiseId: null, platformId: null, platformIds: [], genreIds: [], status: 'COMPLETED',
-  rating: null, difficulty: null, gameType: null, completionCondition: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false,
+  rating: null, difficulty: null, gameType: null, completionCondition: null, review: null, favorite: false, gameOfYear: false, excludedFromSuggestions: false,
   owned: true, archived: false, startedAt: null, completedAt: '2025-03-01', priority: 'NORMAL', estimatedMainHours: null,
   estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 0, notes: null,
   createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',

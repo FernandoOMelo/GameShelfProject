@@ -50,6 +50,8 @@ export function formatCompactHours(value: number): string {
   return `${hours}h ${minutes}min`;
 }
 
+/** Critérios da análise feita ao zerar (ADR-044). */
+export const reviewCriteriaLabels = { gameplay: 'Gameplay', setting: 'Ambientação', soundtrack: 'Trilha sonora', story: 'História' } as const;
 export const difficultyLabels = { C: 'C · Fácil', B: 'B · Médio', A: 'A · Complicado', AA: 'AA · Difícil', AAA: 'AAA · Imperdoável' } as const;
 
 export const statusLabels = {

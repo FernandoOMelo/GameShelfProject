@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gameshelf_mobile/models/game.dart';
 import 'package:gameshelf_mobile/models/lifecycle.dart';
 import 'package:gameshelf_mobile/screens/finish_game_sheet.dart';
+import 'package:gameshelf_mobile/screens/game_detail/review_section.dart';
 import 'package:gameshelf_mobile/screens/journey_start_sheet.dart';
 
 Map<String, dynamic> gameJson({String status = 'PLAYING', String? completedAt}) => {
@@ -106,7 +107,15 @@ void main() {
           'undo': {'status': 'PLAYING', 'journey': {'action': 'NONE', 'id': null}},
         });
 
+    // A etapa de critérios é alta; uma tela maior evita rolar dentro do teste.
+    void tallScreen(WidgetTester tester) {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
     testWidgets('percorre as etapas e grava só o que foi preenchido', (tester) async {
+      tallScreen(tester);
       Map<String, dynamic>? saved;
       FinishResult? closed;
       await tester.pumpWidget(MaterialApp(
@@ -138,8 +147,10 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('difficulty-AA')));
       await tester.tap(find.text('Próximo'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Próximo')); // extras puláveis
-      await tester.pumpAndSettle();
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.text('Próximo')); // extras, critérios e análise puláveis
+        await tester.pumpAndSettle();
+      }
       expect(find.text('Nota'), findsOneWidget);
       await tester.tap(find.text('Concluir'));
       await tester.pumpAndSettle();
@@ -148,14 +159,48 @@ void main() {
       expect(closed, isNotNull);
     });
 
+    testWidgets('grava a análise com critérios e texto quando preenchida', (tester) async {
+      tallScreen(tester);
+      Map<String, dynamic>? saved;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: FinishGameSheet(result: result(), onChangeDate: (_) async => result(), onSaveExtras: (values) async => saved = values),
+        ),
+      ));
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.text('Pular'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const ValueKey('soundtrack-10')));
+      await tester.enterText(find.byKey(const ValueKey('gameplay-comment')), 'Combate fluido');
+      await tester.tap(find.text('Próximo'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('review-summary')), 'Obra-prima.');
+      await tester.tap(find.text('Próximo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Concluir'));
+      await tester.pumpAndSettle();
+
+      expect(saved, {
+        'review': {
+          'summary': 'Obra-prima.',
+          'gameplay': {'score': null, 'comment': 'Combate fluido'},
+          'setting': {'score': null, 'comment': null},
+          'soundtrack': {'score': 10, 'comment': null},
+          'story': {'score': null, 'comment': null},
+        },
+      });
+    });
+
     testWidgets('pular tudo fecha sem gravar nada', (tester) async {
+      tallScreen(tester);
       var saves = 0;
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: FinishGameSheet(result: result(), onChangeDate: (_) async => result(), onSaveExtras: (_) async { saves += 1; return null; }),
         ),
       ));
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 5; i++) {
         await tester.tap(find.text('Pular'));
         await tester.pumpAndSettle();
       }
@@ -163,6 +208,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(saves, 0);
     });
+  });
+
+  testWidgets('ReviewSection mostra só os critérios preenchidos', (tester) async {
+    final game = Game.fromJson(gameJson(status: 'COMPLETED')..['review'] = {
+      'summary': 'Obra-prima.',
+      'gameplay': {'score': 9, 'comment': 'Combate fluido'},
+      'setting': {'score': null, 'comment': null},
+      'soundtrack': {'score': null, 'comment': null},
+      'story': {'score': null, 'comment': null},
+    });
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ReviewSection(review: game.review!))));
+    expect(find.text('MINHA ANÁLISE'), findsOneWidget);
+    expect(find.text('9/10'), findsOneWidget);
+    expect(find.text('Combate fluido'), findsOneWidget);
+    expect(find.text('Obra-prima.'), findsOneWidget);
+    expect(find.text('Ambientação'), findsNothing);
   });
 
   test('canFinish exclui desejados e já zerados', () {

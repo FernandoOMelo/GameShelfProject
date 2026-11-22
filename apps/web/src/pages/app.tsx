@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { DashboardResponse, Franchise, Game, GameAchievementsResponse, GameInput, GameUsage, GameList, GameListSummary, GameMetadataCandidate, GameTimeEstimate, Genre, LibraryFilterState, LibrarySort, Platform, PlatformSummary, Playthrough, QueueItem, SavedFilter, Session } from '@gameshelf/contracts';
-import type { FinishResult, LifecycleHint } from '@gameshelf/contracts';
+import { reviewCriteria, type FinishResult, type LifecycleHint } from '@gameshelf/contracts';
 import { GameAchievementsPanel } from './game-achievements-panel';
 import { DlcPanel } from './dlc-panel';
 import { GameMergeDialog } from './game-merge-dialog';
@@ -9,7 +9,7 @@ import { FranchisePanel } from './franchise-panel';
 type DetailTab = 'resumo' | 'conquistas' | 'sessoes' | 'dlc-franquia';
 import { Button, ConfirmDialog, EmptyState, ErrorBoundary, ErrorState, LoadingState, Switch } from '@gameshelf/ui';
 
-import { apiUrl, difficultyLabels, formatCompactHours, formatDateTime, formatElapsed, formatHours, formatHoursMinutes, formatDuration, statusLabels } from './shared';
+import { apiUrl, difficultyLabels, reviewCriteriaLabels, formatCompactHours, formatDateTime, formatElapsed, formatHours, formatHoursMinutes, formatDuration, statusLabels } from './shared';
 import { PlatformIcon, platformStyle } from './platform-icons';
 import { ProfileHeader, ProfileTabs } from './profile-nav';
 import { readRoute, routePath, type AppView } from '../router';
@@ -1341,6 +1341,10 @@ export function App() {
                 {selectedGame.completionCondition && <div><dt>Condição de zeramento</dt><dd>{selectedGame.completionCondition}</dd></div>}
                 <div className="journey-meta-wide"><dt>Gêneros</dt><dd>{selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || <span className="meta-empty">Não informados</span>}</dd></div>
               </dl></section>
+              {selectedGame.review && <section className="details-section gd-wide"><h2>Minha análise</h2><div className="review-detail">
+                <dl className="review-scores">{reviewCriteria.filter((key) => selectedGame.review![key].score !== null || selectedGame.review![key].comment).map((key) => <div key={key}><dt>{reviewCriteriaLabels[key]}</dt><dd>{selectedGame.review![key].score !== null ? `${selectedGame.review![key].score}/10` : '—'}{selectedGame.review![key].comment && <small>{selectedGame.review![key].comment}</small>}</dd></div>)}</dl>
+                {selectedGame.review.summary && <p>{selectedGame.review.summary}</p>}
+              </div></section>}
               {(() => {
                 const playedMinutes = sessions.reduce((total, s) => total + (s.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60);
                 const playedHours = playedMinutes / 60;

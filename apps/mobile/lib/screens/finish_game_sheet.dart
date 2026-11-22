@@ -70,7 +70,7 @@ Future<void> finishGame(BuildContext context, WidgetRef ref, Game game) async {
   ));
 }
 
-/// Assistente em etapas: nota, dificuldade, extras e resumo.
+/// Assistente em etapas: nota, dificuldade, extras, critérios, análise e resumo.
 class FinishGameSheet extends StatefulWidget {
   final FinishResult result;
   final Future<FinishResult> Function(DateTime date) onChangeDate;
@@ -83,9 +83,12 @@ class FinishGameSheet extends StatefulWidget {
 }
 
 class _FinishGameSheetState extends State<FinishGameSheet> {
-  static const _steps = ['Nota', 'Dificuldade', 'Extras', 'Resumo'];
+  static const _steps = ['Nota', 'Dificuldade', 'Extras', 'Critérios', 'Análise', 'Resumo'];
   late FinishResult _result = widget.result;
   final _condition = TextEditingController();
+  final _summary = TextEditingController();
+  final Map<String, int?> _scores = {};
+  final Map<String, TextEditingController> _comments = {for (final key in GameReview.criteria.keys) key: TextEditingController()};
   int _step = 0;
   int? _rating;
   String? _difficulty;
@@ -97,8 +100,17 @@ class _FinishGameSheetState extends State<FinishGameSheet> {
   @override
   void dispose() {
     _condition.dispose();
+    _summary.dispose();
+    for (final controller in _comments.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
+
+  GameReview get _review => GameReview(
+        summary: _summary.text,
+        byCriterion: {for (final key in GameReview.criteria.keys) key: ReviewCriterion(score: _scores[key], comment: _comments[key]!.text)},
+      );
 
   DateTime get _completedOn => DateTime.parse(_result.game.completedAt ?? DateFormat('yyyy-MM-dd').format(DateTime.now()));
 
@@ -133,6 +145,7 @@ class _FinishGameSheetState extends State<FinishGameSheet> {
       if (_condition.text.trim().isNotEmpty) 'completionCondition': _condition.text.trim(),
       if (_favorite != _result.game.favorite) 'favorite': _favorite,
       if (_gameOfYear) 'gameOfYear': true,
+      if (!_review.isEmpty) 'review': _review.toJson(),
     };
     if (values.isEmpty) {
       Navigator.pop(context, _result);
@@ -170,7 +183,9 @@ class _FinishGameSheetState extends State<FinishGameSheet> {
             if (_step == 0) _ratingStep(),
             if (_step == 1) _difficultyStep(),
             if (_step == 2) _extrasStep(),
-            if (_step == 3) _summaryStep(),
+            if (_step == 3) _criteriaStep(),
+            if (_step == 4) _analysisStep(),
+            if (_step == 5) _summaryStep(),
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: Color(0xFFE53E3E)))),
             const SizedBox(height: 20),
             Row(children: [
@@ -221,11 +236,50 @@ class _FinishGameSheetState extends State<FinishGameSheet> {
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Jogo do ano'), value: _gameOfYear, onChanged: (v) => setState(() => _gameOfYear = v)),
       ]);
 
+  Widget _criteriaStep() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Avalie só o que quiser, de 1 a 10.', style: TextStyle(color: _muted, fontSize: 12)),
+        for (final entry in GameReview.criteria.entries) ...[
+          const SizedBox(height: 14),
+          Text(entry.value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (var value = 1; value <= 10; value++)
+              ChoiceChip(
+                key: ValueKey('${entry.key}-$value'),
+                label: Text('$value'),
+                selected: _scores[entry.key] == value,
+                onSelected: (selected) => setState(() => _scores[entry.key] = selected ? value : null),
+              ),
+          ]),
+          TextField(
+            key: ValueKey('${entry.key}-comment'),
+            controller: _comments[entry.key],
+            maxLength: 1000,
+            decoration: const InputDecoration(hintText: 'Comentário (opcional)', counterText: ''),
+          ),
+        ],
+      ]);
+
+  Widget _analysisStep() => TextField(
+        key: const ValueKey('review-summary'),
+        controller: _summary,
+        minLines: 5,
+        maxLines: 10,
+        maxLength: 5000,
+        decoration: const InputDecoration(
+          labelText: 'Sua análise do jogo (opcional)',
+          helperText: 'O que achou, o que ficou na memória, para quem recomenda…',
+          alignLabelWithHint: true,
+        ),
+      );
+
   Widget _summaryStep() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _line('Zerado em', DateFormat('dd/MM/yyyy').format(_completedOn)),
         _line('Nota', _rating?.toString() ?? '—'),
         _line('Dificuldade', _difficulty == null ? '—' : difficultyLabels[_difficulty]!),
         _line('Favorito', _favorite ? 'Sim' : 'Não'),
+        for (final entry in GameReview.criteria.entries) _line(entry.value, _scores[entry.key]?.toString() ?? '—'),
+        _line('Análise', _summary.text.trim().isEmpty ? '—' : 'Escrita'),
         const SizedBox(height: 8),
         const Text('A conclusão já está salva. Use "Desfazer" no aviso se foi engano.', style: TextStyle(color: _muted, fontSize: 12)),
       ]);

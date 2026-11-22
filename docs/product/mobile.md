@@ -143,7 +143,7 @@ O app tem as metas flexíveis (jogos zerados, horas, zerar uma lista, horas segu
 ## Ciclo do jogo, metadados e proteção de edição (Flutter)
 
 - **Jornada ao iniciar sessão** e **Zerar em etapas** (nota em chips de 1 a 11, dificuldade,
-  extras, resumo, alterar data e Desfazer): ver playthroughs.md e sessions.md (ADR-042).
+  extras, critérios e análise do jogo (ADR-044), resumo, alterar data e Desfazer): ver playthroughs.md e sessions.md (ADR-042).
   O botão "Zerar" fica no detalhe do jogo; o gatilho "Terminou o jogo?" vem do encerramento
   da sessão com 100%.
 - **Metadados a revisar** (Mais): jogos que a API preencheu sozinha (Confirmar ou Desfazer),

@@ -14,7 +14,7 @@ const now = new Date('2026-03-01T10:00:00.000Z');
 const gameRecord: GameRecord = {
   id: id(10), title: 'Hades', description: null, coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null,
   franchiseId: id(1), platformId: id(2), platformIds: [id(2)], genreIds: [id(3)], status: 'COMPLETED', archived: false, priority: 'HIGH', rating: 10, difficulty: 'B',
-  gameType: null, completionCondition: null, favorite: true, gameOfYear: false, excludedFromSuggestions: false, owned: true, startedAt: '2026-01-01', completedAt: '2026-02-01',
+  gameType: null, completionCondition: null, review: null, favorite: true, gameOfYear: false, excludedFromSuggestions: false, owned: true, startedAt: '2026-01-01', completedAt: '2026-02-01',
   estimatedMainHours: '20.50', estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: '5', notes: null, createdAt: now, updatedAt: now,
 };
 
@@ -36,7 +36,7 @@ function validData(): BackupData {
     franchises: [{ id: id(1), name: 'Supergiant', igdbFranchiseId: null }], platforms: [{ id: id(2), name: 'PC', parentId: null }], genres: [{ id: id(3), name: 'Roguelike' }],
     games: [{
       id: id(10), title: 'Hades', description: null, coverUrl: null, backgroundUrl: null, releaseYear: 2020, developer: null, publisher: null,
-      franchiseId: id(1), platformId: id(2), platformIds: [id(2)], genreIds: [id(3)], status: 'COMPLETED', rating: 10, difficulty: 'B', gameType: null, completionCondition: null,
+      franchiseId: id(1), platformId: id(2), platformIds: [id(2)], genreIds: [id(3)], status: 'COMPLETED', rating: 10, difficulty: 'B', gameType: null, completionCondition: null, review: null,
       favorite: true, gameOfYear: false, excludedFromSuggestions: false, owned: true, archived: false, startedAt: '2026-01-01', completedAt: '2026-02-01', priority: 'HIGH',
       estimatedMainHours: 20.5, estimatedCompletionistHours: null, personalEstimatedHours: null, retroactivePlayedHours: 5, notes: null,
       createdAt: now.toISOString(), updatedAt: now.toISOString(),

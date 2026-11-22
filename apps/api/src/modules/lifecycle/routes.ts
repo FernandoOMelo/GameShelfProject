@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  finishInputSchema, finishResultSchema, finishUndoSchema, lifecycleHintSchema, lifecycleQuerySchema,
+  finishInputSchema, finishResultSchema, finishUndoSchema, isReviewEmpty, lifecycleHintSchema, lifecycleQuerySchema,
   startPlayingInputSchema, startPlayingResultSchema,
 } from '@gameshelf/contracts';
 import type { BacklogRepository } from '../backlog/repository.js';
@@ -115,7 +115,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance, deps: Lifecy
 
     const undo = {
       status: toGame(game).status, startedAt: game.startedAt, completedAt: game.completedAt, rating: game.rating, difficulty: game.difficulty,
-      completionCondition: game.completionCondition, favorite: game.favorite, gameOfYear: game.gameOfYear,
+      completionCondition: game.completionCondition, review: game.review ?? null, favorite: game.favorite, gameOfYear: game.gameOfYear,
       journey: { action: plan.action === 'COMPLETE' ? 'REOPEN' as const : plan.action === 'CREATE_COMPLETED' ? 'DELETE' as const : 'NONE' as const, id: plan.journeyId },
     };
 
@@ -138,10 +138,12 @@ export async function registerLifecycleRoutes(app: FastifyInstance, deps: Lifecy
     }
 
     const { rating, difficulty, completionCondition, favorite, gameOfYear } = body.data;
+    // Análise sem nenhum campo preenchido não é gravada.
+    const review = body.data.review && !isReviewEmpty(body.data.review) ? body.data.review : undefined;
     const updated = await games.update(id, {
       ...(rating === undefined ? {} : { rating }), ...(difficulty === undefined ? {} : { difficulty }),
       ...(completionCondition === undefined ? {} : { completionCondition }), ...(favorite === undefined ? {} : { favorite }),
-      ...(gameOfYear === undefined ? {} : { gameOfYear }),
+      ...(gameOfYear === undefined ? {} : { gameOfYear }), ...(review === undefined ? {} : { review }),
       status: 'COMPLETED', completedAt,
       ...(game.startedAt || !journey?.startedAt ? {} : { startedAt: journey.startedAt }),
     });

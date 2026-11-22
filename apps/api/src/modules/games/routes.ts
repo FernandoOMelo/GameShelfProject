@@ -88,6 +88,9 @@ export async function registerGameRoutes(app: FastifyInstance, repository: GameR
     if (parsed.data.rating != null && nextStatus !== 'COMPLETED' && nextStatus !== 'ABANDONED') {
       return reply.code(400).send({ error: 'A avaliação só pode ser alterada para jogos zerados ou abandonados.' });
     }
+    if (parsed.data.review != null && nextStatus !== 'COMPLETED' && nextStatus !== 'ABANDONED') {
+      return reply.code(400).send({ error: 'A análise só pode ser alterada para jogos zerados ou abandonados.' });
+    }
     const nextCompletedAt = parsed.data.completedAt !== undefined ? parsed.data.completedAt : existing.completedAt;
     if ((parsed.data.gameOfYear ?? existing.gameOfYear) && !nextCompletedAt) {
       return reply.code(400).send({ error: 'Informe a data de conclusão para manter o jogo do ano.' });
@@ -170,6 +173,7 @@ export function toResponse(game: Awaited<ReturnType<GameRepository['find']>> ext
     ...game,
     status: game.status,
     rating: game.rating ?? null,
+    review: game.review ?? null,
     platformId: game.platformId ?? null,
     platformIds: game.platformIds ?? [],
     owned: game.owned ?? false,
