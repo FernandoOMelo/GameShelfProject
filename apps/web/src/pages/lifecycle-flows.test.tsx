@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { FinishResult, Game, LifecycleHint } from '@gameshelf/contracts';
 import { JourneyStartDialog } from './journey-start-dialog';
 import { FinishGameDialog } from './finish-game-dialog';
+import { ReviewEditDialog } from './review-fields';
 import { QuickAddDialog } from './quick-add-dialog';
 import { MetadataReviewView } from './metadata-review-view';
 import { JourneyPromptSetting } from './settings-view';
@@ -99,6 +100,38 @@ describe('FinishGameDialog', () => {
     fireEvent.change(screen.getByLabelText('Data de conclusão'), { target: { value: '2026-04-20' } });
     await waitFor(() => expect(onChangeDate).toHaveBeenCalledWith('2026-04-20'));
     expect(await screen.findByText(/20\/04\/2026/)).toBeInTheDocument();
+  });
+});
+
+describe('ReviewEditDialog', () => {
+  const review = { summary: 'Boa.', gameplay: { score: 8, comment: null }, setting: { score: null, comment: null }, soundtrack: { score: null, comment: null }, story: { score: null, comment: null } };
+
+  it('carrega a análise atual e salva a alteração', async () => {
+    const onSave = vi.fn(async () => undefined);
+    const onClose = vi.fn();
+    render(<ReviewEditDialog game={game({ review })} onSave={onSave} onClose={onClose} />);
+    expect(screen.getByLabelText(/Sua análise do jogo/)).toHaveValue('Boa.');
+    fireEvent.click(within(screen.getByRole('group', { name: 'História' })).getByRole('button', { name: '7' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onSave).toHaveBeenCalledWith({ ...review, story: { score: 7, comment: null } });
+  });
+
+  it('esvaziar tudo remove a análise', async () => {
+    const onSave = vi.fn(async () => undefined);
+    render(<ReviewEditDialog game={game({ review })} onSave={onSave} onClose={() => undefined} />);
+    fireEvent.click(within(screen.getByRole('group', { name: 'Gameplay' })).getByRole('button', { name: '8' }));
+    fireEvent.change(screen.getByLabelText(/Sua análise do jogo/), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(null));
+  });
+
+  it('mantém o diálogo aberto quando salvar falha', async () => {
+    const onClose = vi.fn();
+    render(<ReviewEditDialog game={game({ review })} onSave={async () => { throw new Error('x'); }} onClose={onClose} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar');
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

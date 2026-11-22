@@ -22,6 +22,7 @@ import 'game_detail/journey_panel.dart';
 import 'game_detail/review_section.dart';
 import 'game_detail/sessions_panel.dart';
 import 'finish_game_sheet.dart';
+import 'review_form.dart';
 import 'game_editor_screen.dart';
 import 'journey_start_sheet.dart';
 import 'quick_log_sheet.dart';
@@ -237,7 +238,8 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
         if (_game.difficulty != null)
           InfoRow(label: 'Dificuldade', value: difficultyLabels[_game.difficulty] ?? _game.difficulty!),
         if (_game.completionCondition != null) InfoRow(label: 'Conclusão', value: _game.completionCondition!),
-        if (_game.review != null) ReviewSection(review: _game.review!),
+        if (_game.review != null || _game.status == 'COMPLETED' || _game.status == 'ABANDONED')
+          ReviewSection(review: _game.review, onEdit: _editReview),
         if (_game.notes != null && _game.notes!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -286,6 +288,16 @@ class _GameDetailScreenState extends ConsumerState<GameDetailScreen> {
     final games = ref.read(gamesProvider).valueOrNull ?? const <Game>[];
     final fresh = games.where((game) => game.id == _game.id).firstOrNull;
     if (fresh != null && mounted) setState(() => _game = fresh);
+  }
+
+  Future<void> _editReview() async {
+    final result = await showReviewEditor(context, _game);
+    if (result is! ReviewSaved) return;
+    try {
+      await _patch({'review': result.review?.toJson()});
+    } catch (_) {
+      // _patch já avisou o usuário.
+    }
   }
 
   Future<void> _patch(Map<String, dynamic> values) async {

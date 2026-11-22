@@ -2,13 +2,9 @@ import { useState } from 'react';
 import { isReviewEmpty, reviewCriteria, type FinishResult, type Game, type GameReview } from '@gameshelf/contracts';
 import { Button } from '@gameshelf/ui';
 import { difficultyLabels, reviewCriteriaLabels } from './shared';
+import { emptyReview, ReviewCriteriaFields, ReviewSummaryField } from './review-fields';
 
 const STEPS = ['Nota', 'Dificuldade', 'Extras', 'Critérios', 'Análise', 'Resumo'] as const;
-const emptyReview = (): GameReview => ({
-  summary: null,
-  gameplay: { score: null, comment: null }, setting: { score: null, comment: null },
-  soundtrack: { score: null, comment: null }, story: { score: null, comment: null },
-});
 const difficulties = ['C', 'B', 'A', 'AA', 'AAA'] as const;
 const brDate = (value: string | null) => value ? value.split('-').reverse().join('/') : '—';
 
@@ -41,9 +37,6 @@ export function FinishGameDialog({ result, onChangeDate, onSave, onClose }: {
     try { setCurrent(await onChangeDate(date)); } catch { setError('Não foi possível mudar a data (ela não pode ser anterior ao início).'); } finally { setBusy(false); }
   }
 
-  const setCriterion = (key: typeof reviewCriteria[number], patch: Partial<GameReview[typeof key]>) =>
-    setReview((value) => ({ ...value, [key]: { ...value[key], ...patch } }));
-
   async function next() {
     if (!last) { setStep(step + 1); return; }
     const values: Partial<Game> = {
@@ -68,15 +61,8 @@ export function FinishGameDialog({ result, onChangeDate, onSave, onClose }: {
       <label className="form-check"><input type="checkbox" checked={favorite} onChange={(event) => setFavorite(event.target.checked)} /> Favorito</label>
       <label className="form-check"><input type="checkbox" checked={gameOfYear} onChange={(event) => setGameOfYear(event.target.checked)} /> Jogo do ano</label>
     </div>}
-    {step === 3 && <div className="finish-criteria">
-      <p className="library-subtitle">Opcional: avalie só o que quiser, de 1 a 10.</p>
-      {reviewCriteria.map((key) => <div key={key} className="finish-criterion">
-        <strong>{reviewCriteriaLabels[key]}</strong>
-        <div role="group" aria-label={reviewCriteriaLabels[key]} className="finish-chips">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <button key={value} type="button" className={`ach-filter${review[key].score === value ? ' is-active' : ''}`} aria-pressed={review[key].score === value} onClick={() => setCriterion(key, { score: review[key].score === value ? null : value })}>{value}</button>)}</div>
-        <input aria-label={`Comentário de ${reviewCriteriaLabels[key].toLowerCase()}`} placeholder="Comentário (opcional)" maxLength={1000} value={review[key].comment ?? ''} onChange={(event) => setCriterion(key, { comment: event.target.value || null })} />
-      </div>)}
-    </div>}
-    {step === 4 && <label className="form-field">Sua análise do jogo (opcional)<textarea rows={6} maxLength={5000} placeholder="O que você achou, o que ficou na memória, para quem recomenda…" value={review.summary ?? ''} onChange={(event) => setReview((value) => ({ ...value, summary: event.target.value || null }))} /></label>}
+    {step === 3 && <ReviewCriteriaFields review={review} onChange={setReview} />}
+    {step === 4 && <ReviewSummaryField review={review} onChange={setReview} />}
     {step === 5 && <dl className="finish-summary">
       <div><dt>Zerado em</dt><dd>{brDate(current.game.completedAt)}</dd></div>
       <div><dt>Nota</dt><dd>{rating ?? '—'}</dd></div>

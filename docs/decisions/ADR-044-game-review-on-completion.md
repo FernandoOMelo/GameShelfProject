@@ -33,7 +33,9 @@ história) apenas nos jogos que merecem, e pular nos demais.
 
 ## Consequências
 
-- Não há edição da análise depois de zerar: ela só é preenchida no assistente. Editar
-  depois fica como evolução.
+- A análise pode ser editada depois, na ficha do jogo (web: diálogo; Flutter: folha),
+  por `PATCH /games/:id` com `review`. Esvaziar todos os campos envia `review: null`
+  e remove a análise. Jogos zerados ou abandonados sem análise mostram "Adicionar
+  análise". Os campos do assistente e do editor são os mesmos componentes.
 - Estatísticas e filtros por critério não existem; a coluna `jsonb` permitiria
   consultas, mas isso não foi pedido.

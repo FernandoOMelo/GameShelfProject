@@ -5,6 +5,7 @@ import 'package:gameshelf_mobile/models/game.dart';
 import 'package:gameshelf_mobile/models/lifecycle.dart';
 import 'package:gameshelf_mobile/screens/finish_game_sheet.dart';
 import 'package:gameshelf_mobile/screens/game_detail/review_section.dart';
+import 'package:gameshelf_mobile/screens/review_form.dart';
 import 'package:gameshelf_mobile/screens/journey_start_sheet.dart';
 
 Map<String, dynamic> gameJson({String status = 'PLAYING', String? completedAt}) => {
@@ -224,6 +225,67 @@ void main() {
     expect(find.text('Combate fluido'), findsOneWidget);
     expect(find.text('Obra-prima.'), findsOneWidget);
     expect(find.text('Ambientação'), findsNothing);
+  });
+
+  group('ReviewEditorSheet', () {
+    Game reviewed() => Game.fromJson(gameJson(status: 'COMPLETED')..['review'] = {
+          'summary': 'Boa.',
+          'gameplay': {'score': 8, 'comment': null},
+          'setting': {'score': null, 'comment': null},
+          'soundtrack': {'score': null, 'comment': null},
+          'story': {'score': null, 'comment': null},
+        });
+
+    Future<void> open(WidgetTester tester, Game game, void Function(ReviewEdit?) onResult) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(body: ElevatedButton(onPressed: () async => onResult(await showReviewEditor(context, game)), child: const Text('abrir'))),
+        ),
+      ));
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('carrega a análise atual e salva a alteração', (tester) async {
+      ReviewEdit? result;
+      await open(tester, reviewed(), (value) => result = value);
+      expect(find.text('Boa.'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('story-7')));
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      final saved = (result as ReviewSaved).review!;
+      expect(saved.summary, 'Boa.');
+      expect(saved.criterion('gameplay').score, 8);
+      expect(saved.criterion('story').score, 7);
+    });
+
+    testWidgets('esvaziar tudo remove a análise e cancelar não altera nada', (tester) async {
+      ReviewEdit? result;
+      await open(tester, reviewed(), (value) => result = value);
+      await tester.tap(find.byKey(const ValueKey('gameplay-8')));
+      await tester.enterText(find.byKey(const ValueKey('review-summary')), '');
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      expect((result as ReviewSaved).review, isNull);
+
+      result = null;
+      await tester.tap(find.text('abrir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(result, isNull);
+    });
+  });
+
+  testWidgets('ReviewSection sem análise oferece adicionar', (tester) async {
+    var edits = 0;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ReviewSection(review: null, onEdit: () => edits++))));
+    expect(find.text('Ainda sem análise.'), findsOneWidget);
+    await tester.tap(find.text('Adicionar análise'));
+    expect(edits, 1);
   });
 
   test('canFinish exclui desejados e já zerados', () {

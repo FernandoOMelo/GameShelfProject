@@ -59,8 +59,8 @@ vêm depois, e a conclusão já está salva. `finish/undo` desfaz.
 
 Ao zerar também é possível registrar uma **análise** (ADR-044): nota de 1 a 10 e comentário
 para gameplay, ambientação, trilha sonora e história, mais um texto livre. Tudo é
-opcional e só existe nesse momento; pular as etapas "Critérios" e "Análise" não grava
-nada. A ficha do jogo mostra "Minha análise" quando há conteúdo.
+opcional; pular as etapas "Critérios" e "Análise" não grava nada. Depois, "Editar
+análise" (ou "Adicionar análise") na ficha reabre os mesmos campos; esvaziar tudo remove. A ficha do jogo mostra "Minha análise" quando há conteúdo.
 
 ## Jornadas
 

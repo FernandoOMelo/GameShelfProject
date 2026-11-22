@@ -20,6 +20,7 @@ import { SessionScreenshots } from './session-screenshots';
 import { NextGameSuggestion } from './next-game-suggestion';
 import { JourneyStartDialog } from './journey-start-dialog';
 import { FinishGameDialog } from './finish-game-dialog';
+import { ReviewEditDialog } from './review-fields';
 import { QuickAddDialog } from './quick-add-dialog';
 import { fetchMetadataReviewCount } from './metadata-review-view';
 import { canFinishGame, fetchLifecycleHint, finishGameRequest, journeyPromptEnabled, startPlaying, undoFinishRequest } from './lifecycle';
@@ -188,6 +189,7 @@ export function App() {
   const [editing, setEditing] = useState<Game | null>(null);
   const [formStatus, setFormStatus] = useState<Game['status']>('BACKLOG');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [editingReview, setEditingReview] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('resumo');
   const [mergingGame, setMergingGame] = useState(false);
   /** Incrementa quando o jogo aberto muda por dentro (ex.: mesclagem), para recarregar o que depende dele. */
@@ -1071,13 +1073,14 @@ export function App() {
     } catch { /* a tela continua com o valor anterior até a próxima leitura */ }
   }
 
-  async function updateGame(game: Game, values: Partial<Game>) {
+  async function updateGame(game: Game, values: Partial<Game>): Promise<boolean> {
     const response = await fetch(`${apiUrl}/games/${game.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) });
-    if (!response.ok) { setError('Não foi possível atualizar o jogo.'); return; }
+    if (!response.ok) { setError('Não foi possível atualizar o jogo.'); return false; }
     const updated = await response.json() as Game;
     setSelectedGame((current) => current?.id === updated.id ? updated : current);
     await loadGames();
     await refreshPlanningViews();
+    return true;
   }
 
   async function startDashboardSession(game: Game) {
@@ -1341,9 +1344,10 @@ export function App() {
                 {selectedGame.completionCondition && <div><dt>Condição de zeramento</dt><dd>{selectedGame.completionCondition}</dd></div>}
                 <div className="journey-meta-wide"><dt>Gêneros</dt><dd>{selectedGame.genreIds.map((id) => genres.find((genre) => genre.id === id)?.name).filter(Boolean).join(', ') || <span className="meta-empty">Não informados</span>}</dd></div>
               </dl></section>
-              {selectedGame.review && <section className="details-section gd-wide"><h2>Minha análise</h2><div className="review-detail">
-                <dl className="review-scores">{reviewCriteria.filter((key) => selectedGame.review![key].score !== null || selectedGame.review![key].comment).map((key) => <div key={key}><dt>{reviewCriteriaLabels[key]}</dt><dd>{selectedGame.review![key].score !== null ? `${selectedGame.review![key].score}/10` : '—'}{selectedGame.review![key].comment && <small>{selectedGame.review![key].comment}</small>}</dd></div>)}</dl>
-                {selectedGame.review.summary && <p>{selectedGame.review.summary}</p>}
+              {(selectedGame.review || selectedGame.status === 'COMPLETED' || selectedGame.status === 'ABANDONED') && <section className="details-section gd-wide"><h2>Minha análise</h2><div className="review-detail">
+                {selectedGame.review ? <><dl className="review-scores">{reviewCriteria.filter((key) => selectedGame.review![key].score !== null || selectedGame.review![key].comment).map((key) => <div key={key}><dt>{reviewCriteriaLabels[key]}</dt><dd>{selectedGame.review![key].score !== null ? `${selectedGame.review![key].score}/10` : '—'}{selectedGame.review![key].comment && <small>{selectedGame.review![key].comment}</small>}</dd></div>)}</dl>
+                {selectedGame.review.summary && <p>{selectedGame.review.summary}</p>}</> : <p className="meta-empty">Ainda sem análise.</p>}
+                <div><button type="button" className="session-edit" onClick={() => setEditingReview(true)}>{selectedGame.review ? 'Editar análise' : 'Adicionar análise'}</button></div>
               </div></section>}
               {(() => {
                 const playedMinutes = sessions.reduce((total, s) => total + (s.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60);
@@ -1363,7 +1367,7 @@ export function App() {
                 <GameJourneyPanel
                   gameId={selectedGame.id}
                   gameDates={{ status: selectedGame.status, startedAt: selectedGame.startedAt ?? null, completedAt: selectedGame.completedAt ?? null }}
-                  onApplyDate={(field, value) => updateGame(selectedGame, { [field]: value })}
+                  onApplyDate={(field, value) => void updateGame(selectedGame, { [field]: value })}
                   platforms={platforms}
                   localMinutes={sessions.reduce((total, session) => total + (session.durationMinutes ?? 0), 0) + Math.round((selectedGame.retroactivePlayedHours ?? 0) * 60)}
                   retroactiveHours={selectedGame.retroactivePlayedHours ?? 0}
@@ -1528,6 +1532,7 @@ export function App() {
         </form></section></div>}
         {mergingGame && selectedGame && <GameMergeDialog game={selectedGame} games={games} onClose={() => setMergingGame(false)} onMerged={(merged) => { setMergingGame(false); setSelectedGame(merged); setAchievementsSummary(null); setDetailVersion((version) => version + 1); void loadGames(); void refreshPlanningViews(); }} />}
         {journeyOffer && <JourneyStartDialog gameTitle={journeyOffer.game.title} hint={journeyOffer.hint} onAccept={() => void acceptJourney()} onDismiss={() => setJourneyOffer(null)} />}
+        {editingReview && selectedGame && <ReviewEditDialog game={selectedGame} onClose={() => setEditingReview(false)} onSave={async (review) => { if (!await updateGame(selectedGame, { review })) throw new Error('save'); }} />}
         {finishFlow && <FinishGameDialog result={finishFlow.result}
           onChangeDate={async (date) => { await undoFinishRequest(finishFlow.game.id, finishFlow.result.undo); const next = await finishGameRequest(finishFlow.game.id, date); setFinishFlow({ game: finishFlow.game, result: next }); return next; }}
           onSave={async (values) => { await updateGame(finishFlow.game, values); }}
